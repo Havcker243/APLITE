@@ -1,0 +1,42 @@
+{
+  "businesses": [
+    {
+      "id": 1,
+      "created_at": "2025-12-12T22:23:03.951559+00:00",
+      "upi": "TLJSSN01",
+      "core_entity_id": "CORE-JSSN",
+      "legal_name": "Horizon Layer Holdings LLC",
+      "ein": "77-6655443",
+      "business_type": "LLC",
+      "website": " https://horizonlayer.test",
+      "address": "890 Venture Way, Austin, TX 78701",
+      "country": "US",
+      "verification_status": "verified"
+    }
+  ],
+  "payment_accounts": [
+    {
+      "id": 1,
+      "business_id": 1,
+      "payment_index": 1,
+      "rail": "ACH",
+      "ach_routing": "101000019",
+      "ach_account": "111222333444",
+      "bank_name": "Pioneer Federal Bank",
+      "account_name": "Horizon Layer Holdings LLC"
+    },
+    {
+      "id": 2,
+      "business_id": 1,
+      "payment_index": 1,
+      "rail": "WIRE_DOM",
+      "wire_routing": "101000019",
+      "wire_account": "999888777666",
+      "bank_name": "Pioneer Federal Bank",
+      "account_name": "Horizon Layer Holdings LLC",
+      "bank_address": "890 Venture Way, Austin, TX 78701"
+    }
+  ],
+  "business_pk": 1,
+  "payment_account_pk": 2
+}
