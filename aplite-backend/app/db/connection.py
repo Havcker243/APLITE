@@ -1,17 +1,25 @@
 """
-Database connection shim kept for future Postgres integration.
+Postgres connection helper.
 
-The current build stores data on disk via app.db.queries while preserving the
-interface required for a real connection pool.
+Reads DATABASE_URL from the environment (works with Supabase Postgres).
 """
 
+import os
 from contextlib import contextmanager
-from typing import Iterator, Optional
+from typing import Iterator
 
-Connection = Optional[object]
+import psycopg
+from psycopg.rows import dict_row
+
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 
 @contextmanager
-def get_connection() -> Iterator[Connection]:
-    """Yield a fake connection object for compatibility with future code."""
-    yield None
+def get_connection() -> Iterator[psycopg.Connection]:
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL is not set; configure your Supabase Postgres connection string.")
+    conn = psycopg.connect(DATABASE_URL, row_factory=dict_row, autocommit=True)
+    try:
+        yield conn
+    finally:
+        conn.close()

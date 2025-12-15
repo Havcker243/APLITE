@@ -2,10 +2,10 @@ import React from "react";
 
 export type ResolveFormProps = {
   upi: string;
-  rail: "ACH" | "WIRE_DOM";
+  rail: "ACH" | "WIRE_DOM" | "SWIFT";
   loading: boolean;
   onUpiChange: (value: string) => void;
-  onRailChange: (value: "ACH" | "WIRE_DOM") => void;
+  onRailChange: (value: "ACH" | "WIRE_DOM" | "SWIFT") => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
 };
 
@@ -21,12 +21,12 @@ export function ResolveForm({ upi, rail, loading, onUpiChange, onRailChange, onS
             id="upi"
             type="text"
             name="upi"
-            placeholder="AA1B2401"
+            placeholder="NS01ABCDXXXX"
             value={upi}
             onChange={(event) => onUpiChange(event.target.value.toUpperCase())}
             className="input-control"
-            minLength={8}
-            maxLength={8}
+            minLength={14}
+            maxLength={14}
             required
           />
         </div>
@@ -35,16 +35,23 @@ export function ResolveForm({ upi, rail, loading, onUpiChange, onRailChange, onS
           <label className="input-label" htmlFor="rail">
             Rail
           </label>
-          <select id="rail" name="rail" value={rail} onChange={(event) => onRailChange(event.target.value as "ACH" | "WIRE_DOM")}
-            className="input-control">
+          <select
+            id="rail"
+            name="rail"
+            value={rail}
+            onChange={(event) => onRailChange(event.target.value as "ACH" | "WIRE_DOM" | "SWIFT")}
+            className="input-control"
+          >
             <option value="ACH">ACH</option>
             <option value="WIRE_DOM">WIRE_DOM</option>
+            <option value="SWIFT">SWIFT</option>
           </select>
         </div>
       </div>
 
       <button type="submit" className="button" disabled={loading}>
-        {loading ? "Resolving..." : "Resolve UPI"}
+        {loading && <span className="spinner" aria-hidden="true" />}
+        Resolve UPI
       </button>
     </form>
   );

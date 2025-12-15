@@ -38,5 +38,51 @@
     }
   ],
   "business_pk": 1,
-  "payment_account_pk": 2
+  "payment_account_pk": 2,
+  "users": [
+    {
+      "id": 1,
+      "created_at": "2025-12-15T11:17:19.612859+00:00",
+      "first_name": "Oludolapo",
+      "last_name": "Adegbesan",
+      "email": "omadegbesan27@my.fisk.edu",
+      "company": "Fisk University",
+      "password_hash": "1c701c0fb4e7081e6c67c31edec9cacb:cc942530bee9b00b4f936d33df75db42351af50b51a6c8312e2b64d90244bafc",
+      "master_upi": "8JG1JD00"
+    }
+  ],
+  "sessions": [
+    {
+      "token": "CDo7pmPwJ5ZAjxy5Z40t84Uvko71-nVDOWv6Ljtf0_I",
+      "user_id": 1,
+      "created_at": "2025-12-15T11:17:19.614376+00:00"
+    },
+    {
+      "token": "r2RSPiQykphf_mjg-tQ38-LqTLMv2EUEqT7yNngxIpo",
+      "user_id": 1,
+      "created_at": "2025-12-15T12:09:42.624108+00:00"
+    },
+    {
+      "token": "r6hMVSig5wRX72tHOIS_9pkaD2YFqoLnmxcU0daW86g",
+      "user_id": 1,
+      "created_at": "2025-12-15T12:10:32.924948+00:00"
+    }
+  ],
+  "user_pk": 1,
+  "otps": [
+    {
+      "id": "RuS-A4FvCb81q2Ifj9MFzw",
+      "user_id": 1,
+      "code": "338920",
+      "expires_at": "2025-12-15T12:19:08.963781+00:00",
+      "consumed": true
+    },
+    {
+      "id": "BVMS9hXxHCkccKq1JuvV2g",
+      "user_id": 1,
+      "code": "547834",
+      "expires_at": "2025-12-15T12:20:18.712116+00:00",
+      "consumed": true
+    }
+  ]
 }

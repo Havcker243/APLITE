@@ -6,7 +6,7 @@ import { HistoryPanel } from "../components/HistoryPanel";
 import { ResolveForm } from "../components/ResolveForm";
 import { ResolutionResult } from "../components/ResolutionResult";
 import { ResultCard } from "../components/ResultCard";
-import { BusinessSummary, fetchBusinesses, onboardBusiness, resolveUPI } from "../utils/api";
+import { BusinessSummary, deactivateBusiness, fetchBusinesses, listAccounts, onboardBusiness, resolveUPI } from "../utils/api";
 import { useAuth } from "../utils/auth";
 
 const FIELD_LABELS: Record<keyof BusinessFormData, string> = {
@@ -17,10 +17,16 @@ const FIELD_LABELS: Record<keyof BusinessFormData, string> = {
   address: "Address",
   country: "Country",
   bank_name: "Bank Name",
+  account_name: "Account Name",
   ach_routing: "ACH Routing",
   ach_account: "ACH Account",
   wire_routing: "Wire Routing",
   wire_account: "Wire Account",
+  bank_address: "Bank Address",
+  swift_bic: "SWIFT/BIC",
+  iban: "IBAN",
+  bank_country: "Bank Country",
+  bank_city: "Bank City",
 };
 
 const requiredFields: Array<keyof BusinessFormData> = [
@@ -29,16 +35,11 @@ const requiredFields: Array<keyof BusinessFormData> = [
   "business_type",
   "address",
   "country",
-  "bank_name",
-  "ach_routing",
-  "ach_account",
-  "wire_routing",
-  "wire_account",
 ];
 
 const EIN_PATTERN = /^\d{2}-\d{7}$/;
 const ROUTING_PATTERN = /^\d{9}$/;
-const UPI_PATTERN = /^[A-Z0-9]{8}$/;
+const UPI_PATTERN = /^[A-Z0-9]{14}$/;
 
 const defaultForm: BusinessFormData = {
   legal_name: "",
@@ -47,11 +48,20 @@ const defaultForm: BusinessFormData = {
   website: "",
   address: "",
   country: "US",
+  account_mode: "new",
+  payment_account_id: "",
+  rail: "ACH",
   bank_name: "",
+  account_name: "",
   ach_routing: "",
   ach_account: "",
   wire_routing: "",
   wire_account: "",
+  bank_address: "",
+  swift_bic: "",
+  iban: "",
+  bank_country: "",
+  bank_city: "",
 };
 
 function validateForm(data: BusinessFormData): string[] {
@@ -67,12 +77,35 @@ function validateForm(data: BusinessFormData): string[] {
     errors.push("EIN must match NN-NNNNNNN format");
   }
 
-  if (data.ach_routing && !ROUTING_PATTERN.test(data.ach_routing)) {
-    errors.push("ACH routing number must be 9 digits");
-  }
-
-  if (data.wire_routing && data.wire_routing.length < 6) {
-    errors.push("Wire routing should be at least 6 characters");
+  if (data.account_mode === "new") {
+    if (!data.bank_name) {
+      errors.push("Bank Name is required");
+    }
+    if (data.rail === "ACH") {
+      if (!ROUTING_PATTERN.test(data.ach_routing)) {
+        errors.push("ACH routing number must be 9 digits");
+      }
+      if (!data.ach_account) {
+        errors.push("ACH account number is required");
+      }
+    }
+    if (data.rail === "WIRE_DOM") {
+      if (!data.wire_routing || data.wire_routing.length < 6) {
+        errors.push("Wire routing should be at least 6 characters");
+      }
+      if (!data.wire_account) {
+        errors.push("Wire account number is required");
+      }
+    }
+    if (data.rail === "SWIFT") {
+      if (!data.swift_bic) errors.push("SWIFT/BIC is required");
+      if (!data.iban) errors.push("IBAN is required");
+      if (!data.bank_country) errors.push("Bank country is required");
+    }
+  } else {
+    if (!data.payment_account_id) {
+      errors.push("Please select a saved account");
+    }
   }
 
   return errors;
@@ -95,12 +128,15 @@ export default function DashboardPage() {
   const [history, setHistory] = useState<BusinessSummary[]>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [accountsError, setAccountsError] = useState<string | null>(null);
 
   const [resolveUpi, setResolveUpi] = useState("");
-  const [resolveRail, setResolveRail] = useState<"ACH" | "WIRE_DOM">("ACH");
+  const [resolveRail, setResolveRail] = useState<"ACH" | "WIRE_DOM" | "SWIFT">("ACH");
   const [resolveResult, setResolveResult] = useState<any>(null);
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [resolving, setResolving] = useState(false);
+  const [deactivating, setDeactivating] = useState<number | null>(null);
 
   useEffect(() => {
     if (!ready) return;
@@ -109,6 +145,7 @@ export default function DashboardPage() {
       return;
     }
     void loadHistory();
+    void loadAccounts();
   }, [ready, token]);
 
   async function loadHistory() {
@@ -121,7 +158,30 @@ export default function DashboardPage() {
     }
   }
 
-  function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
+  async function handleDeactivate(id: number) {
+    if (!window.confirm("Deactivate this UPI? This will block resolves.")) return;
+    setDeactivating(id);
+    try {
+      await deactivateBusiness(id);
+      await loadHistory();
+    } catch (err) {
+      setHistoryError(err instanceof Error ? err.message : "Unable to deactivate");
+    } finally {
+      setDeactivating(null);
+    }
+  }
+
+  async function loadAccounts() {
+    try {
+      const res = await listAccounts();
+      setAccounts(res);
+      setAccountsError(null);
+    } catch (err) {
+      setAccountsError(err instanceof Error ? err.message : "Unable to load accounts");
+    }
+  }
+
+  function handleChange(event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     const { name, value } = event.target;
     setForm((prev) => ({ ...prev, [name]: value }));
   }
@@ -141,7 +201,41 @@ export default function DashboardPage() {
     setValidationErrors([]);
 
     try {
-      const response = await onboardBusiness(form);
+      const payload =
+        form.account_mode === "existing"
+          ? {
+              legal_name: form.legal_name,
+              ein: form.ein,
+              business_type: form.business_type,
+              website: form.website,
+              address: form.address,
+              country: form.country,
+              payment_account_id: Number(form.payment_account_id),
+            }
+          : {
+              legal_name: form.legal_name,
+              ein: form.ein,
+              business_type: form.business_type,
+              website: form.website,
+              address: form.address,
+              country: form.country,
+              account: {
+                rail: form.rail,
+                bank_name: form.bank_name,
+                account_name: form.account_name || form.legal_name,
+                ach_routing: form.ach_routing,
+                ach_account: form.ach_account,
+                wire_routing: form.wire_routing,
+                wire_account: form.wire_account,
+                bank_address: form.bank_address || form.address,
+                swift_bic: form.swift_bic,
+                iban: form.iban,
+                bank_country: form.bank_country || form.country,
+                bank_city: form.bank_city,
+              },
+            };
+
+      const response = await onboardBusiness(payload as any);
       setUpi(response.upi);
       await loadHistory();
     } catch (err) {
@@ -191,8 +285,8 @@ export default function DashboardPage() {
       <section className="hero">
         <div>
           <p className="section-title">Your workspace</p>
-          <h1 className="hero-title">Manage master and child UPIs</h1>
-          <p className="hero-subtitle">Attach new payout accounts, resolve identifiers, and copy details securely.</p>
+          <h1 className="hero-title">UPI management</h1>
+          <p className="hero-subtitle">Create identifiers, attach payout rails, resolve details, and copy coordinates securely.</p>
         </div>
       </section>
 
@@ -221,7 +315,7 @@ export default function DashboardPage() {
       </div>
 
       {validationErrors.length > 0 && (
-        <div className="error-box">
+        <div className="error-box" role="alert" aria-live="assertive">
           <strong>Please fix the following:</strong>
           <ul>
             {validationErrors.map((item) => (
@@ -231,16 +325,33 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {error && <div className="error-box">{error}</div>}
+      {error && (
+        <div className="error-box" role="alert" aria-live="assertive">
+          {error}
+        </div>
+      )}
+      {accountsError && (
+        <div className="error-box" role="alert" aria-live="assertive">
+          {accountsError}
+        </div>
+      )}
 
       <div className="card-grid" style={{ alignItems: "flex-start" }}>
-        <BusinessForm form={form} loading={loading} onChange={handleChange} onSubmit={handleSubmit} />
+        <BusinessForm form={form} accounts={accounts} loading={loading} onChange={handleChange} onSubmit={handleSubmit} />
 
         <div className="stacked-panels">
           {upi && <ResultCard upi={upi} />}
-          {copyNotice && <div className="status-pill">{copyNotice}</div>}
-          {historyError && <div className="error-box">{historyError}</div>}
-          <HistoryPanel entries={history} onCopy={handleHistoryCopy} />
+          {copyNotice && (
+            <div className="status-pill" role="status" aria-live="polite">
+              {copyNotice}
+            </div>
+          )}
+          {historyError && (
+            <div className="error-box" role="alert" aria-live="assertive">
+              {historyError}
+            </div>
+          )}
+          <HistoryPanel entries={history} onCopy={handleHistoryCopy} onDeactivate={handleDeactivate} deactivatingId={deactivating} />
         </div>
       </div>
 

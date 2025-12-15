@@ -9,6 +9,10 @@ const initialState = {
   last_name: "",
   email: "",
   company_name: "",
+  summary: "",
+  established_year: "",
+  state: "",
+  country: "",
   password: "",
   confirm_password: "",
   accept_terms: false,
@@ -21,8 +25,9 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const { name, value, type, checked } = event.target;
+  function handleChange(event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
+    const target = event.target as HTMLInputElement;
+    const { name, value, type, checked } = target;
     setForm((prev) => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
   }
 
@@ -31,7 +36,10 @@ export default function SignupPage() {
     setLoading(true);
     setError(null);
     try {
-      const response = await signup(form);
+      const response = await signup({
+        ...form,
+        established_year: form.established_year ? Number(form.established_year) : undefined,
+      });
       login(response);
       router.push("/dashboard");
     } catch (err) {
@@ -51,7 +59,11 @@ export default function SignupPage() {
         </div>
       </section>
 
-      {error && <div className="error-box">{error}</div>}
+      {error && (
+        <div className="error-box" role="alert" aria-live="assertive">
+          {error}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="card form-card">
         <div className="form-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
@@ -71,7 +83,16 @@ export default function SignupPage() {
             <label className="input-label" htmlFor="email">
               Work Email
             </label>
-            <input id="email" name="email" type="email" value={form.email} onChange={handleChange} className="input-control" required />
+            <input
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              value={form.email}
+              onChange={handleChange}
+              className="input-control"
+              required
+            />
           </div>
           <div className="input-group">
             <label className="input-label" htmlFor="company_name">
@@ -80,10 +101,53 @@ export default function SignupPage() {
             <input id="company_name" name="company_name" value={form.company_name} onChange={handleChange} className="input-control" required />
           </div>
           <div className="input-group">
+            <label className="input-label" htmlFor="summary">
+              Company Summary
+            </label>
+            <textarea id="summary" name="summary" value={form.summary} onChange={handleChange} className="input-control" placeholder="What does your company do?" />
+          </div>
+          <div className="input-group">
+            <label className="input-label" htmlFor="established_year">
+              Year Established
+            </label>
+            <input
+              id="established_year"
+              name="established_year"
+              value={form.established_year}
+              onChange={handleChange}
+              className="input-control"
+              type="number"
+              min={1800}
+              max={new Date().getFullYear()}
+            />
+          </div>
+          <div className="input-group">
+            <label className="input-label" htmlFor="state">
+              State/Region
+            </label>
+            <input id="state" name="state" value={form.state} onChange={handleChange} className="input-control" />
+          </div>
+          <div className="input-group">
+            <label className="input-label" htmlFor="country">
+              Country
+            </label>
+            <input id="country" name="country" value={form.country} onChange={handleChange} className="input-control" required />
+          </div>
+          <div className="input-group">
             <label className="input-label" htmlFor="password">
               Password
             </label>
-            <input id="password" name="password" type="password" value={form.password} onChange={handleChange} className="input-control" minLength={6} required />
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="new-password"
+              value={form.password}
+              onChange={handleChange}
+              className="input-control"
+              minLength={6}
+              required
+            />
           </div>
           <div className="input-group">
             <label className="input-label" htmlFor="confirm_password">
@@ -93,6 +157,7 @@ export default function SignupPage() {
               id="confirm_password"
               name="confirm_password"
               type="password"
+              autoComplete="new-password"
               value={form.confirm_password}
               onChange={handleChange}
               className="input-control"
@@ -108,7 +173,8 @@ export default function SignupPage() {
         </label>
 
         <button type="submit" className="button" disabled={loading}>
-          {loading ? "Creating..." : "Create Account"}
+          {loading && <span className="spinner" aria-hidden="true" />}
+          Create Account
         </button>
 
         <p className="hero-subtitle" style={{ marginTop: 10 }}>

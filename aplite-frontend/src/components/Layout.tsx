@@ -11,15 +11,23 @@ export function Layout({ children }: PropsWithChildren) {
     ? [
         { href: "/", label: "Home" },
         { href: "/dashboard", label: "Dashboard" },
+        { href: "/accounts", label: "Accounts" },
+        { href: "/profile", label: "Profile" },
+        { href: "/resolve", label: "Resolve" },
+        { href: "/clients", label: "Clients" },
       ]
     : [
         { href: "/", label: "Home" },
+        { href: "/clients", label: "Clients" },
         { href: "/login", label: "Login" },
         { href: "/signup", label: "Get Started" },
       ];
 
   return (
     <div className="app-shell">
+      <a href="#main-content" className="skip-link">
+        Skip to content
+      </a>
       <header className="site-header">
         <div className="logo">
           <span className="logo-dot" />
@@ -46,7 +54,9 @@ export function Layout({ children }: PropsWithChildren) {
           )}
         </nav>
       </header>
-      <main className="site-main">{children}</main>
+      <main className="site-main" id="main-content">
+        {children}
+      </main>
       <footer className="site-footer">Unified Payment Identity Platform</footer>
     </div>
   );
