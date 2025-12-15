@@ -1,8 +1,8 @@
 """
-Database connection placeholder used for future Postgres integration.
+Database connection shim kept for future Postgres integration.
 
-The MVP stores data in-memory via app.db.queries, but this module keeps the
-interface ready for when a real connection pool is added.
+The current build stores data on disk via app.db.queries while preserving the
+interface required for a real connection pool.
 """
 
 from contextlib import contextmanager

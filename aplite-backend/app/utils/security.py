@@ -1,5 +1,5 @@
 """
-Simple password hashing and token helpers for the MVP auth layer.
+Password hashing and session token helpers for the auth layer.
 """
 
 from __future__ import annotations

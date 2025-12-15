@@ -22,7 +22,7 @@ class ParsedUPI(NamedTuple):
 
 
 def generate_core_entity_id() -> str:
-    """Return a pseudo-unique core entity id for the MVP."""
+    """Return a pseudo-unique core entity id."""
     core_segment = "".join(random.choices(ALPHABET, k=CORE_SEGMENT_LENGTH))
     return f"CORE-{core_segment}"
 

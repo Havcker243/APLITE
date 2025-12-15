@@ -212,10 +212,10 @@ export default function DashboardPage() {
         </div>
         <div className="card">
           <p className="section-title">Need another user?</p>
-          <h2 style={{ marginTop: 0 }}>Team access coming soon</h2>
-          <p className="hero-subtitle">Share this account for now or reach out to invite collaborators.</p>
+          <h2 style={{ marginTop: 0 }}>Invite teammates securely</h2>
+          <p className="hero-subtitle">Contact our team to enable multi-user access with proper controls.</p>
           <Link href="/" className="button button-secondary">
-            Product Overview
+            Get Help
           </Link>
         </div>
       </div>

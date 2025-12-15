@@ -47,7 +47,7 @@ export function Layout({ children }: PropsWithChildren) {
         </nav>
       </header>
       <main className="site-main">{children}</main>
-      <footer className="site-footer">Unified Payment Identity · MVP</footer>
+      <footer className="site-footer">Unified Payment Identity Platform</footer>
     </div>
   );
 }

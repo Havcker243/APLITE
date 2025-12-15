@@ -6,7 +6,7 @@ export default function HomePage() {
     <div className="page-container">
       <section className="hero">
         <div>
-          <p className="section-title">Aplite MVP</p>
+          <p className="section-title">Aplite</p>
           <h1 className="hero-title">Instant banking identity for platforms</h1>
           <p className="hero-subtitle">
             Create an account, mint your master UPI, and manage all payout coordinates from one secure dashboard. Log in to generate child accounts

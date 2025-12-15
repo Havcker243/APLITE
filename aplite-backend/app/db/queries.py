@@ -1,8 +1,8 @@
 """
-JSON-backed data helpers for the onboarding MVP.
+JSON-backed data helpers for the onboarding service.
 
 Stores business and payment account data inside data/store.json so that
-records persist across restarts until a real database is added.
+records persist across restarts.
 """
 
 from __future__ import annotations
