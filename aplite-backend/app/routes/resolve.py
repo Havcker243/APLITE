@@ -17,6 +17,7 @@ class ResolveUPIRequest(BaseModel):
 
 @router.post("/api/resolve")
 def resolve_upi(payload: ResolveUPIRequest, user=Depends(get_current_user)):
+    """Resolve a UPI (owned by the caller) into payout coordinates for the requested rail."""
     if not queries.is_user_verified(user["id"]):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

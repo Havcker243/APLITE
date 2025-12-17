@@ -21,6 +21,21 @@ from app.utils import crypto
 from app.utils.email import send_email
 from app.utils.upi import generate_core_entity_id, generate_upi
 
+"""
+This module is the MVP data-access layer.
+
+It is intentionally "flat" (one file) for MVP speed, and contains:
+- User + session helpers
+- OTP helpers
+- Businesses + payment accounts
+- Onboarding/KYB flow persistence
+- File metadata helpers for onboarding uploads
+
+As the project grows, these functions should be split into smaller modules
+(e.g. `auth_queries.py`, `business_queries.py`, `onboarding_queries.py`)
+while keeping `queries.py` as a compatibility re-export.
+"""
+
 
 class BusinessRecord(TypedDict, total=False):
     id: int
@@ -119,6 +134,8 @@ class OnboardingSessionRecord(TypedDict, total=False):
     step_statuses: Dict[str, Any]
     risk_level: str
     address_locked: bool
+    last_saved_at: str
+    completed_at: Optional[str]
     last_saved_at: str
     completed_at: Optional[str]
 
@@ -258,13 +275,32 @@ def create_payment_account(**payload: Any) -> int:
 
 
 def list_businesses() -> List[BusinessRecord]:
+    """Return all businesses (newest first)."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("select * from businesses order by id desc")
             return cur.fetchall()
 
+def _table_exists(table_name: str) -> bool:
+    """
+    Best-effort check for whether a table exists in the current database.
 
-def list_public_clients(*, search: Optional[str], limit: int) -> List[Dict[str, Any]]:
+    This allows the MVP to run against older schemas that may not include newer tables yet.
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("select to_regclass(%s) is not null as ok", (table_name,))
+            row = cur.fetchone() or {}
+            return bool(row.get("ok"))
+
+
+def _list_public_clients_sql_verified_users(*, search: Optional[str], limit: int) -> List[Dict[str, Any]]:
+    """
+    Return a public directory of verified clients (companies).
+
+    This endpoint intentionally only includes businesses whose owning user has
+    at least one onboarding session in VERIFIED state.
+    """
     search_value = (search or "").strip()
     search_like = f"%{search_value.lower()}%" if search_value else None
 
@@ -284,13 +320,12 @@ def list_public_clients(*, search: Optional[str], limit: int) -> List[Dict[str, 
                     b.website
                 from businesses b
                 join users u on u.id = b.user_id
-                where b.status <> 'deactivated'
+                where (b.status is null or b.status <> 'deactivated')
                   and exists (
                     select 1
                     from onboarding_sessions s
                     where s.user_id = u.id
                       and s.state = 'VERIFIED'
-                    limit 1
                   )
                   and (%s is null or lower(coalesce(nullif(u.company_name,''), nullif(u.company,''), b.legal_name)) like %s)
                 order by b.id desc
@@ -299,6 +334,88 @@ def list_public_clients(*, search: Optional[str], limit: int) -> List[Dict[str, 
                 (search_like, search_like, int(limit)),
             )
             return cur.fetchall()
+
+def _list_public_clients_sql_verified_businesses(*, search: Optional[str], limit: int) -> List[Dict[str, Any]]:
+    """
+    Legacy-compatible public directory query.
+
+    Some early MVP schemas may not include onboarding tables; in that case we
+    approximate "verified" using `businesses.verification_status = 'verified'`.
+    """
+    search_value = (search or "").strip()
+    search_like = f"%{search_value.lower()}%" if search_value else None
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select
+                    b.id,
+                    b.legal_name,
+                    coalesce(nullif(u.company_name,''), nullif(u.company,''), b.legal_name) as company_name,
+                    b.country,
+                    u.state,
+                    u.summary,
+                    u.established_year,
+                    b.status,
+                    b.website
+                from businesses b
+                join users u on u.id = b.user_id
+                where (b.status is null or b.status <> 'deactivated')
+                  and (b.verification_status = 'verified')
+                  and (%s is null or lower(coalesce(nullif(u.company_name,''), nullif(u.company,''), b.legal_name)) like %s)
+                order by b.id desc
+                limit %s
+                """,
+                (search_like, search_like, int(limit)),
+            )
+            return cur.fetchall()
+
+def list_public_clients(*, search: Optional[str], limit: int) -> List[Dict[str, Any]]:
+    """
+    Return a public directory of verified clients (companies).
+
+    Primary implementation uses a single SQL query for performance.
+    If anything goes wrong (schema drift during MVP development, etc.),
+    it falls back to a slower Python loop to avoid hard 500s.
+    """
+    try:
+        if _table_exists("onboarding_sessions"):
+            return _list_public_clients_sql_verified_users(search=search, limit=limit)
+        return _list_public_clients_sql_verified_businesses(search=search, limit=limit)
+    except Exception:
+        results: List[Dict[str, Any]] = []
+        for biz in list_businesses():
+            if biz.get("status") == "deactivated":
+                continue
+            owner = get_user_by_id(biz.get("user_id")) or {}
+            verified = False
+            if owner.get("id"):
+                try:
+                    verified = is_user_verified(int(owner["id"]))
+                except Exception:
+                    verified = False
+            if owner.get("id") and not verified:
+                continue
+            display_name = owner.get("company_name") or biz.get("legal_name") or ""
+            if search and search.lower() not in display_name.lower():
+                continue
+            results.append(
+                {
+                    "id": biz.get("id"),
+                    "legal_name": biz.get("legal_name"),
+                    "company_name": display_name,
+                    "country": biz.get("country"),
+                    "state": owner.get("state"),
+                    "summary": owner.get("summary") or "",
+                    "established_year": owner.get("established_year"),
+                    "status": biz.get("status", "active"),
+                    "website": biz.get("website"),
+                }
+            )
+            if len(results) >= int(limit):
+                break
+        return results
 
 
 def list_businesses_for_user(user_id: int) -> List[BusinessRecord]:
@@ -470,6 +587,7 @@ def update_user_profile(user_id: int, **fields: Any) -> Optional[UserRecord]:
 
 
 def create_session(token: str, user_id: int) -> None:
+    """Create a new session token for the given user."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -480,6 +598,7 @@ def create_session(token: str, user_id: int) -> None:
 
 
 def get_session(token: str) -> Optional[SessionRecord]:
+    """Fetch an active session by token."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("select * from sessions where token = %s", (token,))
@@ -487,6 +606,7 @@ def get_session(token: str) -> Optional[SessionRecord]:
 
 
 def delete_session(token: str) -> None:
+    """Invalidate a session token (logout)."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("delete from sessions where token = %s", (token,))
@@ -494,6 +614,7 @@ def delete_session(token: str) -> None:
 
 
 def create_otp(record_id: str, user_id: int, code: str, expires_at: datetime) -> None:
+    """Store a one-time code as a salted HMAC digest with an expiry timestamp."""
     salt = os.urandom(16).hex()
     digest = hmac.new(salt.encode("utf-8"), code.encode("utf-8"), hashlib.sha256).hexdigest()
     with get_connection() as conn:
@@ -534,6 +655,81 @@ def get_active_onboarding_session(user_id: int) -> Optional[OnboardingSessionRec
                 """,
                 (user_id,),
             )
+            return cur.fetchone()
+
+
+def get_latest_onboarding_session(user_id: int) -> Optional[OnboardingSessionRecord]:
+    """Return the most recently saved onboarding session for a user (active or completed)."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select *
+                from onboarding_sessions
+                where user_id = %s
+                order by last_saved_at desc
+                limit 1
+                """,
+                (user_id,),
+            )
+            return cur.fetchone()
+
+
+def get_user_stats(user_id: int) -> Dict[str, int]:
+    """Return a few small counts used by the UI (accounts, issued UPIs)."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("select count(*) as n from payment_accounts where user_id = %s", (user_id,))
+            accounts = int((cur.fetchone() or {}).get("n", 0) or 0)
+            cur.execute("select count(*) as n from businesses where user_id = %s", (user_id,))
+            upis = int((cur.fetchone() or {}).get("n", 0) or 0)
+    return {"payment_accounts": accounts, "upis": upis}
+
+
+def update_organization_profile(
+    *,
+    org_id: str,
+    user_id: int,
+    dba: Optional[str] = None,
+    address: Optional[Dict[str, Any]] = None,
+    industry: Optional[str] = None,
+    website: Optional[str] = None,
+    description: Optional[str] = None,
+) -> Optional[OrganizationRecord]:
+    """
+    Update editable organization (onboarding) profile fields for the current user.
+
+    This is used by the Profile page to allow limited edits after onboarding.
+    """
+    assignments: List[str] = []
+    params: List[Any] = []
+    if dba is not None:
+        assignments.append("dba = %s")
+        params.append(dba)
+    if address is not None:
+        assignments.append("address = %s::jsonb")
+        params.append(json.dumps(address))
+    if industry is not None:
+        assignments.append("industry = %s")
+        params.append(industry)
+    if website is not None:
+        assignments.append("website = %s")
+        params.append(website)
+    if description is not None:
+        assignments.append("description = %s")
+        params.append(description)
+
+    if not assignments:
+        return get_organization(org_id, user_id)
+
+    params.extend([str(org_id), int(user_id)])
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"update organizations set {', '.join(assignments)}, updated_at=now() where id = %s and user_id = %s returning *",
+                params,
+            )
+            conn.commit()
             return cur.fetchone()
 
 
@@ -691,6 +887,13 @@ def update_onboarding_role(
 
 
 def store_onboarding_file(*, file_id: str, filename: str, content_type: str, data: bytes, user_id: int) -> None:
+    """
+    Store an onboarding upload (MVP local disk storage).
+
+    Writes:
+    - `<file_id>.bin`: raw file bytes
+    - `<file_id>.json`: metadata (including `user_id` ownership)
+    """
     if not re.match(r"^id_[0-9a-f]{32}$", file_id):
         raise ValueError("Invalid file_id")
 
@@ -707,6 +910,12 @@ def store_onboarding_file(*, file_id: str, filename: str, content_type: str, dat
 
 
 def onboarding_file_exists(*, file_id: str, user_id: int) -> bool:
+    """
+    Validate that an onboarding upload exists and is owned by the user.
+
+    This is used to ensure `id_document_id` references are not forged and to
+    prevent path traversal (strict file_id format + base-dir constraint).
+    """
     if not re.match(r"^id_[0-9a-f]{32}$", file_id):
         return False
 
@@ -789,6 +998,7 @@ def create_bank_rail_mapping(
 
 
 def create_verification_otp(*, user_id: int, ttl: Any) -> tuple[str, str]:
+    """Create and persist an OTP for onboarding verification; returns (otp_id, raw_code)."""
     otp_id = uuid.uuid4().hex
     # 6 digit code
     code = f"{int.from_bytes(os.urandom(2), 'big') % 1000000:06d}"
@@ -798,6 +1008,12 @@ def create_verification_otp(*, user_id: int, ttl: Any) -> tuple[str, str]:
 
 
 def verify_otp(*, otp_id: str, code: str) -> bool:
+    """
+    Verify a submitted OTP against the stored digest and expiry.
+
+    Note: Postgres drivers may return `expires_at` as a datetime; this code
+    supports both datetime and ISO string representations.
+    """
     record = get_otp(otp_id)
     if not record:
         return False

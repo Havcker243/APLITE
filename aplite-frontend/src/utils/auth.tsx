@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { AuthResponse, setAuthToken, User } from "./api";
+import { AuthResponse, logout as apiLogout, setAuthToken, User } from "./api";
 
 type AuthContextType = {
   user: User | null;
@@ -45,10 +45,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const handleLogout = () => {
-    setUser(null);
-    setToken(null);
-    setAuthToken(null);
-    window.localStorage.removeItem("aplite_auth");
+    void apiLogout().finally(() => {
+      setUser(null);
+      setToken(null);
+      setAuthToken(null);
+      window.localStorage.removeItem("aplite_auth");
+    });
   };
 
   return <AuthContext.Provider value={{ user, token, ready, login: handleLogin, logout: handleLogout }}>{children}</AuthContext.Provider>;

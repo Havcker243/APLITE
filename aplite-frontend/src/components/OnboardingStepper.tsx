@@ -8,19 +8,36 @@ const STEPS = [
   { id: 5, label: "Verify" },
 ];
 
-export function OnboardingStepper({ currentStep }: { currentStep: number }) {
+export function OnboardingStepper({
+  currentStep,
+  completedThrough,
+  onStepClick,
+}: {
+  currentStep: number;
+  completedThrough: number;
+  onStepClick?: (step: number) => void;
+}) {
   return (
     <div className="onboarding-stepper" aria-label="Onboarding progress">
       {STEPS.map((step) => {
-        const completed = currentStep > step.id;
+        const completed = completedThrough >= step.id;
         const current = currentStep === step.id;
+        const clickable = typeof onStepClick === "function" && step.id <= Math.max(currentStep, completedThrough);
+
         return (
-          <div key={step.id} className={`step${completed ? " step--complete" : ""}${current ? " step--current" : ""}`}>
+          <button
+            key={step.id}
+            type="button"
+            className={`step${completed ? " step--complete" : ""}${current ? " step--current" : ""}`}
+            onClick={() => clickable && onStepClick?.(step.id)}
+            disabled={!clickable}
+            aria-current={current ? "step" : undefined}
+          >
             <div className="step-circle" aria-hidden="true">
               {completed ? "✓" : step.id}
             </div>
-            <div className="step-label">{step.label}</div>
-          </div>
+            <div className="step-label">{`Stage ${step.id}: ${step.label}`}</div>
+          </button>
         );
       })}
     </div>

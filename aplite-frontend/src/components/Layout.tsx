@@ -1,25 +1,54 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/router";
-import React, { PropsWithChildren } from "react";
+import React, { PropsWithChildren, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../utils/auth";
 import apliteLogo from "../RealLogo.png";
 
 export function Layout({ children }: PropsWithChildren) {
   const router = useRouter();
   const { user, logout } = useAuth();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  const accountLabel = useMemo(() => {
+    if (!user) return "";
+    const fullName = `${user.first_name || ""} ${user.last_name || ""}`.trim();
+    return fullName || user.company_name || user.company || user.email;
+  }, [user]);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setMenuOpen(false);
+    }
+
+    function onMouseDown(event: MouseEvent) {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (!menuRef.current?.contains(target)) {
+        setMenuOpen(false);
+      }
+    }
+
+    if (!menuOpen) return;
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("mousedown", onMouseDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("mousedown", onMouseDown);
+    };
+  }, [menuOpen]);
 
   const links = user
     ? [
-        { href: "/dashboard", label: "Dashboard" },
+        { href: "/dashboard", label: "Workspace" },
         { href: "/accounts", label: "Accounts" },
-        { href: "/profile", label: "Profile" },
-        { href: "/resolve", label: "Resolve" },
-        { href: "/clients", label: "Clients" },
+        { href: "/resolve", label: "Resolve UPI" },
+        { href: "/clients", label: "Directory" },
       ]
     : [
         { href: "/", label: "Home" },
-        { href: "/clients", label: "Clients" },
+        { href: "/clients", label: "Directory" },
         { href: "/login", label: "Login" },
         { href: "/signup", label: "Get Started" },
       ];
@@ -30,11 +59,11 @@ export function Layout({ children }: PropsWithChildren) {
         Skip to content
       </a>
       <header className="site-header">
-        <div className="logo">
+        <Link href={user ? "/dashboard" : "/"} className="logo" aria-label="Aplite home">
           <Image src={apliteLogo} alt="Aplite" className="logo-img" priority />
           <span>Aplite</span>
-        </div>
-        <nav className="site-nav">
+        </Link>
+        <nav className="site-nav" aria-label="Primary navigation">
           {links.map((link) => {
             const active = router.pathname === link.href;
             return (
@@ -44,14 +73,38 @@ export function Layout({ children }: PropsWithChildren) {
             );
           })}
           {user && (
-            <button
-              type="button"
-              className="nav-link"
-              style={{ border: "none", background: "transparent", cursor: "pointer" }}
-              onClick={logout}
-            >
-              Logout
-            </button>
+            <div className="account-menu" ref={menuRef}>
+              <button
+                type="button"
+                className="account-trigger"
+                onClick={() => setMenuOpen((prev) => !prev)}
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+              >
+                <span className="account-name">{accountLabel}</span>
+                <span className="account-caret" aria-hidden="true">
+                  ▾
+                </span>
+              </button>
+              {menuOpen && (
+                <div className="account-dropdown" role="menu" aria-label="Account menu">
+                  <Link href="/profile" role="menuitem" className="account-item" onClick={() => setMenuOpen(false)}>
+                    Profile
+                  </Link>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="account-item"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      logout();
+                    }}
+                  >
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </nav>
       </header>

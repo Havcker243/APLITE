@@ -94,6 +94,7 @@ a {
   font-size: 1.25rem;
   letter-spacing: 0.04em;
   gap: 10px;
+  text-decoration: none;
 }
 
 .logo-img {
@@ -105,6 +106,7 @@ a {
 
 .site-nav {
   display: flex;
+  align-items: center;
   gap: 12px;
 }
 
@@ -128,6 +130,75 @@ a {
   background: var(--accent-soft);
   color: var(--accent);
   border-color: rgba(108, 124, 255, 0.35);
+}
+
+.account-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.account-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.2s ease, border 0.2s ease;
+}
+
+.account-trigger:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.account-name {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.account-caret {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.account-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  width: 220px;
+  background: rgba(11, 13, 18, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+  z-index: 20;
+}
+
+.account-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+  font: inherit;
+}
+
+.account-item:hover {
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .site-main {
@@ -168,6 +239,23 @@ a {
   gap: 8px;
   text-align: center;
   color: var(--text-muted);
+  border: none;
+  background: transparent;
+  padding: 6px 4px;
+  cursor: default;
+}
+
+.step:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.step:not(:disabled) {
+  cursor: pointer;
+}
+
+.step:not(:disabled):hover .step-circle {
+  border-color: rgba(255, 255, 255, 0.22);
 }
 
 .step-circle {

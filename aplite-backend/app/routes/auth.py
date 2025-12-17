@@ -5,6 +5,7 @@ import os
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Header, status
+from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, EmailStr, Field
 
 from app.db import queries
@@ -52,7 +53,25 @@ class ProfileUpdateRequest(BaseModel):
     country: str | None = None
 
 
+class OrgAddress(BaseModel):
+    street1: str
+    street2: str | None = None
+    city: str
+    state: str
+    zip: str
+    country: str
+
+
+class OnboardingProfileUpdateRequest(BaseModel):
+    dba: str | None = None
+    address: OrgAddress | None = None
+    industry: str | None = None
+    website: str | None = None
+    description: str | None = None
+
+
 def _coerce_utc_datetime(value: object) -> datetime | None:
+    """Parse a DB timestamp into a timezone-aware UTC datetime."""
     if isinstance(value, datetime):
         parsed = value
     elif isinstance(value, str):
@@ -69,12 +88,14 @@ def _coerce_utc_datetime(value: object) -> datetime | None:
 
 
 def _bearer_token_from_header(authorization: str | None) -> str | None:
+    """Extract a bearer token from an Authorization header."""
     if not authorization or not authorization.startswith("Bearer "):
         return None
     return authorization.removeprefix("Bearer ").strip() or None
 
 
 def _issue_session(user_id: int) -> str:
+    """Create and persist a new session token for the user."""
     token = generate_session_token()
     queries.create_session(token, user_id)
     return token
@@ -87,6 +108,7 @@ def _sanitize_user(user: dict) -> dict:
 
 
 def get_current_user(authorization: str | None = Header(default=None)):
+    """FastAPI dependency: authenticate the request and return the current user row."""
     token = _bearer_token_from_header(authorization)
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing or invalid token")
@@ -111,6 +133,7 @@ def get_current_user(authorization: str | None = Header(default=None)):
 
 @router.post("/api/auth/signup", response_model=AuthResponse)
 def signup(payload: SignupRequest):
+    """Create a new user and return a session token + sanitized user profile."""
     if not payload.accept_terms:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Please accept the terms to continue")
 
@@ -147,6 +170,7 @@ def signup(payload: SignupRequest):
 
 @router.post("/api/auth/login/start")
 def login_start(payload: LoginStartRequest):
+    """Start login: verify password and send a 6-digit OTP (email in MVP)."""
     user = queries.get_user_by_email(payload.email.lower())
     if not user:
         # Clear message to guide users without an account.
@@ -169,6 +193,7 @@ def login_start(payload: LoginStartRequest):
 
 @router.post("/api/auth/login/verify", response_model=AuthResponse)
 def login_verify(payload: LoginVerifyRequest):
+    """Complete login: verify OTP and return a new session token."""
     record = queries.get_otp(payload.login_id)
     if not record:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired login request")
@@ -209,6 +234,7 @@ def login_verify(payload: LoginVerifyRequest):
 
 @router.post("/api/auth/logout")
 def logout(user=Depends(get_current_user), authorization: str | None = Header(default=None)):
+    """Invalidate the current session token (best-effort)."""
     token = _bearer_token_from_header(authorization)
     if token:
         queries.delete_session(token)
@@ -217,11 +243,61 @@ def logout(user=Depends(get_current_user), authorization: str | None = Header(de
 
 @router.get("/api/profile")
 def get_profile(user=Depends(get_current_user)):
+    """Return the current user's profile (sanitized)."""
     return _sanitize_user(user)
+
+
+@router.get("/api/profile/details")
+def get_profile_details(user=Depends(get_current_user)):
+    """
+    Return a richer profile snapshot for the UI.
+
+    Includes:
+    - `user`: account identity fields (read-only in MVP)
+    - `onboarding`: latest onboarding session state (if any)
+    - `organization`: onboarding business profile (if any)
+    """
+    latest_session = queries.get_latest_onboarding_session(user["id"])
+    org = None
+    if latest_session and latest_session.get("org_id"):
+        org = queries.get_organization(str(latest_session["org_id"]), user["id"])
+    stats = queries.get_user_stats(user["id"])
+    return jsonable_encoder({"user": _sanitize_user(user), "onboarding": latest_session, "organization": org, "stats": stats})
+
+
+@router.put("/api/profile/onboarding")
+def update_onboarding_profile(payload: OnboardingProfileUpdateRequest, user=Depends(get_current_user)):
+    """
+    Update onboarding/business profile fields shown on the Profile page.
+
+    Rules (MVP):
+    - If onboarding address is locked, address updates are rejected.
+    - Other edits are allowed (dba/website/description/industry) for convenience.
+    """
+    latest_session = queries.get_latest_onboarding_session(user["id"])
+    if not latest_session or not latest_session.get("org_id"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No onboarding profile found.")
+
+    if payload.address is not None and bool(latest_session.get("address_locked", False)):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Address is locked after onboarding Step 1.")
+
+    updated = queries.update_organization_profile(
+        org_id=str(latest_session["org_id"]),
+        user_id=user["id"],
+        dba=(payload.dba.strip() if payload.dba is not None else None),
+        address=(payload.address.model_dump() if payload.address is not None else None),
+        industry=(payload.industry.strip() if payload.industry is not None else None),
+        website=(payload.website.strip() if payload.website is not None else None),
+        description=(payload.description.strip() if payload.description is not None else None),
+    )
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Onboarding profile not found.")
+    return jsonable_encoder(updated)
 
 
 @router.put("/api/profile")
 def update_profile(payload: ProfileUpdateRequest, user=Depends(get_current_user)):
+    """Update editable profile fields shown in public directory and UPI resolves."""
     updated = queries.update_user_profile(
         user_id=user["id"],
         company_name=(payload.company_name or "").strip(),

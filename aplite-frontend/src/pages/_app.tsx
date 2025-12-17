@@ -4,6 +4,7 @@ import Head from "next/head";
 import { Layout } from "../components/Layout";
 import "../styles/globals.css";
 import { AuthProvider } from "../utils/auth";
+import { OnboardingProvider } from "../utils/onboardingWizard";
 
 export default function App({ Component, pageProps }: AppProps) {
   return (
@@ -11,9 +12,11 @@ export default function App({ Component, pageProps }: AppProps) {
       <Head>
         <meta name="theme-color" content="#05060a" />
       </Head>
-      <Layout>
-        <Component {...pageProps} />
-      </Layout>
+      <OnboardingProvider>
+        <Layout>
+          <Component {...pageProps} />
+        </Layout>
+      </OnboardingProvider>
     </AuthProvider>
   );
 }

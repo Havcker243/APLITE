@@ -38,6 +38,42 @@ export type OnboardingCurrentResponse = {
   org: any;
 };
 
+export type ProfileDetailsResponse = {
+  user: User;
+  onboarding: {
+    id: string;
+    org_id: string;
+    user_id: number;
+    state: string;
+    current_step: number;
+    risk_level: string;
+    address_locked: boolean;
+    last_saved_at?: string;
+    completed_at?: string | null;
+    step_statuses?: any;
+  } | null;
+  organization: {
+    id: string;
+    legal_name: string;
+    dba?: string | null;
+    ein: string;
+    formation_date: string;
+    formation_state: string;
+    entity_type: string;
+    address: any;
+    industry: string;
+    website?: string | null;
+    description?: string | null;
+    issued_upi?: string | null;
+    created_at?: string;
+    updated_at?: string;
+  } | null;
+  stats: {
+    payment_accounts: number;
+    upis: number;
+  };
+};
+
 export type OnboardingStep2Payload = { role: "owner" | "authorized_rep"; title?: string };
 export type OnboardingStep3Payload = { full_name: string; title?: string; id_document_id: string; attestation: boolean };
 export type OnboardingStep4Payload = {
@@ -130,10 +166,12 @@ export type ResolveResult = {
 };
 
 export function setAuthToken(token: string | null) {
+  /** Set the bearer token used by all API calls in this module. */
   authToken = token;
 }
 
 function authHeaders(): Record<string, string> {
+  /** Build Authorization headers (empty when logged out). */
   const headers: Record<string, string> = {};
   if (authToken) {
     headers.Authorization = `Bearer ${authToken}`;
@@ -155,6 +193,7 @@ async function parseError(res: Response, fallback: string) {
 }
 
 export async function signup(data: {
+  /** Create a new user and immediately receive a session token. */
   first_name: string;
   last_name: string;
   email: string;
@@ -184,10 +223,12 @@ export async function signup(data: {
 }
 
 export async function login(data: { email: string; password: string }): Promise<AuthResponse> {
+  /** Legacy helper kept for compatibility; use `loginStart` + `loginVerify`. */
   throw new Error("Two-factor login now requires loginStart and loginVerify");
 }
 
 export async function loginStart(data: { email: string; password: string }): Promise<LoginStartResponse> {
+  /** Start login: password + email OTP delivery (MVP). */
   const res = await fetch(`${API_BASE_URL}/api/auth/login/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -211,6 +252,7 @@ export async function loginStart(data: { email: string; password: string }): Pro
 }
 
 export async function loginVerify(data: { login_id: string; code: string }): Promise<AuthResponse> {
+  /** Complete login by verifying the OTP; returns a session token + user. */
   const res = await fetch(`${API_BASE_URL}/api/auth/login/verify`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -233,7 +275,21 @@ export async function loginVerify(data: { login_id: string; code: string }): Pro
   return res.json();
 }
 
+export async function logout(): Promise<void> {
+  /** Best-effort logout: invalidates the server session token for the current user. */
+  if (!authToken) return;
+  try {
+    await fetch(`${API_BASE_URL}/api/auth/logout`, {
+      method: "POST",
+      headers: { ...authHeaders() },
+    });
+  } catch {
+    // ignore network errors during logout
+  }
+}
+
 export async function onboardBusiness(data: BusinessPayload) {
+  /** Create a business and mint a new UPI under the authenticated user's workspace. */
   const res = await fetch(`${API_BASE_URL}/api/businesses`, {
     method: "POST",
     headers: {
@@ -252,6 +308,7 @@ export async function onboardBusiness(data: BusinessPayload) {
 }
 
 export async function resolveUPI(data: ResolvePayload) {
+  /** Resolve an owned UPI to payout coordinates for a specific rail. */
   const res = await fetch(`${API_BASE_URL}/api/resolve`, {
     method: "POST",
     headers: {
@@ -276,6 +333,7 @@ export async function resolveUPI(data: ResolvePayload) {
 }
 
 export async function fetchBusinesses(limit?: number): Promise<BusinessSummary[]> {
+  /** Load recently created businesses/UPIs for the authenticated user. */
   const params = limit ? `?limit=${limit}` : "";
   const res = await fetch(`${API_BASE_URL}/api/businesses${params}`, {
     headers: authHeaders(),
@@ -289,6 +347,7 @@ export async function fetchBusinesses(limit?: number): Promise<BusinessSummary[]
 }
 
 export async function deactivateBusiness(id: number) {
+  /** Deactivate a business/UPI so it can no longer be resolved. */
   const res = await fetch(`${API_BASE_URL}/api/businesses/${id}/deactivate`, {
     method: "POST",
     headers: { ...authHeaders(), "Content-Type": "application/json" },
@@ -301,6 +360,7 @@ export async function deactivateBusiness(id: number) {
 }
 
 export async function fetchProfile(): Promise<User> {
+  /** Fetch the current user's profile. */
   const res = await fetch(`${API_BASE_URL}/api/profile`, {
     headers: {
       "Content-Type": "application/json",
@@ -313,7 +373,41 @@ export async function fetchProfile(): Promise<User> {
   return res.json();
 }
 
+export async function fetchProfileDetails(): Promise<ProfileDetailsResponse> {
+  /** Fetch a richer profile snapshot including onboarding/organization info. */
+  const res = await fetch(`${API_BASE_URL}/api/profile/details`, {
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+    },
+  });
+  if (!res.ok) {
+    throw new Error("Failed to load profile details");
+  }
+  return res.json();
+}
+
+export async function updateOnboardingProfile(data: {
+  dba?: string | null;
+  address?: { street1: string; street2?: string | null; city: string; state: string; zip: string; country: string } | null;
+  industry?: string | null;
+  website?: string | null;
+  description?: string | null;
+}) {
+  /** Update onboarding/business profile fields displayed on the Profile page. */
+  const res = await fetch(`${API_BASE_URL}/api/profile/onboarding`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    throw new Error(await parseError(res, "Failed to update onboarding profile"));
+  }
+  return res.json();
+}
+
 export async function fetchPublicClients(query?: string) {
+  /** Load the public directory of verified clients (optional `search` filter). */
   const params = new URLSearchParams();
   if (query) params.set("search", query);
   const res = await fetch(`${API_BASE_URL}/api/public/clients${params.toString() ? `?${params.toString()}` : ""}`);
@@ -324,6 +418,7 @@ export async function fetchPublicClients(query?: string) {
 }
 
 export async function updateProfile(data: {
+  /** Update the current user's public profile fields. */
   company_name?: string;
   summary?: string;
   established_year?: number;
@@ -345,6 +440,7 @@ export async function updateProfile(data: {
 }
 
 export async function listAccounts() {
+  /** List payout rails/accounts saved for the authenticated user. */
   const res = await fetch(`${API_BASE_URL}/api/accounts`, { headers: authHeaders() });
   if (!res.ok) {
     throw new Error("Failed to load accounts");
@@ -353,6 +449,7 @@ export async function listAccounts() {
 }
 
 export async function createAccount(data: AccountPayload) {
+  /** Create a new payout rail/account for the authenticated user. */
   const res = await fetch(`${API_BASE_URL}/api/accounts`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -366,12 +463,14 @@ export async function createAccount(data: AccountPayload) {
 }
 
 export async function onboardingCurrent(): Promise<OnboardingCurrentResponse> {
+  /** Fetch the current active onboarding session (if any). */
   const res = await fetch(`${API_BASE_URL}/onboarding/current`, { headers: { ...authHeaders() } });
   if (!res.ok) throw new Error(await parseError(res, "Unable to load onboarding session"));
   return res.json();
 }
 
 export async function onboardingStep1(payload: OnboardingStep1Payload): Promise<OnboardingStep1Response> {
+  /** Submit onboarding Step 1 (legal entity details). */
   const res = await fetch(`${API_BASE_URL}/onboarding/step-1`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -382,6 +481,7 @@ export async function onboardingStep1(payload: OnboardingStep1Payload): Promise<
 }
 
 export async function onboardingStep2(payload: OnboardingStep2Payload) {
+  /** Submit onboarding Step 2 (authorization role). */
   const res = await fetch(`${API_BASE_URL}/onboarding/step-2`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -392,6 +492,7 @@ export async function onboardingStep2(payload: OnboardingStep2Payload) {
 }
 
 export async function onboardingUploadId(file: File) {
+  /** Upload an identity document for onboarding Step 3. */
   const formData = new FormData();
   formData.append("file", file);
   const res = await fetch(`${API_BASE_URL}/onboarding/upload-id`, {
@@ -404,6 +505,7 @@ export async function onboardingUploadId(file: File) {
 }
 
 export async function onboardingStep3(payload: OnboardingStep3Payload) {
+  /** Submit onboarding Step 3 (identity verification attestation + document reference). */
   const res = await fetch(`${API_BASE_URL}/onboarding/step-3`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -414,6 +516,7 @@ export async function onboardingStep3(payload: OnboardingStep3Payload) {
 }
 
 export async function onboardingStep4(payload: OnboardingStep4Payload) {
+  /** Submit onboarding Step 4 (bank rail mapping; account number encrypted server-side). */
   const res = await fetch(`${API_BASE_URL}/onboarding/step-4`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -424,6 +527,7 @@ export async function onboardingStep4(payload: OnboardingStep4Payload) {
 }
 
 export async function verifySendOtp(method: "email" | "sms") {
+  /** Send an onboarding verification OTP (email or SMS; SMS is stubbed in MVP). */
   const res = await fetch(`${API_BASE_URL}/verify/send-otp`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -434,6 +538,7 @@ export async function verifySendOtp(method: "email" | "sms") {
 }
 
 export async function verifyConfirmOtp(code: string) {
+  /** Confirm onboarding verification OTP; completes onboarding and issues a UPI. */
   const res = await fetch(`${API_BASE_URL}/verify/confirm-otp`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -444,12 +549,14 @@ export async function verifyConfirmOtp(code: string) {
 }
 
 export async function verifyAvailableSlots() {
+  /** Fetch available verification-call slots (deterministic in MVP). */
   const res = await fetch(`${API_BASE_URL}/verify/available-slots`, { headers: { ...authHeaders() } });
   if (!res.ok) throw new Error(await parseError(res, "Unable to load slots"));
   return res.json() as Promise<{ slots: string[] }>;
 }
 
 export async function verifyScheduleCall(scheduled_at: string) {
+  /** Schedule a verification call for onboarding. */
   const res = await fetch(`${API_BASE_URL}/verify/schedule-call`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
