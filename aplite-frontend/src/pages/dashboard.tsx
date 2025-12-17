@@ -9,13 +9,16 @@ import { ResultCard } from "../components/ResultCard";
 import { BusinessSummary, deactivateBusiness, fetchBusinesses, listAccounts, onboardBusiness, resolveUPI } from "../utils/api";
 import { useAuth } from "../utils/auth";
 
-const FIELD_LABELS: Record<keyof BusinessFormData, string> = {
+const FIELD_LABELS: Partial<Record<keyof BusinessFormData, string>> = {
   legal_name: "Legal Name",
   ein: "EIN",
   business_type: "Business Type",
   website: "Website",
   address: "Address",
   country: "Country",
+  account_mode: "Account Mode",
+  payment_account_id: "Saved Account",
+  rail: "Rail",
   bank_name: "Bank Name",
   account_name: "Account Name",
   ach_routing: "ACH Routing",
@@ -69,7 +72,8 @@ function validateForm(data: BusinessFormData): string[] {
 
   requiredFields.forEach((field) => {
     if (!data[field] || !data[field].trim()) {
-      errors.push(`${FIELD_LABELS[field]} is required`);
+      const label = FIELD_LABELS[field] || String(field);
+      errors.push(`${label} is required`);
     }
   });
 

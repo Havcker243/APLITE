@@ -100,6 +100,7 @@ export type User = {
   summary?: string;
   established_year?: number;
   state?: string;
+  country?: string;
   master_upi: string;
   created_at?: string;
 };
@@ -132,12 +133,12 @@ export function setAuthToken(token: string | null) {
   authToken = token;
 }
 
-function authHeaders() {
-  return authToken
-    ? {
-        Authorization: `Bearer ${authToken}`,
-      }
-    : {};
+function authHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+  return headers;
 }
 
 async function parseError(res: Response, fallback: string) {

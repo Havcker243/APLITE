@@ -28,7 +28,7 @@ class PaymentAccountPayload(BaseModel):
 
 class BusinessCreateRequest(BaseModel):
     legal_name: str
-    ein: str | None = None
+    ein: str
     business_type: str
     website: str | None = None
     address: str
@@ -49,7 +49,7 @@ class BusinessSummary(BaseModel):
 
 
 @router.post("/api/businesses")
-async def create_business(payload: BusinessCreateRequest, user=Depends(get_current_user)):
+def create_business(payload: BusinessCreateRequest, user=Depends(get_current_user)):
     if not queries.is_user_verified(user["id"]):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -172,7 +172,7 @@ async def create_business(payload: BusinessCreateRequest, user=Depends(get_curre
 
 
 @router.post("/api/businesses/{business_id}/deactivate")
-async def deactivate_business(business_id: int, user=Depends(get_current_user)):
+def deactivate_business(business_id: int, user=Depends(get_current_user)):
     business = queries.get_business_by_id(business_id)
     if not business or business.get("user_id") != user["id"]:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Business not found")
@@ -186,7 +186,7 @@ async def deactivate_business(business_id: int, user=Depends(get_current_user)):
 
 
 @router.get("/api/businesses")
-async def list_businesses(
+def list_businesses(
     limit: int | None = Query(default=None, ge=1, le=200),
     user=Depends(get_current_user),
 ) -> list[BusinessSummary]:

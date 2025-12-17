@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
+import os
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Header, status
@@ -51,6 +52,28 @@ class ProfileUpdateRequest(BaseModel):
     country: str | None = None
 
 
+def _coerce_utc_datetime(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value)
+        except Exception:
+            return None
+    else:
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _bearer_token_from_header(authorization: str | None) -> str | None:
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    return authorization.removeprefix("Bearer ").strip() or None
+
+
 def _issue_session(user_id: int) -> str:
     token = generate_session_token()
     queries.create_session(token, user_id)
@@ -64,12 +87,22 @@ def _sanitize_user(user: dict) -> dict:
 
 
 def get_current_user(authorization: str | None = Header(default=None)):
-    if not authorization or not authorization.startswith("Bearer "):
+    token = _bearer_token_from_header(authorization)
+    if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing or invalid token")
-    token = authorization.removeprefix("Bearer ").strip()
     session = queries.get_session(token)
     if not session:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
+    created_at = _coerce_utc_datetime(session.get("created_at"))
+    if created_at is None:
+        queries.delete_session(token)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
+
+    ttl_hours = int(os.getenv("SESSION_TTL_HOURS", "168"))  # default: 7 days
+    if datetime.now(timezone.utc) > created_at + timedelta(hours=ttl_hours):
+        queries.delete_session(token)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
+
     user = queries.get_user_by_id(session["user_id"])
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
@@ -143,10 +176,21 @@ def login_verify(payload: LoginVerifyRequest):
     if record.get("consumed"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Code already used")
 
-    try:
-        expires_at = datetime.fromisoformat(record["expires_at"])
-    except Exception:
-        expires_at = datetime.now(timezone.utc)
+    expires_at_raw = record.get("expires_at")
+    expires_at: datetime | None = None
+    if isinstance(expires_at_raw, datetime):
+        expires_at = expires_at_raw
+    elif isinstance(expires_at_raw, str):
+        try:
+            expires_at = datetime.fromisoformat(expires_at_raw)
+        except Exception:
+            expires_at = None
+    if expires_at is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired login request")
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    else:
+        expires_at = expires_at.astimezone(timezone.utc)
     if datetime.now(timezone.utc) > expires_at:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Code expired")
 
@@ -161,6 +205,14 @@ def login_verify(payload: LoginVerifyRequest):
 
     token = _issue_session(record["user_id"])
     return {"token": token, "user": _sanitize_user(user)}
+
+
+@router.post("/api/auth/logout")
+def logout(user=Depends(get_current_user), authorization: str | None = Header(default=None)):
+    token = _bearer_token_from_header(authorization)
+    if token:
+        queries.delete_session(token)
+    return {"detail": "Logged out"}
 
 
 @router.get("/api/profile")

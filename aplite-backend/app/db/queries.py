@@ -11,6 +11,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, TypedDict
@@ -263,6 +264,43 @@ def list_businesses() -> List[BusinessRecord]:
             return cur.fetchall()
 
 
+def list_public_clients(*, search: Optional[str], limit: int) -> List[Dict[str, Any]]:
+    search_value = (search or "").strip()
+    search_like = f"%{search_value.lower()}%" if search_value else None
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select
+                    b.id,
+                    b.legal_name,
+                    coalesce(nullif(u.company_name,''), nullif(u.company,''), b.legal_name) as company_name,
+                    b.country,
+                    u.state,
+                    u.summary,
+                    u.established_year,
+                    b.status,
+                    b.website
+                from businesses b
+                join users u on u.id = b.user_id
+                where b.status <> 'deactivated'
+                  and exists (
+                    select 1
+                    from onboarding_sessions s
+                    where s.user_id = u.id
+                      and s.state = 'VERIFIED'
+                    limit 1
+                  )
+                  and (%s is null or lower(coalesce(nullif(u.company_name,''), nullif(u.company,''), b.legal_name)) like %s)
+                order by b.id desc
+                limit %s
+                """,
+                (search_like, search_like, int(limit)),
+            )
+            return cur.fetchall()
+
+
 def list_businesses_for_user(user_id: int) -> List[BusinessRecord]:
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -446,6 +484,13 @@ def get_session(token: str) -> Optional[SessionRecord]:
         with conn.cursor() as cur:
             cur.execute("select * from sessions where token = %s", (token,))
             return cur.fetchone()
+
+
+def delete_session(token: str) -> None:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("delete from sessions where token = %s", (token,))
+            conn.commit()
 
 
 def create_otp(record_id: str, user_id: int, code: str, expires_at: datetime) -> None:
@@ -646,10 +691,15 @@ def update_onboarding_role(
 
 
 def store_onboarding_file(*, file_id: str, filename: str, content_type: str, data: bytes, user_id: int) -> None:
-    base = os.path.join(os.path.dirname(__file__), "..", "..", "data", "uploads")
+    if not re.match(r"^id_[0-9a-f]{32}$", file_id):
+        raise ValueError("Invalid file_id")
+
+    base = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "uploads"))
     os.makedirs(base, exist_ok=True)
-    meta_path = os.path.join(base, f"{file_id}.json")
-    bin_path = os.path.join(base, f"{file_id}.bin")
+    meta_path = os.path.abspath(os.path.join(base, f"{file_id}.json"))
+    bin_path = os.path.abspath(os.path.join(base, f"{file_id}.bin"))
+    if not meta_path.startswith(base + os.sep) or not bin_path.startswith(base + os.sep):
+        raise ValueError("Invalid file_id")
     with open(bin_path, "wb") as f:
         f.write(data)
     with open(meta_path, "w", encoding="utf-8") as f:
@@ -657,8 +707,13 @@ def store_onboarding_file(*, file_id: str, filename: str, content_type: str, dat
 
 
 def onboarding_file_exists(*, file_id: str, user_id: int) -> bool:
-    base = os.path.join(os.path.dirname(__file__), "..", "..", "data", "uploads")
-    meta_path = os.path.join(base, f"{file_id}.json")
+    if not re.match(r"^id_[0-9a-f]{32}$", file_id):
+        return False
+
+    base = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "uploads"))
+    meta_path = os.path.abspath(os.path.join(base, f"{file_id}.json"))
+    if not meta_path.startswith(base + os.sep):
+        return False
     if not os.path.exists(meta_path):
         return False
     try:
@@ -748,10 +803,21 @@ def verify_otp(*, otp_id: str, code: str) -> bool:
         return False
     if record.get("consumed"):
         return False
-    try:
-        expires_at = datetime.fromisoformat(record["expires_at"])
-    except Exception:
+    expires_at_raw = record.get("expires_at")
+    expires_at: datetime | None = None
+    if isinstance(expires_at_raw, datetime):
+        expires_at = expires_at_raw
+    elif isinstance(expires_at_raw, str):
+        try:
+            expires_at = datetime.fromisoformat(expires_at_raw)
+        except Exception:
+            expires_at = None
+    if expires_at is None:
         return False
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    else:
+        expires_at = expires_at.astimezone(timezone.utc)
     if datetime.now(timezone.utc) > expires_at:
         return False
     expected = hmac.new(record.get("salt", "").encode("utf-8"), code.encode("utf-8"), hashlib.sha256).hexdigest()

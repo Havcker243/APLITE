@@ -3,7 +3,7 @@ import Image from "next/image";
 import { useRouter } from "next/router";
 import React, { PropsWithChildren } from "react";
 import { useAuth } from "../utils/auth";
-import apliteLogo from "../AplitLogo.avif";
+import apliteLogo from "../RealLogo.png";
 
 export function Layout({ children }: PropsWithChildren) {
   const router = useRouter();

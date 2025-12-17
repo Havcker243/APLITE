@@ -107,6 +107,14 @@ class Step3Payload(BaseModel):
     id_document_id: str = Field(min_length=8, max_length=200)
     attestation: bool
 
+    @field_validator("id_document_id")
+    @classmethod
+    def validate_id_document_id(cls, value: str) -> str:
+        value = value.strip()
+        if not re.match(r"^id_[0-9a-f]{32}$", value):
+            raise ValueError("Invalid document reference. Please re-upload.")
+        return value
+
 
 class Step4Payload(BaseModel):
     bank_name: str = Field(min_length=2, max_length=120)
