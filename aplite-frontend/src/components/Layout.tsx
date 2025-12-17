@@ -5,17 +5,40 @@ import React, { PropsWithChildren, useEffect, useMemo, useRef, useState } from "
 import { useAuth } from "../utils/auth";
 import apliteLogo from "../RealLogo.png";
 
+const THEME_STORAGE_KEY = "aplite_theme";
+
 export function Layout({ children }: PropsWithChildren) {
   const router = useRouter();
   const { user, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
 
   const accountLabel = useMemo(() => {
     if (!user) return "";
     const fullName = `${user.first_name || ""} ${user.last_name || ""}`.trim();
     return fullName || user.company_name || user.company || user.email;
   }, [user]);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+      if (stored === "dark" || stored === "light") {
+        setTheme(stored);
+      }
+    } catch {
+      // ignore storage failures
+    }
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme === "dark" ? "dark" : "";
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {
+      // ignore storage failures
+    }
+  }, [theme]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -72,6 +95,15 @@ export function Layout({ children }: PropsWithChildren) {
               </Link>
             );
           })}
+          <button
+            type="button"
+            className="nav-link"
+            onClick={() => setTheme((prev) => (prev === "dark" ? "light" : "dark"))}
+            aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+            style={{ cursor: "pointer" }}
+          >
+            {theme === "dark" ? "Light" : "Dark"}
+          </button>
           {user && (
             <div className="account-menu" ref={menuRef}>
               <button
