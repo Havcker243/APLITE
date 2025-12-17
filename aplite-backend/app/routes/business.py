@@ -50,6 +50,11 @@ class BusinessSummary(BaseModel):
 
 @router.post("/api/businesses")
 async def create_business(payload: BusinessCreateRequest, user=Depends(get_current_user)):
+    if not queries.is_user_verified(user["id"]):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account must be verified before issuing UPIs.",
+        )
     if not payload.payment_account_id and not payload.account:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

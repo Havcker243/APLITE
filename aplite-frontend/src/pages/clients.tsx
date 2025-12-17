@@ -58,15 +58,15 @@ export default function ClientsPage() {
       )}
 
       <form onSubmit={handleSubmit} className="card form-card" style={{ maxWidth: 640 }}>
-        <div className="form-grid" style={{ gridTemplateColumns: "1fr auto" }}>
+        <div className="form-grid" style={{ gridTemplateColumns: "1fr" }}>
           <input
             className="input-control"
-            placeholder="Search by company name…"
+            placeholder="Search by company name"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             aria-label="Search clients"
           />
-          <button type="submit" className="button" disabled={loading} style={{ alignSelf: "stretch" }}>
+          <button type="submit" className="button" disabled={loading}>
             {loading && <span className="spinner" aria-hidden="true" />}
             Search
           </button>

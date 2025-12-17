@@ -2,8 +2,8 @@
 
 :root {
   color-scheme: dark;
-  --bg: #0b0d12;
-  --bg-secondary: #11141b;
+  --bg: #05060a;
+  --bg-secondary: #0b0d12;
   --divider: rgba(255, 255, 255, 0.08);
 
   --text: #f5f7fa;
@@ -19,13 +19,14 @@
   --warning: #f4b740;
   --danger: #ff6b6b;
 
-  --input-bg: #141824;
+  --input-bg: #10131c;
   --input-border: rgba(255, 255, 255, 0.12);
   --placeholder: #6e7381;
 
   --card: var(--bg-secondary);
   --card-border: var(--divider);
   --shadow-soft: 0 18px 50px rgba(0, 0, 0, 0.35);
+  --form-max: 680px;
 }
 
 * {
@@ -41,9 +42,9 @@ body {
 body {
   margin: 0;
   font-family: "Space Grotesk", "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  background: radial-gradient(circle at 20% -10%, rgba(108, 124, 255, 0.12), transparent 52%),
-    radial-gradient(circle at 95% 10%, rgba(108, 124, 255, 0.07), transparent 48%),
-    linear-gradient(180deg, var(--bg) 0%, var(--bg) 100%);
+  background: radial-gradient(circle at 20% -10%, rgba(108, 124, 255, 0.1), transparent 52%),
+    radial-gradient(circle at 95% 10%, rgba(108, 124, 255, 0.05), transparent 48%),
+    linear-gradient(180deg, var(--bg) 0%, #070912 100%);
   color: var(--text);
   min-height: 100vh;
 }
@@ -79,7 +80,7 @@ a {
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(11, 13, 18, 0.85);
+  background: rgba(5, 6, 10, 0.85);
   backdrop-filter: blur(14px);
   position: sticky;
   top: 0;
@@ -92,15 +93,14 @@ a {
   font-weight: 600;
   font-size: 1.25rem;
   letter-spacing: 0.04em;
+  gap: 10px;
 }
 
-.logo-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--accent);
-  margin-right: 10px;
-  box-shadow: 0 0 16px rgba(108, 124, 255, 0.45);
+.logo-img {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  box-shadow: 0 0 18px rgba(108, 124, 255, 0.25);
 }
 
 .site-nav {
@@ -149,6 +149,116 @@ a {
   width: min(1200px, 100%);
 }
 
+.onboarding-container {
+  width: min(960px, 100%);
+  padding-top: 24px;
+}
+
+.onboarding-stepper {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin: 12px 0 22px;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.step-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  font-weight: 600;
+}
+
+.step-label {
+  font-size: 0.85rem;
+  letter-spacing: 0.01em;
+}
+
+.step--current .step-circle {
+  border-color: rgba(108, 124, 255, 0.45);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.step--complete .step-circle {
+  border-color: rgba(108, 124, 255, 0.55);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.select-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.select-card {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 16px;
+  padding: 18px;
+  cursor: pointer;
+  transition: border 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.select-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.select-card--selected {
+  border-color: rgba(108, 124, 255, 0.55);
+  background: rgba(108, 124, 255, 0.08);
+}
+
+.select-card-title {
+  margin: 0 0 6px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.select-card-desc {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.inline-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.form-section {
+  padding-top: 6px;
+  margin-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.form-section:first-of-type {
+  border-top: none;
+  margin-top: 0;
+  padding-top: 0;
+}
+
 .hero {
   display: grid;
   gap: 12px;
@@ -180,6 +290,13 @@ a {
   padding: 28px;
   box-shadow: var(--shadow-soft);
   backdrop-filter: blur(12px);
+}
+
+.form-card {
+  width: 100%;
+  max-width: var(--form-max);
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .card h2 {
@@ -226,6 +343,10 @@ textarea {
 .input-control::placeholder,
 textarea::placeholder {
   color: var(--placeholder);
+}
+
+textarea.input-control {
+  resize: vertical;
 }
 
 .input-control:focus,
@@ -450,5 +571,9 @@ textarea:focus-within {
 
   .site-nav {
     flex-wrap: wrap;
+  }
+
+  .onboarding-stepper {
+    grid-template-columns: repeat(2, 1fr);
   }
 }

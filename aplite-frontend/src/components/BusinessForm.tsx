@@ -129,15 +129,15 @@ export function BusinessForm({ form, loading, accounts, onChange, onSubmit }: Bu
       <div className="section-title" style={{ marginTop: 32 }}>
         Payment Account
       </div>
-      <div className="form-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
+      <div className="form-grid" style={{ gridTemplateColumns: "1fr" }}>
         <div className="input-group">
           <label className="input-label">Account Source</label>
-          <div style={{ display: "flex", gap: 12 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <input type="radio" name="account_mode" value="new" checked={form.account_mode === "new"} onChange={onChange} />
               <span className="input-label">New account</span>
             </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <input type="radio" name="account_mode" value="existing" checked={form.account_mode === "existing"} onChange={onChange} />
               <span className="input-label">Use stored</span>
             </label>
@@ -154,7 +154,7 @@ export function BusinessForm({ form, loading, accounts, onChange, onSubmit }: Bu
               <option value="">Select an account…</option>
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
-                  {account.bank_name} • {account.rail} • {account.account_name || `Account ${account.id}`}
+                  {account.bank_name} › {account.rail} › {account.account_name || `Account ${account.id}`}
                 </option>
               ))}
             </select>
@@ -169,14 +169,14 @@ export function BusinessForm({ form, loading, accounts, onChange, onSubmit }: Bu
             Using stored account
           </div>
           <div className="history-meta">
-            {selectedAccount.bank_name} • {selectedAccount.account_name || `Account ${selectedAccount.id}`} • {selectedAccount.rail}
+            {selectedAccount.bank_name} › {selectedAccount.account_name || `Account ${selectedAccount.id}`} › {selectedAccount.rail}
           </div>
         </div>
       )}
 
       {form.account_mode === "new" && (
         <>
-          <div className="form-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
+          <div className="form-grid" style={{ gridTemplateColumns: "1fr" }}>
             <div className="input-group">
               <label className="input-label" htmlFor="rail">
                 Rail

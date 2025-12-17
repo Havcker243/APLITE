@@ -17,6 +17,12 @@ class ResolveUPIRequest(BaseModel):
 
 @router.post("/api/resolve")
 async def resolve_upi(payload: ResolveUPIRequest, user=Depends(get_current_user)):
+    if not queries.is_user_verified(user["id"]):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account must be verified before resolving UPIs.",
+        )
+
     upi_value = payload.upi.upper()
 
     if not validate_upi_format(upi_value):
@@ -40,6 +46,8 @@ async def resolve_upi(payload: ResolveUPIRequest, user=Depends(get_current_user)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="UPI not found")
 
     owner = queries.get_user_by_id(business.get("user_id")) or user
+    if not queries.is_user_verified(int(owner.get("id", 0))):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Recipient account is not verified.")
 
     # Verify namespace and signature against owner and stored core/payment_index
     secret = _load_secret()

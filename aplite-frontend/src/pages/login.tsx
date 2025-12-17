@@ -55,7 +55,8 @@ export default function LoginPage() {
     try {
       const response = await loginVerify({ login_id: loginId, code: otp.trim() });
       setAuth(response);
-      router.push("/dashboard");
+      const next = typeof router.query.next === "string" ? router.query.next : "/dashboard";
+      router.push(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to verify code");
     } finally {
@@ -85,7 +86,7 @@ export default function LoginPage() {
       )}
 
       <form onSubmit={loginId ? handleVerify : handleSubmit} className="card form-card" style={{ maxWidth: 520 }}>
-        <div className="form-grid">
+        <div className="form-grid" style={{ gridTemplateColumns: "1fr" }}>
           <div className="input-group">
             <label className="input-label" htmlFor="email">
               Email

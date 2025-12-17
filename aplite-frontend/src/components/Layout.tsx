@@ -1,7 +1,9 @@
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/router";
 import React, { PropsWithChildren } from "react";
 import { useAuth } from "../utils/auth";
+import apliteLogo from "../AplitLogo.avif";
 
 export function Layout({ children }: PropsWithChildren) {
   const router = useRouter();
@@ -29,7 +31,7 @@ export function Layout({ children }: PropsWithChildren) {
       </a>
       <header className="site-header">
         <div className="logo">
-          <span className="logo-dot" />
+          <Image src={apliteLogo} alt="Aplite" className="logo-img" priority />
           <span>Aplite</span>
         </div>
         <nav className="site-nav">

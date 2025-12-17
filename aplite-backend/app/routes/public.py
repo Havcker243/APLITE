@@ -12,6 +12,8 @@ def list_public_clients(search: str | None = Query(default=None, max_length=120)
         if biz.get("status") == "deactivated":
             continue
         owner = queries.get_user_by_id(biz.get("user_id")) or {}
+        if owner.get("id") and not queries.is_user_verified(int(owner["id"])):
+            continue
         display_name = owner.get("company_name") or biz.get("legal_name") or ""
         if search and search.lower() not in display_name.lower():
             continue

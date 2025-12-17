@@ -108,7 +108,7 @@ export default function AccountsPage() {
       )}
 
       <form className="card form-card" onSubmit={handleSubmit}>
-        <div className="form-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+        <div className="form-grid" style={{ gridTemplateColumns: "1fr" }}>
           <div className="input-group">
             <label className="input-label" htmlFor="rail">
               Rail

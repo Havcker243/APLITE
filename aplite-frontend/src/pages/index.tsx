@@ -19,7 +19,7 @@ export default function HomePage() {
         <div className="card">
           <h2>Create your workspace</h2>
           <p className="hero-subtitle">Sign up to mint your master UPI and start attaching verified payout accounts.</p>
-          <Link className="button" href="/signup">
+          <Link className="button" href="/onboard">
             Get Started
           </Link>
         </div>

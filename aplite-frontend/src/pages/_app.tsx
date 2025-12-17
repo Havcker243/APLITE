@@ -9,7 +9,7 @@ export default function App({ Component, pageProps }: AppProps) {
   return (
     <AuthProvider>
       <Head>
-        <meta name="theme-color" content="#04060a" />
+        <meta name="theme-color" content="#05060a" />
       </Head>
       <Layout>
         <Component {...pageProps} />

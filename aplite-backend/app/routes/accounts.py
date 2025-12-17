@@ -30,6 +30,11 @@ def list_accounts(user=Depends(get_current_user)):
 
 @router.post("/api/accounts", status_code=status.HTTP_201_CREATED)
 def create_account(payload: AccountCreateRequest, user=Depends(get_current_user)):
+    if not queries.is_user_verified(user["id"]):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account must be verified before adding payout rails.",
+        )
     try:
         account_id = queries.create_payment_account(
             user_id=user["id"],

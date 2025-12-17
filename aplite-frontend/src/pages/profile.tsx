@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { fetchProfile, updateProfile } from "../utils/api";
 import { useAuth } from "../utils/auth";
+import { YearInput } from "../components/YearInput";
+import { CA_PROVINCES, COUNTRIES, isCanada, isUnitedStates, US_STATES } from "../utils/geo";
 
 const initialState = {
   company_name: "",
@@ -18,6 +20,9 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  const isUS = isUnitedStates(form.country);
+  const isCA = isCanada(form.country);
 
   useEffect(() => {
     if (!ready) return;
@@ -93,7 +98,7 @@ export default function ProfilePage() {
       )}
 
       <form className="card form-card" onSubmit={handleSubmit}>
-        <div className="form-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
+        <div className="form-grid" style={{ gridTemplateColumns: "1fr" }}>
           <div className="input-group">
             <label className="input-label" htmlFor="company_name">
               Company Name
@@ -104,35 +109,64 @@ export default function ProfilePage() {
             <label className="input-label" htmlFor="established_year">
               Year Established
             </label>
-            <input
-              id="established_year"
-              name="established_year"
-              value={form.established_year}
-              onChange={handleChange}
-              className="input-control"
-              type="number"
-              min={1800}
-              max={new Date().getFullYear()}
-            />
+            <YearInput id="established_year" name="established_year" value={form.established_year} onChange={(value) => setForm((p) => ({ ...p, established_year: value }))} />
           </div>
           <div className="input-group">
             <label className="input-label" htmlFor="state">
               State/Region
             </label>
-            <input id="state" name="state" value={form.state} onChange={handleChange} className="input-control" />
+            <input
+              id="state"
+              name="state"
+              list={isUS ? "us-states" : isCA ? "ca-provinces" : undefined}
+              value={form.state}
+              onChange={handleChange}
+              className="input-control"
+              placeholder={isUS ? "CA" : isCA ? "ON" : "State / Region"}
+            />
+            {isUS && (
+              <datalist id="us-states">
+                {US_STATES.map((s) => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
+            )}
+            {isCA && (
+              <datalist id="ca-provinces">
+                {CA_PROVINCES.map((p) => (
+                  <option key={p} value={p} />
+                ))}
+              </datalist>
+            )}
           </div>
           <div className="input-group">
             <label className="input-label" htmlFor="country">
               Country
             </label>
-            <input id="country" name="country" value={form.country} onChange={handleChange} className="input-control" required />
+            <input
+              id="country"
+              name="country"
+              list="countries"
+              value={form.country}
+              onChange={(e) => {
+                const value = e.target.value;
+                setForm((prev) => ({ ...prev, country: value, state: "" }));
+              }}
+              className="input-control"
+              required
+            />
+            <datalist id="countries">
+              {COUNTRIES.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
           </div>
         </div>
         <div className="input-group" style={{ marginTop: 16 }}>
           <label className="input-label" htmlFor="summary">
             Public Summary
           </label>
-          <textarea id="summary" name="summary" value={form.summary} onChange={handleChange} className="input-control" rows={3} />
+          <textarea id="summary" name="summary" value={form.summary} onChange={handleChange} className="input-control" rows={4} />
         </div>
         <button className="button" type="submit" disabled={loading}>
           {loading && <span className="spinner" aria-hidden="true" />}
