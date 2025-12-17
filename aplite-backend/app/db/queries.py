@@ -14,8 +14,6 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, TypedDict
 
-from psycopg.rows import dict_row
-
 from app.db.connection import get_connection
 from app.utils import crypto
 
@@ -145,19 +143,20 @@ def create_business(**payload: Any) -> int:
                     payload.get("status", "active"),
                 ),
             )
+            conn.commit()
             row = cur.fetchone()
             return int(row["id"])
 
 
 def update_business_status(business_id: int, *, status: str) -> Optional[BusinessRecord]:
-    data = _load_data()
-    businesses: List[BusinessRecord] = data.get("businesses", [])  # type: ignore[assignment]
-    for row in businesses:
-        if row.get("id") == business_id:
-            row["status"] = status
-            _save_data(data)
-            return row
-    return None
+    with get_connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                "update businesses set status = %s where id = %s returning *",
+                (status, business_id),
+            )
+            conn.commit()
+            return cur.fetchone()
 
 
 def create_payment_account(**payload: Any) -> int:
@@ -206,55 +205,56 @@ def create_payment_account(**payload: Any) -> int:
                     json.dumps(payload.get("enc", {})),
                 ),
             )
+            conn.commit()
             row = cur.fetchone()
             return int(row["id"])
 
 
 def list_businesses() -> List[BusinessRecord]:
     with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
+        with conn.cursor() as cur:
             cur.execute("select * from businesses order by id desc")
             return cur.fetchall()
 
 
 def list_businesses_for_user(user_id: int) -> List[BusinessRecord]:
     with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
+        with conn.cursor() as cur:
             cur.execute("select * from businesses where user_id = %s order by id desc", (user_id,))
             return cur.fetchall()
 
 
 def get_business_by_upi(upi: str) -> Optional[BusinessRecord]:
     with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
+        with conn.cursor() as cur:
             cur.execute("select * from businesses where upi = %s", (upi,))
             return cur.fetchone()
 
 
 def get_user_business_by_upi(user_id: int, upi: str) -> Optional[BusinessRecord]:
     with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
+        with conn.cursor() as cur:
             cur.execute("select * from businesses where user_id = %s and upi = %s", (user_id, upi))
             return cur.fetchone()
 
 
 def get_business_by_ein(ein: str) -> Optional[BusinessRecord]:
     with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
+        with conn.cursor() as cur:
             cur.execute("select * from businesses where ein = %s", (ein,))
             return cur.fetchone()
 
 
 def get_user_business_by_ein(user_id: int, ein: str) -> Optional[BusinessRecord]:
     with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
+        with conn.cursor() as cur:
             cur.execute("select * from businesses where user_id = %s and ein = %s", (user_id, ein))
             return cur.fetchone()
 
 
 def get_business_by_core_entity_id(core_entity_id: str) -> Optional[BusinessRecord]:
     with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
+        with conn.cursor() as cur:
             cur.execute("select * from businesses where core_entity_id = %s", (core_entity_id,))
             return cur.fetchone()
 
@@ -263,7 +263,7 @@ def get_payment_account(
     *, business_id: int, payment_index: int, rail: str
 ) -> Optional[PaymentAccountRecord]:
     with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
+        with conn.cursor() as cur:
             cur.execute(
                 """
                 select * from payment_accounts
@@ -277,7 +277,7 @@ def get_payment_account(
 
 def list_payment_accounts_for_user(user_id: int) -> List[PaymentAccountRecord]:
     with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
+        with conn.cursor() as cur:
             cur.execute("select * from payment_accounts where user_id = %s order by id desc", (user_id,))
             rows = cur.fetchall()
             return [_decrypt_payment_account(row) for row in rows]
@@ -285,7 +285,7 @@ def list_payment_accounts_for_user(user_id: int) -> List[PaymentAccountRecord]:
 
 def get_payment_account_by_id(account_id: int) -> Optional[PaymentAccountRecord]:
     with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
+        with conn.cursor() as cur:
             cur.execute("select * from payment_accounts where id = %s", (account_id,))
             row = cur.fetchone()
             return _decrypt_payment_account(row) if row else None
@@ -302,8 +302,9 @@ def update_payment_account(account_id: int, **fields: Any) -> Optional[PaymentAc
         return get_payment_account_by_id(account_id)
     params.append(account_id)
     with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
+        with conn.cursor() as cur:
             cur.execute(f"update payment_accounts set {', '.join(set_fields)} where id = %s returning *", params)
+            conn.commit()
             row = cur.fetchone()
             return _decrypt_payment_account(row) if row else None
 
@@ -333,27 +334,36 @@ def create_user(**payload: Any) -> int:
                     payload["master_upi"],
                 ),
             )
+            conn.commit()
             row = cur.fetchone()
             return int(row["id"])
 
 
+def update_user_master_upi(user_id: int, master_upi: str) -> Optional[UserRecord]:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("update users set master_upi = %s where id = %s returning *", (master_upi, user_id))
+            conn.commit()
+            return cur.fetchone()
+
+
 def get_user_by_email(email: str) -> Optional[UserRecord]:
     with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
+        with conn.cursor() as cur:
             cur.execute("select * from users where email = %s", (email,))
             return cur.fetchone()
 
 
 def get_user_by_id(user_id: int) -> Optional[UserRecord]:
     with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
+        with conn.cursor() as cur:
             cur.execute("select * from users where id = %s", (user_id,))
             return cur.fetchone()
 
 
 def get_business_by_id(business_id: int) -> Optional[BusinessRecord]:
     with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
+        with conn.cursor() as cur:
             cur.execute("select * from businesses where id = %s", (business_id,))
             return cur.fetchone()
 
@@ -369,8 +379,9 @@ def update_user_profile(user_id: int, **fields: Any) -> Optional[UserRecord]:
         return get_user_by_id(user_id)
     params.append(user_id)
     with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
+        with conn.cursor() as cur:
             cur.execute(f"update users set {', '.join(assignments)} where id = %s returning *", params)
+            conn.commit()
             return cur.fetchone()
 
 
@@ -381,11 +392,12 @@ def create_session(token: str, user_id: int) -> None:
                 "insert into sessions (token, user_id, created_at) values (%s,%s, now())",
                 (token, user_id),
             )
+            conn.commit()
 
 
 def get_session(token: str) -> Optional[SessionRecord]:
     with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
+        with conn.cursor() as cur:
             cur.execute("select * from sessions where token = %s", (token,))
             return cur.fetchone()
 
@@ -402,11 +414,12 @@ def create_otp(record_id: str, user_id: int, code: str, expires_at: datetime) ->
                 """,
                 (record_id, user_id, digest, salt, expires_at),
             )
+            conn.commit()
 
 
 def get_otp(record_id: str) -> Optional[OtpRecord]:
     with get_connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
+        with conn.cursor() as cur:
             cur.execute("select * from otps where id = %s", (record_id,))
             return cur.fetchone()
 
@@ -415,3 +428,4 @@ def consume_otp(record_id: str) -> None:
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("update otps set consumed = true where id = %s", (record_id,))
+            conn.commit()

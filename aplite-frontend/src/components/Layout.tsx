@@ -9,7 +9,6 @@ export function Layout({ children }: PropsWithChildren) {
 
   const links = user
     ? [
-        { href: "/", label: "Home" },
         { href: "/dashboard", label: "Dashboard" },
         { href: "/accounts", label: "Accounts" },
         { href: "/profile", label: "Profile" },

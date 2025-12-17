@@ -1,8 +1,10 @@
 from datetime import datetime, timedelta, timezone
+import hashlib
+import hmac
+import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Header, status
 from pydantic import BaseModel, EmailStr, Field
-import secrets
 
 from app.db import queries
 from app.utils.email import send_email
@@ -87,9 +89,9 @@ def signup(payload: SignupRequest):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account already exists for this email")
 
     core_id = generate_core_entity_id()
-    master_upi = generate_upi(core_id, payment_index=0)
     password_hash = hash_password(payload.password)
 
+    # Create the user first, then generate a master UPI once we have the user_id for namespacing.
     user_id = queries.create_user(
         first_name=payload.first_name.strip(),
         last_name=payload.last_name.strip(),
@@ -101,8 +103,10 @@ def signup(payload: SignupRequest):
         state=(payload.state or "").strip() or None,
         country=(payload.country or "").strip() or None,
         password_hash=password_hash,
-        master_upi=master_upi,
+        master_upi="",
     )
+    master_upi = generate_upi(core_id, payment_index=0, user_id=user_id)
+    queries.update_user_master_upi(user_id, master_upi)
     token = _issue_session(user_id)
     user = queries.get_user_by_id(user_id) or {}
     return {"token": token, "user": _sanitize_user(user)}
@@ -111,7 +115,10 @@ def signup(payload: SignupRequest):
 @router.post("/api/auth/login/start")
 def login_start(payload: LoginStartRequest):
     user = queries.get_user_by_email(payload.email.lower())
-    if not user or not verify_password(payload.password, user.get("password_hash", "")):
+    if not user:
+        # Clear message to guide users without an account.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No account found for this email.")
+    if not verify_password(payload.password, user.get("password_hash", "")):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     login_id = secrets.token_urlsafe(16)

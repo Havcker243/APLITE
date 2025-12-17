@@ -1,0 +1,686 @@
+﻿# Product/UI Spec (Draft)
+
+This document captures the intended **design language** + **onboarding UX** direction for Aplite.
+
+It is written to be **implementation-ready** for the current repo:
+- Frontend: `aplite-frontend/` (Next.js pages router)
+- Styling: `aplite-frontend/src/styles/globals.css` + shared shell `aplite-frontend/src/components/Layout.tsx`
+
+---
+
+# A. Product UI Theme (Homepage + App Shell)
+
+## A1) What you’re copying from the homepage reference
+
+The reference is a premium agent product landing style:
+- Dark, gradient-backed canvas
+- One dominant message (headline)
+- One dominant action (command bar / CTA)
+- Soft depth (blurred glow, subtle borders)
+- Minimal navigation
+- High trust / high taste design
+
+This should become the **global design language**, not just the landing page.
+
+---
+
+## A2) Onboarding Design Philosophy
+
+This onboarding is not consumer onboarding. It is designed to:
+- satisfy KYB / KYC expectations
+- feel serious, expensive, and compliant
+- avoid playful or casual UI patterns
+
+The user should feel:
+
+> “This product handles real money. It is strict for a reason.”
+
+---
+
+## A3) UI Design System Spec (Token-Level)
+
+### Colors
+- Onboarding should not be pitch black; aim for Stripe/Brex/Mercury.
+
+#### Global backgrounds
+- Primary background: `#0B0D12` (deep charcoal, not black)
+- Secondary background (cards/panels): `#11141B`
+- Divider lines: `rgba(255,255,255,0.08)`
+
+#### Text colors
+- Primary text: `#F5F7FA`
+- Secondary text: `#B8BCC6`
+- Muted/helper text: `#8A8F9C`
+- Disabled text: `#5E636E`
+
+#### Accent colors (use sparingly)
+- Primary accent (trust): `#6C7CFF` (soft indigo)
+- Success: `#3ED598`
+- Warning: `#F4B740`
+- Error: `#FF6B6B`
+
+Never use bright red or neon green; keep everything muted and professional.
+
+#### Form colors
+- Input background: `#141824`
+- Input border (default): `rgba(255,255,255,0.12)`
+- Input border (focus): `#6C7CFF`
+- Input error border: `#FF6B6B`
+- Placeholder text: `#6E7381`
+
+#### Buttons
+- Primary button background: `#6C7CFF`
+- Primary button hover: `#5A69E8`
+- Primary button text: `#FFFFFF`
+- Secondary button: transparent
+- Secondary border: `rgba(255,255,255,0.15)`
+
+### Typography
+- Headline: large, bold, tight tracking
+- Body: clean sans-serif, comfortable line height
+- Emphasis: use weight + color, not underline
+- Numbers/codes: monospaced for routing/account/OTP inputs
+
+### Spacing + Layout
+- Wide whitespace
+- Standard container width (e.g. max-w 1100“1200px)
+- Forms: two-column grid on desktop, one column on mobile
+- Buttons: large touch targets, rounded corners
+
+### Shapes
+- Rounded corners everywhere
+- Inputs and buttons feel soft, not sharp
+- Focus ring: subtle glow in accent color
+
+### Motion
+- Hover effects: slight glow + lift
+- Page transitions: fade/slide small amount
+- Loading: skeletons instead of spinners where possible
+
+---
+
+## A4) Onboarding Layout Structure
+
+### Page layout
+- Fixed header
+- Centered content container
+- Max width: 960px
+- Padding: 48px top, 32px sides
+- Stepper always visible at top
+
+### Stepper (top progress indicator)
+
+Structure:
+- Horizontal stepper with 5 steps
+- Each step:
+  - circle (number or checkmark)
+  - label underneath
+
+States:
+- Completed: filled circle + checkmark (accent)
+- Current: filled circle + number (accent)
+- Future: outline circle (muted)
+
+Rules:
+- Steps are not clickable
+- Navigation is linear only
+
+---
+
+## A5) App Shell Layout (Global Frame)
+
+This is the skeleton that wraps every page.
+
+### Header (Top)
+- Left: product logo + product name
+- Center or right: nav links (if needed)
+- Right: user profile + logout/settings
+
+### Main Content Area
+- Centered content container
+- Background gradient or vignette (subtle)
+
+### Notifications
+- Toast system for:
+  - Saved
+  - Code sent
+  - Verification successful
+  - Bank details encrypted
+  - Errors with guidance
+
+---
+
+## A4) Agent-First Interaction Pattern
+
+### Core idea
+Instead of only forms everywhere, provide a **command entry point** where the user can:
+- Start onboarding
+- Verify my business
+- Connect bank
+- Issue UPI
+- Update payment rails
+- Invite teammates
+- Generate payment identity
+
+### Homepage structure
+1. Headline
+2. Subheadline: trust + speed + security
+3. Command bar input (or big CTA button)
+4. Showcase area (like the reference screenshot/mock)
+
+---
+
+# B. FinTech B2B Onboarding Flow (5 Steps)
+
+## B0) Main onboarding requirements
+
+Must have:
+- Multi-step wizard with progress indicator
+- Form validation + field formatting
+- Data persistence between steps
+- A way to resume onboarding later
+- Verification via email/SMS/call depending on risk
+- Audit trail of what the user submitted and when
+
+## B1) Suggested 5-step wizard (draft)
+
+This is the high-level flow the UI and backend should support. Each step must be saveable and resumable.
+
+1. Establish legal entity (business info + legal address)
+2. Add business context (industry, description, website, etc.)
+3. Add representative / user identity (owner or authorized rep)
+4. Connect payout rails (ACH / wire / SWIFT)
+5. Verification + risk decisioning (email/SMS/call depending on risk)
+
+---
+
+# C. Onboarding Architecture (Backend + Frontend + States)
+
+## C1) Onboarding entities
+
+### 1) Organization (Business)
+
+Represents the business account.
+
+Fields:
+- `legal_name`
+- `dba_name` (optional)
+- `ein`
+- `formation_date`
+- `formation_state`
+- `entity_type`
+- `website`
+- `industry`
+- `business_description`
+- `legal_address` (structured)
+- `risk_score` (computed)
+- `verification_status` (`pending` / `verified` / `needs_review` / `rejected`)
+- `created_at`, `updated_at`
+
+### 2) User
+
+Represents who is filling this out.
+
+Fields:
+- `name`
+- `email`
+- `phone` (optional)
+- `role_in_org` (`owner` / `authorized_rep`)
+- `executive_title` (required if `authorized_rep`)
+- `identity_verification_status`
+- `created_at`
+
+### 3) OnboardingSession
+
+Tracks progress and supports –resume later→.
+
+Fields:
+- `org_id`
+- `user_id`
+- `current_step` (1“5)
+- `step_statuses` (JSON)
+- `last_saved_at`
+- `completed_at`
+
+### 4) VerificationAttempt
+
+Stores OTP attempts and call scheduling.
+
+Fields:
+- `org_id`
+- `user_id`
+- `type` (`email_otp` / `sms_otp` / `call`)
+- `destination` (email/phone)
+- `status` (`sent` / `verified` / `expired` / `failed`)
+- `created_at`
+
+### 5) BankRailMapping
+
+Stores bank routing information securely.
+
+Fields:
+- `org_id`
+- `bank_name`
+- `account_last4` (store last4 only in plaintext)
+- `account_number_encrypted`
+- `ach_routing`
+- `wire_routing`
+- `swift_code` (optional)
+- `verified` (boolean)
+- `created_at`
+
+---
+
+## C2) State machine (workflow)
+
+Onboarding should behave like a strict workflow with resumable checkpoints.
+
+Possible states:
+- `NOT_STARTED`
+- `STEP_1_IN_PROGRESS` / `STEP_1_COMPLETE`
+- `STEP_2_IN_PROGRESS` / `STEP_2_COMPLETE`
+- `STEP_3_IN_PROGRESS` / `STEP_3_VERIFICATION_PENDING` / `STEP_3_COMPLETE`
+- `STEP_4_IN_PROGRESS` / `STEP_4_COMPLETE`
+- `STEP_5_PENDING_VERIFICATION`
+- `VERIFIED` / `NEEDS_REVIEW` / `REJECTED`
+
+Rules:
+- User can’t jump to step 4 without step 1“3 complete.
+- If a user edits step 1 after completing step 3, the system may require re-verification (risk-based).
+
+---
+
+# D. Step-by-step Implementation Spec
+
+## Step 1: Establish Legal Entity (Business Info)
+
+Purpose:
+- Create the legal identity of the business; this becomes immutable later.
+- Once submitted, the legal address becomes read-only in later steps.
+
+### UI requirements
+- Title: `Stage 1: Establish Legal Entity`
+- Subtitle: –Please provide your business information→
+- Two-column form layout (desktop), one column (mobile)
+
+### Inputs + validation
+
+1) Legal Name (required)
+- string, min length 2
+- max length 120
+- trim whitespace
+- reject emoji characters
+
+2) DBA Name (optional)
+- string
+
+3) EIN (required)
+- validate format: `XX-XXXXXXX`
+- allow user typing digits; auto-format as they type
+
+4) Formation Date (required)
+- date picker
+- must be a valid past date (not future)
+
+5) Formation State (required)
+- dropdown list of states
+
+6) Entity Type (required)
+- dropdown (LLC, C-Corp, S-Corp, Partnership, Nonprofit, Sole Proprietor, etc.)
+
+### Legal business address (required)
+- Street 1
+- Street 2 (optional)
+- City
+- State (dropdown)
+- ZIP (5 digits; allow ZIP+4 optionally)
+- Optional (later): address autocomplete API
+
+### Business profile (part of step 1)
+- Industry (dropdown)
+- Industry free-text when –Other→
+- Website (validate domain)
+- Business description (optional but useful)
+
+### Backend behavior
+- Save partial progress (autosave or –Save & continue→)
+- Mark step 1 complete only when required fields validate
+- Lock address from edits in later steps (risk/compliance consistency)
+
+### Backend API
+
+`POST /onboarding/step-1`
+
+Payload:
+```json
+{
+  "legal_name": "",
+  "dba": "",
+  "ein": "",
+  "formation_date": "",
+  "formation_state": "",
+  "entity_type": "",
+  "address": {},
+  "industry": "",
+  "website": "",
+  "description": ""
+}
+```
+
+Response:
+```json
+{
+  "org_id": "uuid",
+  "session_id": "uuid",
+  "next_step": 2
+}
+```
+
+---
+
+## Step 2: Confirm Authorization
+
+### UI requirements
+- Title: `Stage 2: Confirm Authorization`
+- Options:
+  - –I am the Business Owner→
+  - –I am an Authorized Representative→
+- If authorized rep: show executive title dropdown
+
+### Validation
+- Must pick one option
+- If authorized rep:
+  - require executive title
+  - examples: CEO, COO, CFO, President, VP, Director
+
+### Backend logic
+- If owner: lower risk flag
+- If authorized rep: increase risk score slightly
+- Save role and title
+- Mark step 2 complete
+
+### API
+`POST /onboarding/step-2`
+
+Payload:
+```json
+{
+  "role": "owner | authorized_rep",
+  "title": "COO"
+}
+```
+
+---
+
+## Step 3: Identity Verification
+
+### UI requirements
+- Title: `Stage 3: Identity Verification`
+- Inputs:
+  - Full legal name
+  - Title (prefill from step 2 when possible)
+  - Upload government ID (file upload)
+  - Checkbox attestation
+
+### File upload requirements
+- Accept: `jpg`, `png`, `pdf`
+- Max size: e.g. 10MB
+- Show uploaded filename + –replace→
+- Store securely (S3-like bucket)
+- Generate signed URL for private access
+
+### Attestation
+- Checkbox required: –I confirm I have legal authority and the information is accurate.→
+
+### Backend workflow
+When submitted:
+1. Save identity fields
+2. Store ID file (private)
+3. Provide signed URLs for access when needed
+4. Send to ID verification provider (or store for manual review in MVP)
+4. Mark step 3 as pending verification or complete (depending on MVP mode)
+
+### API
+`POST /onboarding/step-3`
+
+Payload:
+```json
+{
+  "full_name": "",
+  "title": "",
+  "id_document_id": "file_id",
+  "attestation": true
+}
+```
+
+Backend processing:
+- Store identity info
+- Run ID verification (or flag for review)
+- Advance state accordingly
+
+---
+
+## Step 4: Payment Rail Resolution (Bank Info)
+
+### UI requirements
+- Title: `Stage 4: Payment Rail Resolution Data`
+- Banner: –All data is encrypted and securely stored→
+- Inputs:
+  - Bank name
+  - Account number (masked)
+  - ACH routing
+  - Wire routing
+  - SWIFT (optional)
+  - Business address confirmation section (read-only)
+
+### Validation rules
+- Bank name required
+- Account number:
+  - required
+  - numeric only
+  - UI should only display last4 after save
+- Routing numbers:
+  - numeric only
+  - length checks (ACH usually 9 digits)
+- SWIFT:
+  - optional
+  - pattern checks (basic BIC format)
+
+### Backend security rules
+- Encrypt account number before storing
+- Only store last 4 digits in plaintext
+- Never return full account number after save
+- Only return `last4` + `bank_name` (and non-sensitive routing metadata as needed)
+
+### API
+`POST /onboarding/step-4`
+
+Payload:
+```json
+{
+  "bank_name": "",
+  "account_number": "",
+  "ach_routing": "",
+  "wire_routing": "",
+  "swift": ""
+}
+```
+
+---
+
+## Step 5: Final Verification + Issuance
+
+### UI requirements
+- Thank-you state
+- Message: –Before issuance, verification required→
+- Risk-based CTA(s):
+  - Verify via Email
+  - Verify via SMS
+  - Schedule a Verification Call (high risk)
+
+### Risk-based method selection
+Step 5 should choose a verification method based on risk (email/SMS vs call).
+
+Risk level â†’ method:
+- Low â†’ Email OTP
+- Medium â†’ SMS OTP
+- High â†’ Call
+
+---
+
+# E. Verification Channel System (Email / Text / Call)
+
+## E1) When to use each method (MVP logic)
+
+- If user is owner + US-based + identity matches cleanly: Email OTP or SMS OTP
+- If authorized rep or missing/mismatched details: schedule call
+
+### Risk scoring factors (examples)
+- Authorized rep instead of owner
+- EIN/formation mismatch
+- Suspicious domain/website
+- Disposable phone/email signals
+- Bank info mismatch
+- Address inconsistencies
+
+---
+
+## E2) OTP verification spec (Email/SMS)
+
+### User flow
+1. User chooses method OR system chooses automatically
+2. System sends 6-digit code
+3. User enters code
+4. Code verified â†’ onboarding complete â†’ issue identifier
+
+### Backend rules
+- Code expires in 10 minutes
+- Attempt limit: 5 max
+- Resend limit: 3 max
+
+### API endpoints
+
+`POST /verify/send-otp`
+
+Payload:
+```json
+{
+  "method": "email | sms"
+}
+```
+
+`POST /verify/confirm-otp`
+
+Payload:
+```json
+{
+  "code": "123456"
+}
+```
+
+---
+
+## E3) Call verification spec
+
+### User flow
+1. Schedule call
+2. Confirmation sent (email + optional SMS)
+3. At call time:
+   - verify identity + authority + business info + bank details
+4. After call:
+   - mark `VERIFIED`
+   - issue identifier(s)
+
+### MVP approaches
+- Simulate call verification as:
+  - admin marks verified manually
+  - or user picks a time and you confirm with a code later
+
+### API
+- `GET /verify/available-slots`
+- `POST /verify/schedule-call`
+- `POST /verify/complete-call` (admin/internal)
+
+---
+
+# F. UX Details That Make It Feel Enterprise
+
+## F1) Wizard behavior
+- Top progress bar with steps 1“5
+- Completed steps show checkmark
+- Current step highlighted
+- Cannot skip ahead
+- Back is always available unless verification started
+
+## F2) Autosave
+- Every step saves as a draft
+- Show a –Saved→ indicator
+- On refresh, user resumes from the last saved step
+
+## F3) Resume onboarding
+- If user logs out mid-way, on next login show –Continue onboarding (Step X of 5)→
+
+## F4) Error messages
+- Always show:
+  - what went wrong
+  - how to fix it
+- Avoid generic –invalid input→ without guidance.
+
+# G. MVP Build Order (Recommended)
+---
+
+# J. Completion
+
+After verification:
+- Status becomes `VERIFIED`
+- Universal Payment Identifier issued
+- User redirected to dashboard
+
+---
+
+# K. Final Experience Summary
+
+This onboarding is:
+- Dark
+- Structured
+- Strict
+- Trust-first
+- Regulated
+- Enterprise-grade
+
+It intentionally slows the user slightly to build confidence.
+
+---
+
+# G. MVP Build Order (Recommended)
+
+1. Build onboarding session state machine
+2. Step 1 form + save
+3. Step 2 role selection
+4. Step 3 upload + attestation (store file)
+5. Step 4 bank rails storage (encrypt)
+6. Step 5 verification method selection
+7. OTP email + OTP SMS (one at a time)
+8. Call scheduling (can be fake slots first)
+
+---
+
+# H. Deliverable (Copy/Paste Task for Another Agent)
+
+**Task:** Implement B2B fintech onboarding in 5 steps with enterprise UI and dark theme.
+
+**UI:** Premium dark gradient theme (minimal, agent-first), but onboarding uses a clean step wizard.
+
+**Steps:**
+1. Legal entity + address + industry + website (required validation; saved as source of truth)
+2. Confirm user authority (owner vs authorized rep; exec title required if rep)
+3. Identity verification (full name + title + upload government ID + attestation)
+4. Bank rails mapping (bank name, acct number encrypted, ACH/wire routing, SWIFT optional; address read-only)
+5. Verification before issuance (OTP via email/SMS for low risk; call scheduling for higher risk)
+
+**Requirements:**
+- Autosave drafts, resume later, strict step gating
+- OTP expiration + attempt limits
+- Encrypted storage for bank account details
+
+

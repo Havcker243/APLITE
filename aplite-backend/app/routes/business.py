@@ -4,6 +4,7 @@ from app.db import queries
 from app.routes.auth import get_current_user
 from app.utils.upi import generate_core_entity_id, generate_upi
 from pydantic import BaseModel
+from datetime import datetime
 from typing import Literal
 
 
@@ -27,7 +28,7 @@ class PaymentAccountPayload(BaseModel):
 
 class BusinessCreateRequest(BaseModel):
     legal_name: str
-    ein: str
+    ein: str | None = None
     business_type: str
     website: str | None = None
     address: str
@@ -43,7 +44,7 @@ class BusinessSummary(BaseModel):
     legal_name: str
     rails: list[str]
     verification_status: str
-    created_at: str
+    created_at: datetime | str
     status: str
 
 
@@ -194,7 +195,7 @@ async def list_businesses(
             legal_name=row["legal_name"],
             rails=row.get("rails", []) or [],
             verification_status=row["verification_status"],
-            created_at=row.get("created_at", ""),
+            created_at=row.get("created_at") or "",
             status=row.get("status", "active"),
         )
         for row in rows

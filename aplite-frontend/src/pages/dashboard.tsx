@@ -259,7 +259,7 @@ export default function DashboardPage() {
     setResolving(true);
 
     if (!UPI_PATTERN.test(resolveUpi.trim())) {
-      setResolveError("UPI must be exactly 8 alphanumeric characters");
+      setResolveError("UPI must be exactly 14 alphanumeric characters");
       setResolving(false);
       return;
     }

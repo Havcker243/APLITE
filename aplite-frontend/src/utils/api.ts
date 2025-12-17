@@ -134,8 +134,18 @@ export async function loginStart(data: { email: string; password: string }): Pro
     body: JSON.stringify(data),
   });
   if (!res.ok) {
-    const message = await res.text();
-    throw new Error(message || "Failed to start login");
+    let message = "Failed to start login";
+    try {
+      const body = await res.json();
+      message = body?.detail || message;
+    } catch {
+      try {
+        message = await res.text();
+      } catch {
+        /* ignore */
+      }
+    }
+    throw new Error(message);
   }
   return res.json();
 }
@@ -147,8 +157,18 @@ export async function loginVerify(data: { login_id: string; code: string }): Pro
     body: JSON.stringify(data),
   });
   if (!res.ok) {
-    const message = await res.text();
-    throw new Error(message || "Invalid code");
+    let message = "Invalid code";
+    try {
+      const body = await res.json();
+      message = body?.detail || message;
+    } catch {
+      try {
+        message = await res.text();
+      } catch {
+        /* ignore */
+      }
+    }
+    throw new Error(message);
   }
   return res.json();
 }

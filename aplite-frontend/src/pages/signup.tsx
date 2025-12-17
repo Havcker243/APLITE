@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { signup } from "../utils/api";
 import { useAuth } from "../utils/auth";
 
@@ -20,10 +20,17 @@ const initialState = {
 
 export default function SignupPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, token, ready } = useAuth();
   const [form, setForm] = useState(initialState);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!ready) return;
+    if (token) router.replace("/dashboard");
+  }, [ready, token, router]);
+
+  if (ready && token) return null;
 
   function handleChange(event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
     const target = event.target as HTMLInputElement;

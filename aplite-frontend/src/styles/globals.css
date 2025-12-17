@@ -2,16 +2,29 @@
 
 :root {
   color-scheme: dark;
-  --bg: #04060a;
-  --bg-secondary: #0a0d14;
-  --card: rgba(255, 255, 255, 0.04);
-  --card-border: rgba(255, 255, 255, 0.08);
-  --text: #f6f7fb;
-  --text-muted: #a7b0c5;
-  --accent: #4fd1c5;
-  --accent-strong: #3cb8aa;
-  --accent-soft: rgba(79, 209, 197, 0.15);
-  --danger: #f87171;
+  --bg: #0b0d12;
+  --bg-secondary: #11141b;
+  --divider: rgba(255, 255, 255, 0.08);
+
+  --text: #f5f7fa;
+  --text-secondary: #b8bcc6;
+  --text-muted: #8a8f9c;
+  --text-disabled: #5e636e;
+
+  --accent: #6c7cff;
+  --accent-hover: #5a69e8;
+  --accent-soft: rgba(108, 124, 255, 0.16);
+
+  --success: #3ed598;
+  --warning: #f4b740;
+  --danger: #ff6b6b;
+
+  --input-bg: #141824;
+  --input-border: rgba(255, 255, 255, 0.12);
+  --placeholder: #6e7381;
+
+  --card: var(--bg-secondary);
+  --card-border: var(--divider);
   --shadow-soft: 0 18px 50px rgba(0, 0, 0, 0.35);
 }
 
@@ -28,8 +41,9 @@ body {
 body {
   margin: 0;
   font-family: "Space Grotesk", "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  background: radial-gradient(circle at 10% 20%, rgba(79, 209, 197, 0.06), transparent 35%),
-    radial-gradient(circle at 80% 0%, rgba(79, 70, 229, 0.08), transparent 25%), linear-gradient(160deg, #04060a 0%, #05070f 100%);
+  background: radial-gradient(circle at 20% -10%, rgba(108, 124, 255, 0.12), transparent 52%),
+    radial-gradient(circle at 95% 10%, rgba(108, 124, 255, 0.07), transparent 48%),
+    linear-gradient(180deg, var(--bg) 0%, var(--bg) 100%);
   color: var(--text);
   min-height: 100vh;
 }
@@ -44,7 +58,7 @@ a {
   top: 8px;
   padding: 10px 14px;
   background: var(--accent);
-  color: #041013;
+  color: #ffffff;
   border-radius: 10px;
   z-index: 20;
 }
@@ -64,8 +78,8 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(4, 6, 10, 0.8);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(11, 13, 18, 0.85);
   backdrop-filter: blur(14px);
   position: sticky;
   top: 0;
@@ -86,7 +100,7 @@ a {
   border-radius: 50%;
   background: var(--accent);
   margin-right: 10px;
-  box-shadow: 0 0 12px rgba(79, 209, 197, 0.9);
+  box-shadow: 0 0 16px rgba(108, 124, 255, 0.45);
 }
 
 .site-nav {
@@ -105,7 +119,7 @@ a {
 }
 
 .nav-link:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.03);
   color: var(--text);
   border-color: var(--card-border);
 }
@@ -113,7 +127,7 @@ a {
 .nav-link--active {
   background: var(--accent-soft);
   color: var(--accent);
-  border-color: rgba(79, 209, 197, 0.4);
+  border-color: rgba(108, 124, 255, 0.35);
 }
 
 .site-main {
@@ -202,22 +216,27 @@ select,
 textarea {
   padding: 11px 12px;
   border-radius: 10px;
-  border: 1px solid var(--card-border);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
   color: var(--text);
   transition: border 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
   font-size: 16px;
 }
 
+.input-control::placeholder,
+textarea::placeholder {
+  color: var(--placeholder);
+}
+
 .input-control:focus,
 select:focus {
-  outline: 2px solid var(--accent-soft);
-  border-color: var(--accent-strong);
-  box-shadow: 0 0 0 3px rgba(79, 209, 197, 0.12);
+  outline: 2px solid rgba(108, 124, 255, 0.25);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(108, 124, 255, 0.18);
 }
 
 select {
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: var(--input-bg);
   color: var(--text);
 }
 
@@ -226,13 +245,13 @@ select:focus-visible,
 textarea:focus-visible,
 button:focus-visible,
 .nav-link:focus-visible {
-  outline: 2px solid var(--accent-strong);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
 .input-control:focus-within,
 textarea:focus-within {
-  background: rgba(255, 255, 255, 0.05);
+  background: #161b29;
 }
 
 .input-with-action {
@@ -245,7 +264,7 @@ textarea:focus-within {
   top: 50%;
   transform: translateY(-50%);
   border: 1px solid var(--card-border);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.04);
   color: var(--text);
   padding: 6px 10px;
   border-radius: 999px;
@@ -265,12 +284,12 @@ textarea:focus-within {
   font-weight: 600;
   cursor: pointer;
   margin-top: 10px;
-  background: linear-gradient(120deg, var(--accent), var(--accent-strong));
-  color: #041013;
+  background: var(--accent);
+  color: #ffffff;
   transition: transform 0.15s ease, box-shadow 0.15s ease, border 0.15s ease;
-  box-shadow: 0 10px 30px rgba(79, 209, 197, 0.18);
+  box-shadow: 0 10px 30px rgba(108, 124, 255, 0.18);
   touch-action: manipulation;
-  -webkit-tap-highlight-color: rgba(79, 209, 197, 0.25);
+  -webkit-tap-highlight-color: rgba(108, 124, 255, 0.25);
   text-decoration: none;
 }
 
@@ -280,14 +299,15 @@ textarea:focus-within {
 }
 
 .button:not(:disabled):hover {
+  background: var(--accent-hover);
   transform: translateY(-1px);
-  box-shadow: 0 16px 36px rgba(79, 209, 197, 0.26);
+  box-shadow: 0 16px 36px rgba(108, 124, 255, 0.26);
 }
 
 .button-secondary {
-  background: rgba(255, 255, 255, 0.06);
+  background: transparent;
   color: var(--text);
-  border-color: var(--card-border);
+  border-color: rgba(255, 255, 255, 0.15);
   box-shadow: none;
   text-decoration: none;
 }
@@ -296,8 +316,8 @@ textarea:focus-within {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  border: 2px solid rgba(4, 16, 19, 0.4);
-  border-top-color: #041013;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #ffffff;
   margin-right: 8px;
   display: inline-block;
   animation: spin 0.7s linear infinite;
@@ -317,11 +337,11 @@ textarea:focus-within {
 }
 
 .error-box {
-  background: rgba(248, 113, 113, 0.1);
-  border: 1px solid rgba(248, 113, 113, 0.4);
+  background: rgba(255, 107, 107, 0.12);
+  border: 1px solid rgba(255, 107, 107, 0.35);
   border-radius: 12px;
   padding: 14px;
-  color: #fecaca;
+  color: var(--text);
   margin-bottom: 20px;
 }
 

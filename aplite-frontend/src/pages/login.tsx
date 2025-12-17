@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { loginStart, loginVerify } from "../utils/api";
 import { useAuth } from "../utils/auth";
 
@@ -11,13 +11,20 @@ const initialState = {
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login: setAuth } = useAuth();
+  const { login: setAuth, token, ready } = useAuth();
   const [form, setForm] = useState(initialState);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loginId, setLoginId] = useState<string | null>(null);
   const [otp, setOtp] = useState("");
   const [info, setInfo] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!ready) return;
+    if (token) router.replace("/dashboard");
+  }, [ready, token, router]);
+
+  if (ready && token) return null;
 
   function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
     const { name, value } = event.target;

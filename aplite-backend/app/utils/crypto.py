@@ -1,51 +1,30 @@
-"""
-Small encryption helpers for sensitive fields (at-rest protection).
-
-Uses AES-GCM with a 256-bit key loaded from DATA_ENC_KEY (raw or base64).
-If the key is missing, functions will raise to avoid silently storing plaintext.
-"""
-
-from __future__ import annotations
-
-import base64
 import os
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from dotenv import load_dotenv
 import secrets
-from typing import Tuple
 
-try:
-    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-except ImportError as exc:  # pragma: no cover - dependency notice
-    raise ImportError("cryptography is required for field encryption") from exc
+load_dotenv()
 
+_RAW_KEY = os.getenv("ENCRYPTION_KEY")
 
-DATA_KEY_ENV = "DATA_ENC_KEY"
+if not _RAW_KEY:
+    raise RuntimeError("ENCRYPTION_KEY is not set")
 
+key = _RAW_KEY.encode("utf-8")
 
-def _load_key() -> bytes:
-    key = os.getenv(DATA_KEY_ENV, "")
-    if not key:
-        raise RuntimeError(f"Missing encryption key; set {DATA_KEY_ENV} to a 32-byte base64 or raw key.")
-    try:
-        return base64.b64decode(key)
-    except Exception:
-        return key.encode("utf-8")
+if len(key) not in (16, 24, 32):
+    raise RuntimeError("ENCRYPTION_KEY must be 16, 24, or 32 bytes long")
 
 
-def encrypt_value(value: str) -> Tuple[str, str]:
-    """
-    Encrypt a string value, returning (nonce_b64, ciphertext_b64).
-    """
-    key = _load_key()
+def encrypt_value(value: str):
     aesgcm = AESGCM(key)
     nonce = secrets.token_bytes(12)
-    ct = aesgcm.encrypt(nonce, value.encode("utf-8"), None)
-    return base64.b64encode(nonce).decode("ascii"), base64.b64encode(ct).decode("ascii")
+    ciphertext = aesgcm.encrypt(nonce, value.encode(), None)
+    return nonce.hex(), ciphertext.hex()
 
 
-def decrypt_value(nonce_b64: str, ciphertext_b64: str) -> str:
-    key = _load_key()
+def decrypt_value(nonce_hex: str, ciphertext_hex: str) -> str:
     aesgcm = AESGCM(key)
-    nonce = base64.b64decode(nonce_b64)
-    ct = base64.b64decode(ciphertext_b64)
-    pt = aesgcm.decrypt(nonce, ct, None)
-    return pt.decode("utf-8")
+    nonce = bytes.fromhex(nonce_hex)
+    ciphertext = bytes.fromhex(ciphertext_hex)
+    return aesgcm.decrypt(nonce, ciphertext, None).decode()

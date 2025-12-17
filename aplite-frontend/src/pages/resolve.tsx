@@ -28,7 +28,7 @@ export default function ResolvePage() {
     setError(null);
     setResult(null);
     if (!UPI_PATTERN.test(upi.trim())) {
-      setError("UPI must be exactly 8 alphanumeric characters");
+      setError("UPI must be exactly 14 alphanumeric characters");
       return;
     }
     setLoading(true);
