@@ -4,6 +4,7 @@ import { OnboardingShell } from "../../components/onboarding/OnboardingShell";
 import { verifyAvailableSlots, verifyConfirmOtp, verifyScheduleCall, verifySendOtp } from "../../utils/api";
 import { useAuth } from "../../utils/auth";
 import { useOnboardingWizard } from "../../utils/onboardingWizard";
+import { LoadingScreen } from "../../components/LoadingScreen";
 
 export default function OnboardVerify() {
   const router = useRouter();
@@ -31,8 +32,7 @@ export default function OnboardVerify() {
     })();
   }, [currentStep, riskLevel]);
 
-  if (!ready) return null;
-  if (!token) return null;
+  if (!ready || !token) return <LoadingScreen />;
   if (currentStep < 5) {
     router.replace("/onboard/step-4");
     return null;
@@ -161,4 +161,3 @@ export default function OnboardVerify() {
     </OnboardingShell>
   );
 }
-

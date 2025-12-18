@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+import os
 import re
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
+from fastapi import Request
 from pydantic import BaseModel, Field, field_validator
 
 from app.db import queries
 from app.routes.auth import get_current_user
+from app.utils.email import send_email
+from app.utils.ratelimit import RateLimit, check_rate_limit
 
 router = APIRouter()
 
@@ -278,12 +282,42 @@ async def onboarding_upload_id(file: UploadFile = File(...), user=Depends(get_cu
     content_type = (file.content_type or "").lower()
     if content_type not in ("image/jpeg", "image/png", "application/pdf"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported file type. Use jpg, png, or pdf.")
-    data = await file.read()
-    if len(data) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File too large (max 10MB).")
 
     file_id = f"id_{uuid.uuid4().hex}"
-    queries.store_onboarding_file(file_id=file_id, filename=file.filename, content_type=content_type, data=data, user_id=user["id"])
+
+    # Stream to disk to avoid buffering full uploads in memory.
+    max_bytes = 10 * 1024 * 1024
+    base = queries.onboarding_upload_base_dir()
+    os.makedirs(base, exist_ok=True)
+    bin_path = os.path.abspath(os.path.join(base, f"{file_id}.bin"))
+    tmp_path = os.path.abspath(os.path.join(base, f"{file_id}.bin.tmp"))
+    if not bin_path.startswith(base + os.sep) or not tmp_path.startswith(base + os.sep):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid upload id")
+
+    written = 0
+    try:
+        with open(tmp_path, "wb") as out:
+            while True:
+                chunk = await file.read(1024 * 1024)  # 1MB chunks
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > max_bytes:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File too large (max 10MB).")
+                out.write(chunk)
+        os.replace(tmp_path, bin_path)
+        queries.store_onboarding_file_metadata(
+            file_id=file_id,
+            filename=file.filename,
+            content_type=content_type,
+            user_id=user["id"],
+        )
+    finally:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
     return {"file_id": file_id}
 
 
@@ -357,12 +391,22 @@ class SendOtpPayload(BaseModel):
 
 
 @router.post("/verify/send-otp")
-def send_verification_otp(payload: SendOtpPayload, user=Depends(get_current_user)):
+def send_verification_otp(payload: SendOtpPayload, background_tasks: BackgroundTasks, request: Request, user=Depends(get_current_user)):
     session = queries.get_active_onboarding_session(user["id"])
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Start onboarding first.")
     if int(session.get("current_step", 1)) < 5:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Complete onboarding steps before verification.")
+
+    ip = (request.client.host if request.client else "unknown").strip()
+    user_rule = RateLimit(limit=int(os.getenv("RL_VERIFY_OTP_USER_LIMIT", "5")), window_seconds=int(os.getenv("RL_VERIFY_OTP_USER_WINDOW_SECONDS", "600")))
+    ip_rule = RateLimit(limit=int(os.getenv("RL_VERIFY_OTP_IP_LIMIT", "30")), window_seconds=int(os.getenv("RL_VERIFY_OTP_IP_WINDOW_SECONDS", "600")))
+    ok, retry = check_rate_limit(f"verify_send_otp:user:{int(user['id'])}", user_rule)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many OTP requests. Try again soon.", headers={"Retry-After": str(retry)})
+    ok, retry = check_rate_limit(f"verify_send_otp:ip:{ip}", ip_rule)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many OTP requests. Try again soon.", headers={"Retry-After": str(retry)})
 
     existing = queries.get_latest_verification_attempt(user["id"], uuid.UUID(str(session["id"])))
     destination = user["email"] if payload.method == "email" else None
@@ -387,7 +431,13 @@ def send_verification_otp(payload: SendOtpPayload, user=Depends(get_current_user
         )
 
     if payload.method == "email":
-        queries.send_verification_message_email(to_address=user["email"], code=code)
+        # Avoid blocking the request on network I/O to the email provider.
+        background_tasks.add_task(
+            send_email,
+            to_address=user["email"],
+            subject="Your Aplite verification code",
+            body=f"Your verification code is {code}. It expires in 10 minutes.",
+        )
     else:
         # MVP: SMS not integrated; log to stdout via the backend logger.
         queries.send_verification_message_sms(code=code)

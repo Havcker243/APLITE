@@ -188,11 +188,10 @@ def deactivate_business(business_id: int, user=Depends(get_current_user)):
 @router.get("/api/businesses")
 def list_businesses(
     limit: int | None = Query(default=None, ge=1, le=200),
+    before_id: int | None = Query(default=None, ge=1),
     user=Depends(get_current_user),
 ) -> list[BusinessSummary]:
-    rows = queries.list_businesses_for_user(user["id"])
-    if limit:
-        rows = rows[:limit]
+    rows = queries.list_businesses_for_user(user["id"], limit=limit, before_id=before_id)
     return [
         BusinessSummary(
             id=row["id"],

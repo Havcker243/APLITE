@@ -5,6 +5,7 @@ import { onboardingStep1 } from "../../utils/api";
 import { useAuth } from "../../utils/auth";
 import { COUNTRIES, isCanada, isUnitedStates, US_STATES, CA_PROVINCES } from "../../utils/geo";
 import { normalizeEIN, useOnboardingWizard } from "../../utils/onboardingWizard";
+import { LoadingScreen } from "../../components/LoadingScreen";
 
 export default function OnboardStep1() {
   const router = useRouter();
@@ -18,8 +19,7 @@ export default function OnboardStep1() {
   const bizIsUS = isUnitedStates(step1.country);
   const bizIsCA = isCanada(step1.country);
 
-  if (!ready) return null;
-  if (!token) return null;
+  if (!ready || !token) return <LoadingScreen />;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -286,4 +286,3 @@ export default function OnboardStep1() {
     </OnboardingShell>
   );
 }
-

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/router";
 import { useAuth } from "../../utils/auth";
 import { useOnboardingWizard } from "../../utils/onboardingWizard";
+import { LoadingScreen } from "../../components/LoadingScreen";
 
 function stepPath(step: number) {
   if (step <= 1) return "/onboard/step-1";
@@ -27,6 +28,7 @@ export default function OnboardIndex() {
     });
   }, [ready, token, router, refreshSession, currentStep]);
 
-  return null;
+  if (!ready) return <LoadingScreen />;
+  if (!token) return <LoadingScreen />;
+  return <LoadingScreen label="Loading onboarding..." />;
 }
-

@@ -3,22 +3,45 @@ import Image from "next/image";
 import { useRouter } from "next/router";
 import React, { PropsWithChildren, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../utils/auth";
+import { fetchProfileDetails } from "../utils/api";
 import apliteLogo from "../RealLogo.png";
 
 const THEME_STORAGE_KEY = "aplite_theme";
 
 export function Layout({ children }: PropsWithChildren) {
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, token, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [isVerified, setIsVerified] = useState<boolean>(false);
 
   const accountLabel = useMemo(() => {
     if (!user) return "";
     const fullName = `${user.first_name || ""} ${user.last_name || ""}`.trim();
     return fullName || user.company_name || user.company || user.email;
   }, [user]);
+
+  useEffect(() => {
+    if (!token) {
+      setIsVerified(false);
+      return;
+    }
+    let canceled = false;
+    void fetchProfileDetails()
+      .then((details) => {
+        if (canceled) return;
+        const state = String(details?.onboarding?.state || "NOT_STARTED");
+        setIsVerified(state === "VERIFIED");
+      })
+      .catch(() => {
+        if (canceled) return;
+        setIsVerified(false);
+      });
+    return () => {
+      canceled = true;
+    };
+  }, [token]);
 
   useEffect(() => {
     try {
@@ -63,12 +86,18 @@ export function Layout({ children }: PropsWithChildren) {
   }, [menuOpen]);
 
   const links = user
-    ? [
-        { href: "/dashboard", label: "Workspace" },
-        { href: "/accounts", label: "Accounts" },
-        { href: "/resolve", label: "Resolve UPI" },
-        { href: "/clients", label: "Directory" },
-      ]
+    ? isVerified
+      ? [
+          { href: "/dashboard", label: "Workspace" },
+          { href: "/accounts", label: "Accounts" },
+          { href: "/resolve", label: "Resolve UPI" },
+          { href: "/clients", label: "Directory" },
+        ]
+      : [
+          { href: "/onboard", label: "Onboarding" },
+          { href: "/profile", label: "Profile" },
+          { href: "/clients", label: "Directory" },
+        ]
     : [
         { href: "/", label: "Home" },
         { href: "/clients", label: "Directory" },

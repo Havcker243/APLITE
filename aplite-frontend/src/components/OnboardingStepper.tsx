@@ -29,7 +29,9 @@ export function OnboardingStepper({
             key={step.id}
             type="button"
             className={`step${completed ? " step--complete" : ""}${current ? " step--current" : ""}`}
-            onClick={() => clickable && onStepClick?.(step.id)}
+            onClick={() => {
+              if (clickable) onStepClick?.(step.id);
+            }}
             disabled={!clickable}
             aria-current={current ? "step" : undefined}
           >
@@ -43,4 +45,3 @@ export function OnboardingStepper({
     </div>
   );
 }
-

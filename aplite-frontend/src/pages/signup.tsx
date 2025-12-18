@@ -32,7 +32,9 @@ export default function SignupPage() {
 
   useEffect(() => {
     if (!ready) return;
-    if (token) router.replace("/dashboard");
+    if (!token) return;
+    const next = typeof router.query.next === "string" ? router.query.next : "/dashboard";
+    router.replace(next);
   }, [ready, token, router]);
 
   if (ready && token) return null;
@@ -53,7 +55,7 @@ export default function SignupPage() {
         established_year: form.established_year ? Number(form.established_year) : undefined,
       });
       login(response);
-      const next = typeof router.query.next === "string" ? router.query.next : "/dashboard";
+      const next = typeof router.query.next === "string" ? router.query.next : "/onboard";
       router.push(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create account");

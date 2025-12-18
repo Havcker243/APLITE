@@ -4,6 +4,7 @@ import { OnboardingShell } from "../../components/onboarding/OnboardingShell";
 import { onboardingStep2 } from "../../utils/api";
 import { useAuth } from "../../utils/auth";
 import { useOnboardingWizard } from "../../utils/onboardingWizard";
+import { LoadingScreen } from "../../components/LoadingScreen";
 
 export default function OnboardStep2() {
   const router = useRouter();
@@ -14,8 +15,7 @@ export default function OnboardStep2() {
   const [saved, setSaved] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  if (!ready) return null;
-  if (!token) return null;
+  if (!ready || !token) return <LoadingScreen />;
   if (currentStep < 2) {
     router.replace("/onboard/step-1");
     return null;
@@ -109,4 +109,3 @@ export default function OnboardStep2() {
     </OnboardingShell>
   );
 }
-

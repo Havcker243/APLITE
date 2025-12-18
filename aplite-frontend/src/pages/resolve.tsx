@@ -4,6 +4,7 @@ import { ResolveForm } from "../components/ResolveForm";
 import { ResolutionResult } from "../components/ResolutionResult";
 import { resolveUPI } from "../utils/api";
 import { useAuth } from "../utils/auth";
+import { requireVerifiedOrRedirect } from "../utils/requireVerified";
 
 const UPI_PATTERN = /^[A-Z0-9]{14}$/;
 
@@ -20,7 +21,9 @@ export default function ResolvePage() {
     if (!ready) return;
     if (!token) {
       router.replace("/login");
+      return;
     }
+    void requireVerifiedOrRedirect({ token, router });
   }, [ready, token]);
 
   async function handleResolve(event: React.FormEvent<HTMLFormElement>) {

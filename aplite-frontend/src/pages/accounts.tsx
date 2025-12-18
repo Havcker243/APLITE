@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { createAccount, listAccounts } from "../utils/api";
 import { useAuth } from "../utils/auth";
+import { requireVerifiedOrRedirect } from "../utils/requireVerified";
 
 type Rail = "ACH" | "WIRE_DOM" | "SWIFT";
 
@@ -35,6 +36,7 @@ export default function AccountsPage() {
       router.replace("/login");
       return;
     }
+    void requireVerifiedOrRedirect({ token, router });
     void loadAccounts();
   }, [ready, token]);
 

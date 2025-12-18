@@ -156,5 +156,6 @@ create table if not exists payment_accounts (
 create index if not exists idx_payment_accounts_user on payment_accounts(user_id);
 create index if not exists idx_payment_accounts_business on payment_accounts(business_id);
 create index if not exists idx_businesses_user on businesses(user_id);
+create index if not exists idx_businesses_user_id_desc on businesses(user_id, id desc);
 create unique index if not exists idx_businesses_ein_per_user on businesses(user_id, ein);
 create unique index if not exists idx_payment_accounts_unique_pi on payment_accounts(user_id, payment_index, rail);

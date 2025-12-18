@@ -21,7 +21,9 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!ready) return;
-    if (token) router.replace("/dashboard");
+    if (!token) return;
+    const next = typeof router.query.next === "string" ? router.query.next : "/dashboard";
+    router.replace(next);
   }, [ready, token, router]);
 
   if (ready && token) return null;

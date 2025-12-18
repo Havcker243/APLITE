@@ -1,6 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.db.connection import request_connection
 from app.routes.auth import router as auth_router
 from app.routes.accounts import router as accounts_router
 from app.routes.business import router as business_router
@@ -25,6 +26,13 @@ app.include_router(auth_router)
 app.include_router(accounts_router)
 app.include_router(public_router)
 app.include_router(onboarding_router)
+
+
+@app.middleware("http")
+async def db_connection_middleware(request: Request, call_next):
+    # Use one pooled DB connection per request to reduce pool churn.
+    with request_connection():
+        return await call_next(request)
 
 
 @app.get("/health")

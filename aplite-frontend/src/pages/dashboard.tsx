@@ -8,6 +8,7 @@ import { ResolutionResult } from "../components/ResolutionResult";
 import { ResultCard } from "../components/ResultCard";
 import { BusinessSummary, deactivateBusiness, fetchBusinesses, listAccounts, onboardBusiness, resolveUPI } from "../utils/api";
 import { useAuth } from "../utils/auth";
+import { requireVerifiedOrRedirect } from "../utils/requireVerified";
 
 const FIELD_LABELS: Partial<Record<keyof BusinessFormData, string>> = {
   legal_name: "Legal Name",
@@ -148,6 +149,7 @@ export default function DashboardPage() {
       router.replace("/login");
       return;
     }
+    void requireVerifiedOrRedirect({ token, router });
     void loadHistory();
     void loadAccounts();
   }, [ready, token]);

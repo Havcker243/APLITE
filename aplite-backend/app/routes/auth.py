@@ -4,12 +4,13 @@ import hmac
 import os
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, Header, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Header, Request, status
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, EmailStr, Field
 
 from app.db import queries
 from app.utils.email import send_email
+from app.utils.ratelimit import RateLimit, check_rate_limit
 from app.utils.security import generate_session_token, hash_password, verify_password
 from app.utils.upi import generate_core_entity_id, generate_upi
 
@@ -169,9 +170,21 @@ def signup(payload: SignupRequest):
 
 
 @router.post("/api/auth/login/start")
-def login_start(payload: LoginStartRequest):
+def login_start(payload: LoginStartRequest, background_tasks: BackgroundTasks, request: Request):
     """Start login: verify password and send a 6-digit OTP (email in MVP)."""
-    user = queries.get_user_by_email(payload.email.lower())
+    ip = (request.client.host if request.client else "unknown").strip()
+    email = payload.email.lower().strip()
+
+    ip_rule = RateLimit(limit=int(os.getenv("RL_LOGIN_IP_LIMIT", "30")), window_seconds=int(os.getenv("RL_LOGIN_IP_WINDOW_SECONDS", "600")))
+    email_rule = RateLimit(limit=int(os.getenv("RL_LOGIN_EMAIL_LIMIT", "10")), window_seconds=int(os.getenv("RL_LOGIN_EMAIL_WINDOW_SECONDS", "600")))
+    ok, retry = check_rate_limit(f"login_start:ip:{ip}", ip_rule)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many login attempts. Try again soon.", headers={"Retry-After": str(retry)})
+    ok, retry = check_rate_limit(f"login_start:email:{email}", email_rule)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many login attempts for this email. Try again soon.", headers={"Retry-After": str(retry)})
+
+    user = queries.get_user_by_email(email)
     if not user:
         # Clear message to guide users without an account.
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No account found for this email.")
@@ -183,7 +196,8 @@ def login_start(payload: LoginStartRequest):
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
     queries.create_otp(login_id, user_id=user["id"], code=code, expires_at=expires_at)
 
-    send_email(
+    background_tasks.add_task(
+        send_email,
         to_address=user["email"],
         subject="Your Aplite login code",
         body=f"Your verification code is {code}. It expires in 10 minutes.",
@@ -257,10 +271,17 @@ def get_profile_details(user=Depends(get_current_user)):
     - `onboarding`: latest onboarding session state (if any)
     - `organization`: onboarding business profile (if any)
     """
-    latest_session = queries.get_latest_onboarding_session(user["id"])
+    latest_session = None
     org = None
-    if latest_session and latest_session.get("org_id"):
-        org = queries.get_organization(str(latest_session["org_id"]), user["id"])
+    try:
+        latest_session = queries.get_latest_onboarding_session(user["id"])
+        if latest_session and latest_session.get("org_id"):
+            org = queries.get_organization(str(latest_session["org_id"]), user["id"])
+    except Exception:
+        # Keep profile page functional even if onboarding tables aren't present yet.
+        latest_session = None
+        org = None
+
     stats = queries.get_user_stats(user["id"])
     return jsonable_encoder({"user": _sanitize_user(user), "onboarding": latest_session, "organization": org, "stats": stats})
 

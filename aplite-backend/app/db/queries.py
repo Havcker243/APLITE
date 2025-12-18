@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional, TypedDict
 from app.db.connection import get_connection
 from app.utils import crypto
 from app.utils.email import send_email
+from app.utils.security import hash_session_token
 from app.utils.upi import generate_core_entity_id, generate_upi
 
 """
@@ -418,10 +419,20 @@ def list_public_clients(*, search: Optional[str], limit: int) -> List[Dict[str, 
         return results
 
 
-def list_businesses_for_user(user_id: int) -> List[BusinessRecord]:
+def list_businesses_for_user(user_id: int, *, limit: int | None = None, before_id: int | None = None) -> List[BusinessRecord]:
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("select * from businesses where user_id = %s order by id desc", (user_id,))
+            params: list[Any] = [user_id]
+            where = "where user_id = %s"
+            if before_id is not None:
+                where += " and id < %s"
+                params.append(int(before_id))
+
+            sql = f"select * from businesses {where} order by id desc"
+            if limit is not None:
+                sql += " limit %s"
+                params.append(int(limit))
+            cur.execute(sql, tuple(params))
             return cur.fetchall()
 
 
@@ -588,28 +599,49 @@ def update_user_profile(user_id: int, **fields: Any) -> Optional[UserRecord]:
 
 def create_session(token: str, user_id: int) -> None:
     """Create a new session token for the given user."""
+    token_hash = hash_session_token(token)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "insert into sessions (token, user_id, created_at) values (%s,%s, now())",
-                (token, user_id),
+                (token_hash, user_id),
             )
             conn.commit()
 
 
 def get_session(token: str) -> Optional[SessionRecord]:
     """Fetch an active session by token."""
+    token_hash = hash_session_token(token)
     with get_connection() as conn:
         with conn.cursor() as cur:
+            cur.execute("select * from sessions where token = %s", (token_hash,))
+            row = cur.fetchone()
+            if row:
+                return row
+
+            # Backwards-compat: accept legacy plaintext tokens and upgrade on first use.
             cur.execute("select * from sessions where token = %s", (token,))
-            return cur.fetchone()
+            row = cur.fetchone()
+            if not row:
+                return None
+            try:
+                cur.execute("update sessions set token = %s where token = %s", (token_hash, token))
+                conn.commit()
+            except Exception:
+                # Best-effort; still treat the session as valid for this request.
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            return row
 
 
 def delete_session(token: str) -> None:
     """Invalidate a session token (logout)."""
+    token_hash = hash_session_token(token)
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("delete from sessions where token = %s", (token,))
+            cur.execute("delete from sessions where token = %s or token = %s", (token_hash, token))
             conn.commit()
 
 
@@ -644,6 +676,8 @@ def consume_otp(record_id: str) -> None:
 
 
 def get_active_onboarding_session(user_id: int) -> Optional[OnboardingSessionRecord]:
+    if not _table_exists("onboarding_sessions"):
+        return None
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -660,6 +694,8 @@ def get_active_onboarding_session(user_id: int) -> Optional[OnboardingSessionRec
 
 def get_latest_onboarding_session(user_id: int) -> Optional[OnboardingSessionRecord]:
     """Return the most recently saved onboarding session for a user (active or completed)."""
+    if not _table_exists("onboarding_sessions"):
+        return None
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -905,6 +941,26 @@ def store_onboarding_file(*, file_id: str, filename: str, content_type: str, dat
         raise ValueError("Invalid file_id")
     with open(bin_path, "wb") as f:
         f.write(data)
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump({"user_id": user_id, "filename": filename, "content_type": content_type}, f)
+
+
+def onboarding_upload_base_dir() -> str:
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "uploads"))
+
+
+def store_onboarding_file_metadata(*, file_id: str, filename: str, content_type: str, user_id: int) -> None:
+    """
+    Store onboarding upload metadata (used when the file bytes are written elsewhere).
+    """
+    if not re.match(r"^id_[0-9a-f]{32}$", file_id):
+        raise ValueError("Invalid file_id")
+
+    base = onboarding_upload_base_dir()
+    os.makedirs(base, exist_ok=True)
+    meta_path = os.path.abspath(os.path.join(base, f"{file_id}.json"))
+    if not meta_path.startswith(base + os.sep):
+        raise ValueError("Invalid file_id")
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump({"user_id": user_id, "filename": filename, "content_type": content_type}, f)
 
@@ -1257,6 +1313,8 @@ def is_user_verified(user_id: int) -> bool:
     MVP definition of a verified user:
     - has at least one onboarding session that reached VERIFIED.
     """
+    if not _table_exists("onboarding_sessions"):
+        return False
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
