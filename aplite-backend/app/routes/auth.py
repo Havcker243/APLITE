@@ -323,6 +323,7 @@ def get_profile_details(user=Depends(get_current_user)):
     stats = queries.get_user_stats(user["id"])
     onboarding_state = str(latest_session.get("state")) if latest_session else "NOT_STARTED"
     needs_onboarding = onboarding_state != "VERIFIED"
+    access_level = "ONBOARDING" if needs_onboarding else "ACTIVE"
     return jsonable_encoder(
         {
             "user": _sanitize_user(user),
@@ -331,6 +332,7 @@ def get_profile_details(user=Depends(get_current_user)):
             "stats": stats,
             "needs_onboarding": needs_onboarding,
             "onboarding_state": onboarding_state,
+            "access_level": access_level,
         }
     )
 

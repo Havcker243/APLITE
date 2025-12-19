@@ -29,13 +29,16 @@ export type OnboardingStep3Draft = { full_name: string; title: string; file?: Fi
 
 export type OnboardingStep4Draft = { bank_name: string; account_number: string; ach_routing: string; wire_routing: string; swift: string };
 
-export type OnboardingVerifyDraft = { otpMethod: "email" | "sms"; otpCode: string; selectedSlot: string };
+const STORAGE_KEY = "aplite_onboarding_session_v2";
 
 type OnboardingContextValue = {
   session: any | null;
   currentStep: OnboardingStep;
   completedThrough: number;
-  refreshSession: () => Promise<void>;
+  sessionReady: boolean;
+  refreshSession: () => Promise<OnboardingStep>;
+  touchStep: (step: OnboardingStep) => void;
+  markStepComplete: (step: OnboardingStep) => void;
 
   step1: OnboardingStep1Draft;
   setStep1: React.Dispatch<React.SetStateAction<OnboardingStep1Draft>>;
@@ -45,34 +48,9 @@ type OnboardingContextValue = {
   setStep3: React.Dispatch<React.SetStateAction<OnboardingStep3Draft>>;
   step4: OnboardingStep4Draft;
   setStep4: React.Dispatch<React.SetStateAction<OnboardingStep4Draft>>;
-  verify: OnboardingVerifyDraft;
-  setVerify: React.Dispatch<React.SetStateAction<OnboardingVerifyDraft>>;
 };
 
 const OnboardingContext = createContext<OnboardingContextValue | null>(null);
-
-const DRAFT_KEY = "aplite_onboarding_draft_v1";
-const PROGRESS_KEY = "aplite_onboarding_progress_v1";
-
-function loadJson<T>(key: string): T | null {
-  if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(key);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
-}
-
-function saveJson(key: string, value: unknown) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // ignore storage failures
-  }
-}
 
 export function normalizeEIN(raw: string) {
   const digits = raw.replace(/\D/g, "").slice(0, 9);
@@ -84,92 +62,146 @@ export function normalizeRouting(raw: string, max = 34) {
   return raw.replace(/\D/g, "").slice(0, max);
 }
 
+const INITIAL_STEP1: OnboardingStep1Draft = {
+  legal_name: "",
+  dba: "",
+  ein: "",
+  formation_date: "",
+  formation_state: "",
+  entity_type: "LLC",
+  street1: "",
+  street2: "",
+  city: "",
+  state: "",
+  zip: "",
+  country: "United States",
+  industry: "",
+  industry_other: "",
+  website: "",
+  description: "",
+};
+const INITIAL_STEP2: OnboardingStep2Draft = { role: "", title: "" };
+const INITIAL_STEP3: OnboardingStep3Draft = { full_name: "", title: "", file: undefined, file_id: undefined, attestation: false };
+const INITIAL_STEP4: OnboardingStep4Draft = { bank_name: "", account_number: "", ach_routing: "", wire_routing: "", swift: "" };
+
 export function OnboardingProvider({ children }: { children: React.ReactNode }) {
   const { token, ready } = useAuth();
 
   const [session, setSession] = useState<any | null>(null);
   const [currentStep, setCurrentStep] = useState<OnboardingStep>(1);
   const [completedThrough, setCompletedThrough] = useState<number>(0);
+  const [sessionReady, setSessionReady] = useState(false);
 
-  const [step1, setStep1] = useState<OnboardingStep1Draft>({
-    legal_name: "",
-    dba: "",
-    ein: "",
-    formation_date: "",
-    formation_state: "",
-    entity_type: "LLC",
-    street1: "",
-    street2: "",
-    city: "",
-    state: "",
-    zip: "",
-    country: "United States",
-    industry: "",
-    industry_other: "",
-    website: "",
-    description: "",
-  });
-  const [step2, setStep2] = useState<OnboardingStep2Draft>({ role: "", title: "" });
-  const [step3, setStep3] = useState<OnboardingStep3Draft>({ full_name: "", title: "", file: undefined, file_id: undefined, attestation: false });
-  const [step4, setStep4] = useState<OnboardingStep4Draft>({ bank_name: "", account_number: "", ach_routing: "", wire_routing: "", swift: "" });
-  const [verify, setVerify] = useState<OnboardingVerifyDraft>({ otpMethod: "email", otpCode: "", selectedSlot: "" });
+  const [step1, setStep1] = useState<OnboardingStep1Draft>(INITIAL_STEP1);
+  const [step2, setStep2] = useState<OnboardingStep2Draft>(INITIAL_STEP2);
+  const [step3, setStep3] = useState<OnboardingStep3Draft>(INITIAL_STEP3);
+  const [step4, setStep4] = useState<OnboardingStep4Draft>(INITIAL_STEP4);
 
+  // Load draft from sessionStorage (refresh survival).
   useEffect(() => {
-    const saved = loadJson<Partial<OnboardingContextValue>>(DRAFT_KEY) as any;
-    if (!saved) return;
-    if (saved.step1) setStep1((prev) => ({ ...prev, ...saved.step1 }));
-    if (saved.step2) setStep2((prev) => ({ ...prev, ...saved.step2 }));
-    if (saved.step3) setStep3((prev) => ({ ...prev, ...saved.step3, file: undefined }));
-    if (saved.step4) setStep4((prev) => ({ ...prev, ...saved.step4 }));
-    if (saved.verify) setVerify((prev) => ({ ...prev, ...saved.verify }));
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.sessionStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as Partial<OnboardingContextValue> & { step3?: any; step4?: any; completedThrough?: number };
+      if (saved.step1) setStep1((prev) => ({ ...prev, ...saved.step1 }));
+      if (saved.step2) setStep2((prev) => ({ ...prev, ...saved.step2 }));
+      if (saved.step3) setStep3((prev) => ({ ...prev, ...saved.step3, file: undefined }));
+      if (saved.step4) setStep4((prev) => ({ ...prev, ...saved.step4 }));
+      if (typeof saved.completedThrough === "number") {
+        setCompletedThrough((prev) => Math.max(prev, saved.completedThrough || 0));
+      }
+    } catch {
+      // ignore parse errors
+    }
   }, []);
 
   useEffect(() => {
-    saveJson(DRAFT_KEY, { step1, step2, step3: { ...step3, file: undefined }, step4, verify });
-  }, [step1, step2, step3, step4, verify]);
+    if (typeof window === "undefined") return;
+    try {
+      window.sessionStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ step1, step2, step3: { ...step3, file: undefined }, step4, completedThrough })
+      );
+    } catch {
+      // ignore storage errors
+    }
+  }, [step1, step2, step3, step4, completedThrough]);
 
-  useEffect(() => {
-    const saved = loadJson<{ completedThrough?: number }>(PROGRESS_KEY);
-    if (saved?.completedThrough) setCompletedThrough(saved.completedThrough);
+  const clearDraft = React.useCallback(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.sessionStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // ignore
+    }
   }, []);
 
+  // Reset onboarding state when the user logs out (token disappears).
   useEffect(() => {
-    saveJson(PROGRESS_KEY, { completedThrough });
-  }, [completedThrough]);
+    if (!token) {
+      setSession(null);
+      setCurrentStep(1);
+      setCompletedThrough(0);
+      setStep1(INITIAL_STEP1);
+      setStep2(INITIAL_STEP2);
+      setStep3(INITIAL_STEP3);
+      setStep4(INITIAL_STEP4);
+      clearDraft();
+    }
+  }, [token, clearDraft]);
 
-  async function refreshSession() {
+  const refreshSession = React.useCallback(async (): Promise<OnboardingStep> => {
     if (!ready || !token) return 1;
     try {
       const current = await onboardingCurrent();
       setSession(current);
       const serverStep = Math.min(Math.max(Number(current.current_step || 1), 1), 5) as OnboardingStep;
-      setCurrentStep(serverStep);
-      setCompletedThrough((prev) => Math.max(prev, serverStep - 1));
+      // Only override local progress if server is already verified; otherwise stay client-driven.
+      if (current.state === "VERIFIED") {
+        setCurrentStep(serverStep);
+        setCompletedThrough((prev) => Math.max(prev, serverStep - 1));
+      }
       const roleInfo = current.step_statuses?.role || {};
       if (roleInfo.role && (!step2.role || step2.role !== roleInfo.role)) {
         setStep2((prev) => ({ ...prev, role: roleInfo.role, title: roleInfo.title || "" }));
       }
       return serverStep;
     } catch {
-      // If no active session, reset progress so stale local storage doesn't mis-route.
+      // If no active session, keep local progress; onboarding is client-driven until final submit.
       setSession(null);
       setCurrentStep(1);
-      setCompletedThrough(0);
       return 1;
+    } finally {
+      setSessionReady(true);
     }
-  }
+  }, [ready, token]);
 
   useEffect(() => {
+    if (!ready || !token) return;
+    // Only fetch once to see if onboarding is already VERIFIED; otherwise rely on local flow.
     void refreshSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, token]);
+
+  const touchStep = React.useCallback((step: OnboardingStep) => {
+    setCompletedThrough((prev) => Math.max(prev, step - 1));
+  }, []);
+
+  const markStepComplete = React.useCallback((step: OnboardingStep) => {
+    setCompletedThrough((prev) => Math.max(prev, step));
+  }, []);
 
   const value = useMemo<OnboardingContextValue>(
     () => ({
       session,
       currentStep,
       completedThrough,
+      sessionReady,
       refreshSession,
+      touchStep,
+      markStepComplete,
+      clearDraft,
       step1,
       setStep1,
       step2,
@@ -178,10 +210,8 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       setStep3,
       step4,
       setStep4,
-      verify,
-      setVerify,
     }),
-    [session, currentStep, completedThrough, step1, step2, step3, step4, verify]
+    [session, currentStep, completedThrough, step1, step2, step3, step4]
   );
 
   return <OnboardingContext.Provider value={value}>{children}</OnboardingContext.Provider>;

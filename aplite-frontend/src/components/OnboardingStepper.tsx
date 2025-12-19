@@ -36,7 +36,7 @@ export function OnboardingStepper({
             aria-current={current ? "step" : undefined}
           >
             <div className="step-circle" aria-hidden="true">
-              {completed ? "✓" : step.id}
+              {completed ? "\u2713" : step.id}
             </div>
             <div className="step-label">{`Stage ${step.id}: ${step.label}`}</div>
           </button>

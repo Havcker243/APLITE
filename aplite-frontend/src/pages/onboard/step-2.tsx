@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import { OnboardingShell } from "../../components/onboarding/OnboardingShell";
-import { onboardingStep2 } from "../../utils/api";
+import Link from "next/link";
 import { useAuth } from "../../utils/auth";
 import { useOnboardingWizard } from "../../utils/onboardingWizard";
 import { LoadingScreen } from "../../components/LoadingScreen";
@@ -9,8 +9,13 @@ import { LoadingScreen } from "../../components/LoadingScreen";
 export default function OnboardStep2() {
   const router = useRouter();
   const { token, ready } = useAuth();
-  const { step2, setStep2, refreshSession, currentStep } =
-    useOnboardingWizard();
+  const {
+    step2,
+    setStep2,
+    completedThrough,
+    touchStep,
+    markStepComplete,
+  } = useOnboardingWizard();
 
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
@@ -21,13 +26,13 @@ export default function OnboardStep2() {
     setMounted(true);
   }, []);
 
-  
   useEffect(() => {
-    if (!mounted || !ready || !token) return;
-    if (currentStep < 2) {
+    touchStep(2);
+    // Guard: require local completion of Step 1 to be on Step 2.
+    if (completedThrough < 1) {
       router.replace("/onboard/step-1");
     }
-  }, [mounted, ready, token, currentStep, router]);
+  }, [touchStep, completedThrough, router]);
 
   if (!ready || !token || !mounted) return <LoadingScreen />;
 
@@ -38,12 +43,8 @@ export default function OnboardStep2() {
     setError(null);
     try {
       if (!step2.role) throw new Error("Select your role to continue.");
-      await onboardingStep2({
-        role: step2.role as any,
-        title: step2.role === "authorized_rep" ? step2.title : undefined,
-      });
-      setSaved("Saved");
-      await refreshSession();
+      setSaved("Saved locally");
+      markStepComplete(2);
       router.push("/onboard/step-3");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save step");
@@ -127,7 +128,7 @@ export default function OnboardStep2() {
               }
               required
             >
-              <option value="">Select…</option>
+              <option value="">Select...</option>
               <option value="CEO">CEO</option>
               <option value="COO">COO</option>
               <option value="CFO">CFO</option>

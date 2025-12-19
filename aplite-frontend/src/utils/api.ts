@@ -85,6 +85,7 @@ export type ProfileDetailsResponse = {
     industry: string;
     website?: string | null;
     description?: string | null;
+    upi?: string | null;
     issued_upi?: string | null;
     created_at?: string;
     updated_at?: string;
@@ -95,6 +96,7 @@ export type ProfileDetailsResponse = {
   };
   needs_onboarding?: boolean;
   onboarding_state?: string;
+  access_level?: "ONBOARDING" | "ACTIVE" | "SUSPENDED";
 };
 
 export type OnboardingStep2Payload = { role: "owner" | "authorized_rep"; title?: string };
@@ -495,25 +497,10 @@ export async function onboardingCurrent(): Promise<OnboardingCurrentResponse> {
   return res.json();
 }
 
-export async function onboardingStep1(payload: OnboardingStep1Payload): Promise<OnboardingStep1Response> {
-  /** Submit onboarding Step 1 (legal entity details). */
-  const res = await authedFetch(`${API_BASE_URL}/onboarding/step-1`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) throw new Error(await parseError(res, "Unable to save Step 1"));
-  return res.json();
-}
-
-export async function onboardingStep2(payload: OnboardingStep2Payload) {
-  /** Submit onboarding Step 2 (authorization role). */
-  const res = await authedFetch(`${API_BASE_URL}/onboarding/step-2`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) throw new Error(await parseError(res, "Unable to save Step 2"));
+export async function onboardingReset() {
+  /** Delete any in-progress onboarding session to restart from Step 1. */
+  const res = await authedFetch(`${API_BASE_URL}/onboarding/reset`, { method: "POST" });
+  if (!res.ok) throw new Error(await parseError(res, "Unable to reset onboarding session"));
   return res.json();
 }
 
@@ -529,72 +516,30 @@ export async function onboardingUploadId(file: File) {
   return res.json() as Promise<{ file_id: string }>;
 }
 
-export async function onboardingStep3(payload: OnboardingStep3Payload) {
-  /** Submit onboarding Step 3 (identity verification attestation + document reference). */
-  const res = await authedFetch(`${API_BASE_URL}/onboarding/step-3`, {
+export async function onboardingComplete(payload: {
+  org: OnboardingStep1Payload;
+  role: OnboardingStep2Payload;
+  identity: OnboardingStep3Payload & { id_document_id?: string };
+  bank: OnboardingStep4Payload;
+  verification_method?: "otp" | "call" | "none";
+  verification_code?: string;
+  file?: File | null;
+}) {
+  /**
+   * Single-submit onboarding. Sends multipart/form-data with:
+   *  - data: JSON string of the payload without the file
+   *  - file: optional UploadFile for ID document
+   */
+  const form = new FormData();
+  const { file, ...rest } = payload;
+  form.append("data", JSON.stringify(rest));
+  if (file) {
+    form.append("file", file);
+  }
+  const res = await authedFetch(`${API_BASE_URL}/onboarding/complete`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: form,
   });
-  if (!res.ok) throw new Error(await parseError(res, "Unable to save Step 3"));
-  return res.json();
-}
-
-export async function onboardingStep4(payload: OnboardingStep4Payload) {
-  /** Submit onboarding Step 4 (bank rail mapping; account number encrypted server-side). */
-  const res = await authedFetch(`${API_BASE_URL}/onboarding/step-4`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) throw new Error(await parseError(res, "Unable to save Step 4"));
-  return res.json();
-}
-
-export async function verifySendOtp(method: "email" | "sms") {
-  /** Send an onboarding verification OTP (email or SMS; SMS is stubbed in MVP). */
-  const res = await authedFetch(`${API_BASE_URL}/verify/send-otp`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ method }),
-  });
-  if (!res.ok) throw new Error(await parseError(res, "Unable to send OTP"));
-  return res.json();
-}
-
-export async function verifyConfirmOtp(code: string) {
-  /** Confirm onboarding verification OTP; completes onboarding and issues a UPI. */
-  const res = await authedFetch(`${API_BASE_URL}/verify/confirm-otp`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code }),
-  });
-  if (!res.ok) throw new Error(await parseError(res, "Unable to confirm OTP"));
-  return res.json();
-}
-
-export async function verifyAvailableSlots() {
-  /** Fetch available verification-call slots (deterministic in MVP). */
-  const res = await authedFetch(`${API_BASE_URL}/verify/available-slots`);
-  if (!res.ok) throw new Error(await parseError(res, "Unable to load slots"));
-  return res.json() as Promise<{ slots: string[] }>;
-}
-
-export async function verifyScheduleCall(scheduled_at: string) {
-  /** Schedule a verification call for onboarding. */
-  const res = await authedFetch(`${API_BASE_URL}/verify/schedule-call`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ scheduled_at }),
-  });
-  if (!res.ok) throw new Error(await parseError(res, "Unable to schedule call"));
-  return res.json();
-}
-
-export async function verifyCompleteCall(session_id: string) {
-  /** Mark a verification call complete (dev/MVP helper). */
-  const params = new URLSearchParams({ session_id });
-  const res = await authedFetch(`${API_BASE_URL}/verify/complete-call?${params.toString()}`, { method: "POST" });
-  if (!res.ok) throw new Error(await parseError(res, "Unable to complete call verification"));
+  if (!res.ok) throw new Error(await parseError(res, "Unable to complete onboarding"));
   return res.json();
 }

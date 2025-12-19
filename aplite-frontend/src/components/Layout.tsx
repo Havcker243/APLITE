@@ -3,24 +3,16 @@ import { useRouter } from "next/router";
 import React, { PropsWithChildren, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../utils/auth";
 import { fetchProfileDetails } from "../utils/api";
+import { LoadingScreen } from "./LoadingScreen";
 
 const THEME_STORAGE_KEY = "aplite_theme";
 
 export function Layout({ children }: PropsWithChildren) {
   const router = useRouter();
-  const { user, token, logout } = useAuth();
+  const { user, token, logout, accessLevel, profileReady } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const [theme, setTheme] = useState<"light" | "dark">(() => {
-    if (typeof window === "undefined") return "dark";
-    try {
-      const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-      if (stored === "dark" || stored === "light") return stored;
-    } catch {
-      // ignore storage failures
-    }
-    return "dark";
-  });
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [isVerified, setIsVerified] = useState<boolean>(false);
 
   const accountLabel = useMemo(() => {
@@ -49,6 +41,18 @@ export function Layout({ children }: PropsWithChildren) {
       canceled = true;
     };
   }, [token]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+      if (stored === "dark" || stored === "light") {
+        setTheme(stored);
+      }
+    } catch {
+      // ignore storage failures
+    }
+  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme === "dark" ? "dark" : "light";
@@ -82,16 +86,16 @@ export function Layout({ children }: PropsWithChildren) {
   }, [menuOpen]);
 
   const links = user
-    ? isVerified
+    ? accessLevel === "ONBOARDING"
       ? [
-          { href: "/dashboard", label: "Workspace" },
-          { href: "/accounts", label: "Accounts" },
-          { href: "/resolve", label: "Resolve UPI" },
+          { href: "/onboard", label: "Onboarding" },
+          { href: "/profile", label: "Profile" },
           { href: "/clients", label: "Directory" },
         ]
       : [
-          { href: "/onboard", label: "Onboarding" },
-          { href: "/profile", label: "Profile" },
+          { href: "/dashboard", label: "Workspace" },
+          { href: "/accounts", label: "Accounts" },
+          { href: "/resolve", label: "Resolve UPI" },
           { href: "/clients", label: "Directory" },
         ]
     : [
@@ -100,6 +104,10 @@ export function Layout({ children }: PropsWithChildren) {
         { href: "/login", label: "Login" },
         { href: "/signup", label: "Get Started" },
       ];
+
+  if (token && !profileReady) {
+    return <LoadingScreen />;
+  }
 
   return (
     <div className="app-shell">

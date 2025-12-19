@@ -284,17 +284,6 @@ a {
   position: relative;
 }
 
-.onboarding-stepper::before {
-  content: "";
-  position: absolute;
-  top: 18px;
-  left: 16px;
-  right: 16px;
-  height: 2px;
-  background: rgba(255, 255, 255, 0.14);
-  pointer-events: none;
-}
-
 .step {
   display: flex;
   flex-direction: column;
@@ -306,6 +295,7 @@ a {
   background: transparent;
   padding: 6px 4px;
   cursor: default;
+  position: relative;
 }
 
 .step:disabled {
@@ -337,6 +327,23 @@ a {
   letter-spacing: 0.01em;
 }
 
+.step::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  left: calc(-50% + 28px);
+  right: calc(50% + 28px);
+  height: 2px;
+  background: rgba(255, 255, 255, 0.18);
+  z-index: 0;
+  display: none;
+}
+
+.step:first-child::before {
+  display: none;
+}
+
 .step--current .step-circle {
   border-color: rgba(108, 124, 255, 0.45);
   background: var(--accent-soft);
@@ -347,6 +354,11 @@ a {
   border-color: rgba(23, 156, 106, 0.65);
   background: var(--success);
   color: #ffffff;
+}
+
+.step--current::before,
+.step--complete::before {
+  display: block;
 }
 
 .select-card-grid {

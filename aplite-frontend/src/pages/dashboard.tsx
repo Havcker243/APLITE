@@ -129,7 +129,7 @@ function maskUpi(upi: string) {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, token, ready } = useAuth();
+  const { user, token, ready, accessLevel, profileReady } = useAuth();
 
   const [form, setForm] = useState<BusinessFormData>(defaultForm);
   const [loading, setLoading] = useState(false);
@@ -151,15 +151,19 @@ export default function DashboardPage() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (!mounted || !ready) return;
+    if (!mounted || !ready || !profileReady) return;
     if (!token) {
       router.replace("/login");
+      return;
+    }
+    if (accessLevel === "ONBOARDING") {
+      router.replace("/onboard");
       return;
     }
     requireVerifiedOrRedirect({ token, router });
     loadOrg();
     loadAccounts();
-  }, [mounted, ready, token, router]);
+  }, [mounted, ready, profileReady, token, accessLevel, router]);
 
   useEffect(() => {
     setMounted(true);

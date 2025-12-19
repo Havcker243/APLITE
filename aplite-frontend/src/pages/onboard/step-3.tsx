@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import { OnboardingShell } from "../../components/onboarding/OnboardingShell";
-import { onboardingStep3, onboardingUploadId } from "../../utils/api";
+import { onboardingUploadId } from "../../utils/api";
 import { useAuth } from "../../utils/auth";
 import { useOnboardingWizard } from "../../utils/onboardingWizard";
 import { LoadingScreen } from "../../components/LoadingScreen";
@@ -9,30 +9,32 @@ import { LoadingScreen } from "../../components/LoadingScreen";
 export default function OnboardStep3() {
   const router = useRouter();
   const { token, ready } = useAuth();
-  const { step3, setStep3, refreshSession, currentStep, session, step2 } = useOnboardingWizard();
+  const { step3, setStep3, step2, completedThrough, touchStep, markStepComplete } = useOnboardingWizard();
 
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
-  const role = useMemo(
-    () => (session?.step_statuses?.role?.role as "owner" | "authorized_rep" | undefined) || (step2.role as any) || "",
-    [session, step2.role]
-  );
-  const callBased = role === "authorized_rep";
+  const role = useMemo(() => (step2.role as "owner" | "authorized_rep" | undefined) || "", [step2.role]);
+  const callBased = role === "owner";
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   useEffect(() => {
-    if (!mounted) return;
-    if (currentStep < 3) {
-      router.replace(currentStep <= 1 ? "/onboard/step-1" : "/onboard/step-2");
-    }
-  }, [mounted, currentStep, router]);
+    touchStep(3);
+  }, [touchStep]);
 
-  if (!ready || !token || !session || !mounted) return <LoadingScreen />;
+  useEffect(() => {
+    if (!mounted) return;
+    // Guard: require local completion of Step 2 to be on Step 3.
+    if (completedThrough < 2) {
+      router.replace(completedThrough < 1 ? "/onboard/step-1" : "/onboard/step-2");
+    }
+  }, [mounted, completedThrough, router]);
+
+  if (!ready || !token || !mounted) return <LoadingScreen />;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -48,14 +50,8 @@ export default function OnboardStep3() {
         setStep3((prev) => ({ ...prev, file_id: fileId }));
       }
 
-      await onboardingStep3({
-        full_name: step3.full_name,
-        title: step3.title || undefined,
-        id_document_id: callBased ? undefined : fileId!,
-        attestation: step3.attestation,
-      });
-      setSaved("Saved");
-      await refreshSession();
+      setSaved("Saved locally");
+      markStepComplete(3);
       router.push("/onboard/step-4");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save step");
@@ -80,7 +76,9 @@ export default function OnboardStep3() {
       <form className="card form-card" onSubmit={handleSubmit}>
         <h2 style={{ marginTop: 0 }}>Identity Verification</h2>
         <p className="hero-subtitle">
-          {callBased ? "For authorized representatives, we’ll verify via a live call. Upload is optional here." : "Tie a real human to this authority. Files are stored privately (MVP local storage)."}
+          {callBased
+            ? "As the business owner, you'll complete a live verification call later. No document upload needed now."
+            : "Authorized representatives must upload ID to verify their authority. Files are stored privately (MVP local storage)."}
         </p>
 
         <div className="form-section">
@@ -95,7 +93,13 @@ export default function OnboardStep3() {
               <label className="input-label" htmlFor="person_title">
                 Title {callBased ? "(exec role)" : "(optional)"}
               </label>
-              <input id="person_title" className="input-control" value={step3.title} onChange={(e) => setStep3((p) => ({ ...p, title: e.target.value }))} required={callBased} />
+              <input
+                id="person_title"
+                className="input-control"
+                value={step3.title}
+                onChange={(e) => setStep3((p) => ({ ...p, title: e.target.value }))}
+                required={callBased}
+              />
             </div>
             {!callBased && (
               <div className="input-group">

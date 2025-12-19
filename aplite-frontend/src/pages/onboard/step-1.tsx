@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useRouter } from "next/router";
 import { OnboardingShell } from "../../components/onboarding/OnboardingShell";
-import { onboardingStep1 } from "../../utils/api";
+// Step 1 is now local-only; final submit happens on the Verify page.
 import { useAuth } from "../../utils/auth";
 import { COUNTRIES, isCanada, isUnitedStates, US_STATES, CA_PROVINCES } from "../../utils/geo";
 import { normalizeEIN, useOnboardingWizard } from "../../utils/onboardingWizard";
@@ -10,7 +10,23 @@ import { LoadingScreen } from "../../components/LoadingScreen";
 export default function OnboardStep1() {
   const router = useRouter();
   const { token, ready } = useAuth();
-  const { step1, setStep1, refreshSession } = useOnboardingWizard();
+  const {
+    step1,
+    setStep1,
+    step2,
+    setStep2,
+    step3,
+    setStep3,
+    step4,
+    setStep4,
+    verify,
+    refreshSession,
+    currentStep,
+    sessionReady,
+    clearDraft,
+    touchStep,
+    markStepComplete,
+  } = useOnboardingWizard();
 
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
@@ -18,6 +34,18 @@ export default function OnboardStep1() {
 
   const bizIsUS = isUnitedStates(step1.country);
   const bizIsCA = isCanada(step1.country);
+
+  React.useEffect(() => {
+    if (!ready || !token) return;
+    // Fire-and-forget to see if already verified; do not block render.
+    void refreshSession();
+  }, [ready, token, refreshSession]);
+
+  React.useEffect(() => {
+    touchStep(1);
+  }, [touchStep]);
+
+  const today = React.useMemo(() => new Date().toISOString().split("T")[0], []);
 
   if (!ready || !token) return <LoadingScreen />;
 
@@ -31,27 +59,9 @@ export default function OnboardStep1() {
       if (step1.industry === "Other" && !step1.industry_other.trim()) {
         throw new Error("Industry is required. Select an industry or specify Other.");
       }
-      await onboardingStep1({
-        legal_name: step1.legal_name,
-        dba: step1.dba || undefined,
-        ein: step1.ein,
-        formation_date: step1.formation_date,
-        formation_state: step1.formation_state,
-        entity_type: step1.entity_type,
-        address: {
-          street1: step1.street1,
-          street2: step1.street2 || undefined,
-          city: step1.city,
-          state: step1.state,
-          zip: step1.zip,
-          country: step1.country,
-        },
-        industry,
-        website: step1.website || undefined,
-        description: step1.description || undefined,
-      });
-      setSaved("Saved");
-      await refreshSession();
+      // Only validate required fields for Step 1; final submit happens on Verify.
+      setSaved("Saved locally");
+      markStepComplete(1);
       router.push("/onboard/step-2");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save step");
@@ -111,7 +121,15 @@ export default function OnboardStep1() {
               <label className="input-label" htmlFor="formation_date">
                 Formation date
               </label>
-              <input id="formation_date" type="date" className="input-control" value={step1.formation_date} onChange={(e) => setStep1((p) => ({ ...p, formation_date: e.target.value }))} required />
+              <input
+                id="formation_date"
+                type="date"
+                className="input-control"
+                value={step1.formation_date}
+                max={today}
+                onChange={(e) => setStep1((p) => ({ ...p, formation_date: e.target.value }))}
+                required
+              />
             </div>
             <div className="input-group">
               <label className="input-label" htmlFor="formation_state">
@@ -242,7 +260,7 @@ export default function OnboardStep1() {
                 Industry
               </label>
               <select id="industry" className="input-control" value={step1.industry} onChange={(e) => setStep1((p) => ({ ...p, industry: e.target.value }))} required>
-                <option value="">Select…</option>
+                <option value="">Select...</option>
                 <option value="Software">Software</option>
                 <option value="Fintech">Fintech</option>
                 <option value="E-commerce">E-commerce</option>
@@ -273,10 +291,7 @@ export default function OnboardStep1() {
           </div>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginTop: 18 }}>
-          <button type="button" className="button button-secondary" onClick={() => router.push("/dashboard")}>
-            Back to Workspace
-          </button>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 18 }}>
           <button className="button" type="submit" disabled={loading}>
             {loading && <span className="spinner" aria-hidden="true" />}
             Save & Continue

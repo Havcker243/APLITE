@@ -14,27 +14,31 @@ function stepPath(step: number) {
 
 export default function OnboardIndex() {
   const router = useRouter();
-  const { token, ready } = useAuth();
+  const { token, ready, accessLevel, profileReady } = useAuth();
   const { currentStep, refreshSession } = useOnboardingWizard();
 
   useEffect(() => {
-  if (!ready || !token) return;
-
-  let cancelled = false;
-
-  (async () => {
-    const step = await refreshSession();
-    if (!cancelled) {
-      router.replace(stepPath(step ?? currentStep));
+    if (!ready) return;
+    if (!token) return;
+    if (profileReady && accessLevel !== "ONBOARDING") {
+      router.replace("/dashboard");
+      return;
     }
-  })();
+    let cancelled = false;
 
-  return () => {
-    cancelled = true;
-  };
-}, [ready, token]);
+    (async () => {
+      const step = await refreshSession();
+      if (!cancelled) {
+        router.replace(stepPath(step ?? currentStep));
+      }
+    })();
 
-  if (!ready) return <LoadingScreen />;
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, token, profileReady, accessLevel]);
+
+  if (!ready || !profileReady) return <LoadingScreen />;
   if (!token) return <LoadingScreen />;
   return <LoadingScreen label="Loading onboarding..." />;
 }

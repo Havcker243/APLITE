@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import { OnboardingShell } from "../../components/onboarding/OnboardingShell";
-import { onboardingStep4 } from "../../utils/api";
 import { useAuth } from "../../utils/auth";
 import {
   normalizeRouting,
@@ -12,8 +11,7 @@ import { LoadingScreen } from "../../components/LoadingScreen";
 export default function OnboardStep4() {
   const router = useRouter();
   const { token, ready } = useAuth();
-  const { step4, setStep4, refreshSession, currentStep } =
-    useOnboardingWizard();
+  const { step4, setStep4, completedThrough, touchStep, markStepComplete } = useOnboardingWizard();
 
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
@@ -26,17 +24,21 @@ export default function OnboardStep4() {
   }, []);
 
   useEffect(() => {
+    touchStep(4);
+  }, [touchStep]);
+
+  useEffect(() => {
     if (!mounted) return;
-    if (currentStep < 4) {
+    if (completedThrough < 3) {
       router.replace(
-        currentStep <= 1
+        completedThrough < 1
           ? "/onboard/step-1"
-          : currentStep === 2
+          : completedThrough === 1
           ? "/onboard/step-2"
           : "/onboard/step-3"
       );
     }
-  }, [mounted, ready, token , currentStep, router]);
+  }, [mounted, completedThrough, router]);
 
   if (!ready || !token || !mounted) return <LoadingScreen />;
 
@@ -47,15 +49,8 @@ export default function OnboardStep4() {
     setSaved(null);
     setError(null);
     try {
-      await onboardingStep4({
-        bank_name: step4.bank_name,
-        account_number: step4.account_number,
-        ach_routing: step4.ach_routing || undefined,
-        wire_routing: step4.wire_routing || undefined,
-        swift: step4.swift || undefined,
-      });
-      setSaved("Saved");
-      await refreshSession();
+      setSaved("Saved locally");
+      markStepComplete(4);
       router.push("/onboard/verify");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save step");

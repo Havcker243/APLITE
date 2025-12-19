@@ -1,116 +1,121 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import { OnboardingShell } from "../../components/onboarding/OnboardingShell";
-import { verifyAvailableSlots, verifyCompleteCall, verifyConfirmOtp, verifyScheduleCall, verifySendOtp } from "../../utils/api";
 import { useAuth } from "../../utils/auth";
 import { useOnboardingWizard } from "../../utils/onboardingWizard";
 import { LoadingScreen } from "../../components/LoadingScreen";
+import { onboardingComplete } from "../../utils/api";
 
 export default function OnboardVerify() {
   const router = useRouter();
   const { token, ready } = useAuth();
-  const { currentStep, session, refreshSession, verify, setVerify, step2 } = useOnboardingWizard();
+  const { step1, step2, step3, step4, completedThrough, clearDraft, touchStep, markStepComplete } = useOnboardingWizard();
 
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [slots, setSlots] = useState<string[]>([]);
   const [mounted, setMounted] = useState(false);
 
-  const riskLevel = useMemo(() => (session?.risk_level as "low" | "medium" | "high") || "low", [session]);
-  const role = useMemo(() => (session?.step_statuses?.role?.role as "owner" | "authorized_rep" | undefined) || (step2.role as any) || "", [session, step2.role]);
-  const callOnly = role === "authorized_rep" || riskLevel === "high";
-
-  useEffect(() => {
+  React.useEffect(() => {
     setMounted(true);
   }, []);
 
-  useEffect(() => {
-    if (!mounted) return;
-    if (currentStep < 5) {
-      router.replace("/onboard/step-4");
+  React.useEffect(() => {
+    touchStep(5);
+    // Guard: require local completion through Step 4.
+    if (completedThrough < 4) {
+      router.replace(
+        completedThrough < 1
+          ? "/onboard/step-1"
+          : completedThrough === 1
+          ? "/onboard/step-2"
+          : completedThrough === 2
+          ? "/onboard/step-3"
+          : "/onboard/step-4"
+      );
     }
-  }, [mounted, currentStep, router]);
+  }, [touchStep]);
 
-  useEffect(() => {
-    if (currentStep !== 5) return;
-    if (!callOnly) return;
-    void (async () => {
-      try {
-        const res = await verifyAvailableSlots();
-        setSlots(res.slots);
-      } catch {
-        // ignore slot load errors
+  const maskedAccount = useMemo(() => {
+    if (!step4.account_number) return "";
+    const last4 = step4.account_number.slice(-4);
+    return `•••• ${last4}`;
+  }, [step4.account_number]);
+
+  const verificationMethod = step2.role === "owner" ? "call" : "id";
+
+  if (!ready || !token || !mounted) return <LoadingScreen />;
+
+  async function handleSubmit() {
+    setLoading(true);
+    setSaved(null);
+    setError(null);
+    try {
+      const industry = step1.industry === "Other" ? step1.industry_other : step1.industry;
+      if (step1.industry === "Other" && !step1.industry_other.trim()) {
+        throw new Error("Industry is required. Select an industry or specify Other.");
       }
-    })();
-  }, [currentStep, callOnly]);
+      if (!step2.role) throw new Error("Select your role on Step 2.");
+      if (!step3.attestation) throw new Error("Attestation required on Step 3.");
+      if (!step4.bank_name || !step4.account_number) throw new Error("Bank details are required on Step 4.");
 
-  if (!ready || !token || !session || !mounted) return <LoadingScreen />;
+      const file = step3.file || null;
+      const payload = {
+        org: {
+          legal_name: step1.legal_name,
+          dba: step1.dba || undefined,
+          ein: step1.ein,
+          formation_date: step1.formation_date,
+          formation_state: step1.formation_state,
+          entity_type: step1.entity_type,
+          address: {
+            street1: step1.street1,
+            street2: step1.street2 || undefined,
+            city: step1.city,
+            state: step1.state,
+            zip: step1.zip,
+            country: step1.country,
+          },
+          industry,
+          website: step1.website || undefined,
+          description: step1.description || undefined,
+        },
+        role: {
+          role: step2.role as "owner" | "authorized_rep",
+          title: step2.title || undefined,
+        },
+        identity: {
+          full_name: step3.full_name,
+          title: step3.title || undefined,
+          id_document_id: step3.file_id || undefined,
+          attestation: step3.attestation,
+        },
+        bank: {
+          bank_name: step4.bank_name,
+          account_number: step4.account_number,
+          ach_routing: step4.ach_routing || undefined,
+          wire_routing: step4.wire_routing || undefined,
+          swift: step4.swift || undefined,
+        },
+        verification_method: verificationMethod,
+        verification_code: undefined, // TODO: once real verification is wired, send OTP/call metadata here.
+        file,
+      };
 
-  async function handleSendOtp() {
-    setLoading(true);
-    setSaved(null);
-    setError(null);
-    try {
-      await verifySendOtp(verify.otpMethod);
-      setSaved("Code sent");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to send OTP");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleConfirmOtp() {
-    setLoading(true);
-    setSaved(null);
-    setError(null);
-    try {
-      const res = await verifyConfirmOtp(verify.otpCode.trim());
+      const res = await onboardingComplete(payload);
+      markStepComplete(5);
+      clearDraft();
       setSaved(`Verified. Issued UPI: ${res.upi}`);
-      await refreshSession();
       router.push("/dashboard");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to confirm OTP");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleScheduleCall() {
-    setLoading(true);
-    setSaved(null);
-    setError(null);
-    try {
-      if (!verify.selectedSlot) throw new Error("Select a time slot to schedule the call.");
-      await verifyScheduleCall(verify.selectedSlot);
-      setSaved("Call scheduled");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to schedule call");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleCompleteCall() {
-    if (!session?.session_id) return;
-    setLoading(true);
-    setSaved(null);
-    setError(null);
-    try {
-      const res = await verifyCompleteCall(session.session_id);
-      setSaved(`Verified. Issued UPI: ${res.upi}`);
-      await refreshSession();
-      router.push("/dashboard");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to complete call verification");
+      setError(err instanceof Error ? err.message : "Unable to complete onboarding");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <OnboardingShell title="Stage 5" subtitle="Confirm verification to complete onboarding." activeStep={5}>
+    <OnboardingShell title="Stage 5" subtitle="Review and submit to complete onboarding." activeStep={5}>
       {saved && (
         <div className="status-pill" role="status" aria-live="polite">
           {saved}
@@ -123,75 +128,143 @@ export default function OnboardVerify() {
       )}
 
       <div className="card form-card">
-        <h2 style={{ marginTop: 0 }}>Verify</h2>
-        {!callOnly && <p className="hero-subtitle">We’ll send a verification code to confirm you control this account.</p>}
+        <h2 style={{ marginTop: 0 }}>Review</h2>
+        <p className="hero-subtitle">Confirm your details, then submit to issue your UPI.</p>
 
-        {!callOnly && (
-          <div className="form-grid" style={{ gridTemplateColumns: "1fr", marginTop: 14 }}>
+        <div className="form-section">
+          <p className="section-title">Business identity</p>
+          <div className="form-grid" style={{ gridTemplateColumns: "1fr", marginTop: 10 }}>
             <div className="input-group">
-              <label className="input-label" htmlFor="method">
-                Delivery method
-              </label>
-              <select id="method" className="input-control" value={verify.otpMethod} onChange={(e) => setVerify((p) => ({ ...p, otpMethod: e.target.value as any }))}>
-                <option value="email">Email</option>
-                <option value="sms">SMS (dev)</option>
-              </select>
+              <label className="input-label">Legal name</label>
+              <div className="hero-subtitle">{step1.legal_name || "-"}</div>
             </div>
+            {step1.dba && (
+              <div className="input-group">
+                <label className="input-label">DBA</label>
+                <div className="hero-subtitle">{step1.dba}</div>
+              </div>
+            )}
+            <div className="input-group">
+              <label className="input-label">EIN</label>
+              <div className="hero-subtitle">{step1.ein || "-"}</div>
+            </div>
+            <div className="input-group">
+              <label className="input-label">Entity</label>
+              <div className="hero-subtitle">
+                {step1.entity_type || "-"} · {step1.formation_state || "-"} · {step1.formation_date || "-"}
+              </div>
+            </div>
+            <div className="input-group">
+              <label className="input-label">Address</label>
+              <div className="hero-subtitle">
+                {[step1.street1, step1.street2, step1.city, step1.state, step1.zip, step1.country].filter(Boolean).join(", ")}
+              </div>
+            </div>
+            <div className="input-group">
+              <label className="input-label">Industry</label>
+              <div className="hero-subtitle">
+                {step1.industry === "Other" ? step1.industry_other || "Other" : step1.industry || "-"}
+              </div>
+            </div>
+            {step1.website && (
+              <div className="input-group">
+                <label className="input-label">Website</label>
+                <div className="hero-subtitle">{step1.website}</div>
+              </div>
+            )}
+            {step1.description && (
+              <div className="input-group">
+                <label className="input-label">Description</label>
+                <div className="hero-subtitle">{step1.description}</div>
+              </div>
+            )}
+          </div>
+        </div>
 
-            <div style={{ display: "flex", gap: 10 }}>
-              <button type="button" className="button button-secondary" onClick={handleSendOtp} disabled={loading}>
-                {loading && <span className="spinner" aria-hidden="true" />}
-                Send Code
-              </button>
-              <input
-                className="input-control mono"
-                placeholder="6-digit code"
-                value={verify.otpCode}
-                onChange={(e) => setVerify((p) => ({ ...p, otpCode: e.target.value }))}
-                maxLength={6}
-                inputMode="numeric"
-              />
-              <button type="button" className="button" onClick={handleConfirmOtp} disabled={loading}>
-                {loading && <span className="spinner" aria-hidden="true" />}
-                Confirm
-              </button>
+        <div className="form-section" style={{ marginTop: 16 }}>
+          <p className="section-title">Authorization & Identity</p>
+          <div className="form-grid" style={{ gridTemplateColumns: "1fr", marginTop: 10 }}>
+            <div className="input-group">
+              <label className="input-label">Role</label>
+              <div className="hero-subtitle">
+                {step2.role || "-"} {step2.title ? `· ${step2.title}` : ""}
+              </div>
+            </div>
+            <div className="input-group">
+              <label className="input-label">Full name</label>
+              <div className="hero-subtitle">{step3.full_name || "-"}</div>
+            </div>
+            <div className="input-group">
+              <label className="input-label">Title</label>
+              <div className="hero-subtitle">{step3.title || "-"}</div>
+            </div>
+            {verificationMethod !== "call" && (
+              <div className="input-group">
+                <label className="input-label">ID document</label>
+                <div className="hero-subtitle">
+                  {step3.file_id ? `Uploaded (${step3.file_id})` : step3.file ? step3.file.name : "Not provided"}
+                </div>
+              </div>
+            )}
+            <div className="input-group">
+              <label className="input-label">Attestation</label>
+              <div className="hero-subtitle">{step3.attestation ? "Yes" : "No"}</div>
             </div>
           </div>
-        )}
+        </div>
 
-        {callOnly && (
-          <div className="form-grid" style={{ gridTemplateColumns: "1fr", marginTop: 14 }}>
-            <p className="hero-subtitle">High-authority representatives must complete a verification call.</p>
+        <div className="form-section" style={{ marginTop: 16 }}>
+          <p className="section-title">Verification path</p>
+          <div className="form-grid" style={{ gridTemplateColumns: "1fr", marginTop: 10 }}>
             <div className="input-group">
-              <label className="input-label" htmlFor="slot">
-                Select a slot
-              </label>
-              <select id="slot" className="input-control" value={verify.selectedSlot} onChange={(e) => setVerify((p) => ({ ...p, selectedSlot: e.target.value }))}>
-                <option value="">Select a slot…</option>
-                {slots.map((slot) => (
-                  <option key={slot} value={slot}>
-                    {mounted ? new Date(slot).toLocaleString() : slot}
-                  </option>
-                ))}
-              </select>
-              <button type="button" className="button button-secondary" style={{ marginTop: 10 }} onClick={handleScheduleCall} disabled={loading}>
-                {loading && <span className="spinner" aria-hidden="true" />}
-                Schedule Call
-              </button>
-              <button type="button" className="button" style={{ marginTop: 10 }} onClick={handleCompleteCall} disabled={loading || !session?.session_id}>
-                {loading && <span className="spinner" aria-hidden="true" />}
-                Mark Call Completed (dev)
-              </button>
+              <label className="input-label">Method</label>
+              <div className="hero-subtitle">
+                {verificationMethod === "call"
+                  ? "Owner call verification (scheduling to be added)."
+                  : "Document verification (ID uploaded)."}
+              </div>
+              {verificationMethod === "call" && (
+                <p className="hero-subtitle" style={{ marginTop: 6 }}>
+                  TODO: Integrate Zoom/Calendly scheduling and gate final verification on call completion.
+                </p>
+              )}
             </div>
           </div>
-        )}
+        </div>
+
+        <div className="form-section" style={{ marginTop: 16 }}>
+          <p className="section-title">Bank details</p>
+          <div className="form-grid" style={{ gridTemplateColumns: "1fr", marginTop: 10 }}>
+            <div className="input-group">
+              <label className="input-label">Bank name</label>
+              <div className="hero-subtitle">{step4.bank_name || "-"}</div>
+            </div>
+            <div className="input-group">
+              <label className="input-label">Account number</label>
+              <div className="hero-subtitle">{maskedAccount || "-"}</div>
+            </div>
+            <div className="input-group">
+              <label className="input-label">ACH routing</label>
+              <div className="hero-subtitle">{step4.ach_routing || "-"}</div>
+            </div>
+            <div className="input-group">
+              <label className="input-label">Wire routing</label>
+              <div className="hero-subtitle">{step4.wire_routing || "-"}</div>
+            </div>
+            <div className="input-group">
+              <label className="input-label">SWIFT/BIC</label>
+              <div className="hero-subtitle">{step4.swift || "-"}</div>
+            </div>
+          </div>
+        </div>
 
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginTop: 18 }}>
           <button type="button" className="button button-secondary" onClick={() => router.push("/onboard/step-4")}>
             Back
           </button>
-          <button type="button" className="button" onClick={() => router.push("/dashboard")}>
-            Skip for now
+          <button type="button" className="button" onClick={handleSubmit} disabled={loading}>
+            {loading && <span className="spinner" aria-hidden="true" />}
+            Submit & Finish
           </button>
         </div>
       </div>

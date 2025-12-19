@@ -35,6 +35,20 @@ export function OnboardingShell({
         </div>
       </section>
 
+      <div
+        style={{
+          marginBottom: 12,
+          padding: 12,
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 12,
+          background: "rgba(255,255,255,0.02)",
+          color: "var(--text-secondary, #B8BCC6)",
+          fontSize: "0.95rem",
+        }}
+      >
+        Onboarding must be completed in one session. If you leave or log out before finishing, you will restart from Step 1 next time.
+      </div>
+
       <OnboardingStepper
         currentStep={activeStep}
         completedThrough={completedThrough}

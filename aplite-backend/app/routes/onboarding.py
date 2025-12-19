@@ -1,30 +1,28 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date
 import os
+import logging
 import re
 import uuid
+import json
+from psycopg2.errors import UniqueViolation
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
-from fastapi import Request
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status, Form
+from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field, field_validator
 
 from app.db import queries
 from app.routes.auth import get_current_user
-from app.utils.email import send_email
-from app.utils.ratelimit import RateLimit, check_rate_limit
+from app.utils.upi import generate_core_entity_id, generate_upi
 
 router = APIRouter()
+logger = logging.getLogger("aplite")
 
 EIN_RE = re.compile(r"^\d{2}-\d{7}$")
 DOMAIN_RE = re.compile(
     r"^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))+$"
 )
-
-MAX_OTP_ATTEMPTS = 5
-MAX_OTP_RESENDS = 3
-OTP_TTL_MINUTES = 10
-
 
 class Address(BaseModel):
     street1: str = Field(min_length=1, max_length=120)
@@ -84,12 +82,6 @@ class Step1Payload(BaseModel):
         if not DOMAIN_RE.match(value):
             raise ValueError("Website must be a valid domain (e.g. example.com).")
         return value
-
-
-class Step1Response(BaseModel):
-    org_id: str
-    session_id: str
-    next_step: int = 2
 
 
 class Step2Payload(BaseModel):
@@ -184,6 +176,16 @@ class CurrentOnboardingResponse(BaseModel):
     org: dict
 
 
+class CompletePayload(BaseModel):
+    org: Step1Payload
+    role: Step2Payload
+    identity: Step3Payload
+    bank: Step4Payload
+    verification_method: str | None = Field(default=None, pattern=r"^(call|id|otp|none)?$")
+    verification_code: str | None = Field(default=None, min_length=6, max_length=6)
+    id_document_id: str | None = None
+
+
 @router.get("/onboarding/current", response_model=CurrentOnboardingResponse)
 def onboarding_current(user=Depends(get_current_user)):
     session = queries.get_active_onboarding_session(user["id"])
@@ -202,83 +204,15 @@ def onboarding_current(user=Depends(get_current_user)):
     }
 
 
-@router.post("/onboarding/step-1", response_model=Step1Response)
-def onboarding_step1(payload: Step1Payload, user=Depends(get_current_user)):
-    active = queries.get_active_onboarding_session(user["id"])
-    if active and int(active.get("current_step", 1)) > 1:
-        # Step 1 already completed; return existing session to let the UI continue.
-        return {
-            "org_id": str(active["org_id"]),
-            "session_id": str(active["id"]),
-            "next_step": int(active.get("current_step", 2)),
-        }
+@router.post("/onboarding/reset")
+def onboarding_reset(user=Depends(get_current_user)):
+    """
+    Delete any in-progress (non-verified) onboarding session for the user.
 
-    org_id = uuid.uuid4()
-    session_id = uuid.uuid4()
-
-    if active:
-        org_id = uuid.UUID(str(active["org_id"]))
-        session_id = uuid.UUID(str(active["id"]))
-        queries.update_organization_step1(
-            org_id=org_id,
-            user_id=user["id"],
-            legal_name=payload.legal_name.strip(),
-            dba=(payload.dba or "").strip() or None,
-            ein=payload.ein,
-            formation_date=payload.formation_date,
-            formation_state=payload.formation_state.strip(),
-            entity_type=payload.entity_type.strip(),
-            address=payload.address.model_dump(),
-            industry=payload.industry.strip(),
-            website=payload.website,
-            description=(payload.description or "").strip() or None,
-        )
-        queries.touch_onboarding_session(session_id)
-    else:
-        queries.create_organization_step1(
-            org_id=org_id,
-            user_id=user["id"],
-            legal_name=payload.legal_name.strip(),
-            dba=(payload.dba or "").strip() or None,
-            ein=payload.ein,
-            formation_date=payload.formation_date,
-            formation_state=payload.formation_state.strip(),
-            entity_type=payload.entity_type.strip(),
-            address=payload.address.model_dump(),
-            industry=payload.industry.strip(),
-            website=payload.website,
-            description=(payload.description or "").strip() or None,
-        )
-        queries.create_onboarding_session(
-            session_id=session_id,
-            org_id=org_id,
-            user_id=user["id"],
-            state="STEP_1_COMPLETE",
-            current_step=2,
-            address_locked=True,
-        )
-
-    return {"org_id": str(org_id), "session_id": str(session_id), "next_step": 2}
-
-
-@router.post("/onboarding/step-2")
-def onboarding_step2(payload: Step2Payload, user=Depends(get_current_user)):
-    session = queries.get_active_onboarding_session(user["id"])
-    if not session:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Start onboarding first.")
-    if int(session.get("current_step", 1)) != 2:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="You cannot complete this step yet.")
-
-    risk_level = "low" if payload.role == "owner" else "high"
-    queries.update_onboarding_role(
-        session_id=uuid.UUID(str(session["id"])),
-        user_id=user["id"],
-        role=payload.role,
-        title=payload.title,
-        risk_level=risk_level,
-    )
-    queries.advance_onboarding_session(uuid.UUID(str(session["id"])), state="STEP_2_COMPLETE", next_step=3)
-    return {"next_step": 3, "risk_level": risk_level}
+    Used to force a clean restart when the user returns to onboarding.
+    """
+    queries.reset_active_onboarding(user["id"])
+    return {"detail": "reset"}
 
 
 @router.post("/onboarding/upload-id")
@@ -327,233 +261,198 @@ async def onboarding_upload_id(file: UploadFile = File(...), user=Depends(get_cu
     return {"file_id": file_id}
 
 
-# Step 3: owners must upload ID; authorized reps can take the call-based path (no ID upload).
-@router.post("/onboarding/step-3")
-def onboarding_step3(payload: Step3Payload, user=Depends(get_current_user)):
-    if not payload.attestation:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You must attest to continue.")
+def _store_uploaded_file(file: UploadFile, user_id: int) -> str:
+    if not file.filename:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing file.")
+    content_type = (file.content_type or "").lower()
+    if content_type not in ("image/jpeg", "image/png", "application/pdf"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported file type. Use jpg, png, or pdf.")
 
-    session = queries.get_active_onboarding_session(user["id"])
-    if not session:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Start onboarding first.")
-    if int(session.get("current_step", 1)) != 3:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="You cannot complete this step yet.")
+    file_id = f"id_{uuid.uuid4().hex}"
+    max_bytes = 10 * 1024 * 1024
+    base = queries.onboarding_upload_base_dir()
+    os.makedirs(base, exist_ok=True)
+    bin_path = os.path.abspath(os.path.join(base, f"{file_id}.bin"))
+    tmp_path = os.path.abspath(os.path.join(base, f"{file_id}.bin.tmp"))
+    if not bin_path.startswith(base + os.sep) or not tmp_path.startswith(base + os.sep):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid upload id")
 
-    role_info = (session.get("step_statuses") or {}).get("role") or {}
-    role = role_info.get("role")
-    require_document = role != "authorized_rep"
-
-    if require_document:
-        if not payload.id_document_id:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Upload a government ID document.")
-        if not queries.onboarding_file_exists(file_id=payload.id_document_id, user_id=user["id"]):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid document reference. Please re-upload.")
-        doc_ref = payload.id_document_id
-    else:
-        # For authorized reps, allow call-based verification and skip document upload.
-        doc_ref = payload.id_document_id or "call_verification"
-
-    verification_id = uuid.uuid4()
-    queries.create_identity_verification(
-        verification_id=verification_id,
-        session_id=uuid.UUID(str(session["id"])),
-        org_id=uuid.UUID(str(session["org_id"])),
-        user_id=user["id"],
-        full_name=payload.full_name.strip(),
-        title=(payload.title or "").strip() or None,
-        id_document_id=doc_ref,
-        attestation=payload.attestation,
-        status="pending",
-    )
-
-    # MVP: mark as pending verification, then allow user to proceed.
-    queries.advance_onboarding_session(uuid.UUID(str(session["id"])), state="STEP_3_VERIFICATION_PENDING", next_step=4)
-    return {"next_step": 4, "status": "pending_verification"}
+    written = 0
+    try:
+        with open(tmp_path, "wb") as out:
+            while True:
+                chunk = file.file.read(1024 * 1024)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > max_bytes:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File too large (max 10MB).")
+                out.write(chunk)
+        os.replace(tmp_path, bin_path)
+        queries.store_onboarding_file_metadata(
+            file_id=file_id,
+            filename=file.filename,
+            content_type=content_type,
+            user_id=user_id,
+        )
+    finally:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
+    return file_id
 
 
-@router.post("/onboarding/step-4")
-def onboarding_step4(payload: Step4Payload, user=Depends(get_current_user)):
-    session = queries.get_active_onboarding_session(user["id"])
-    if not session:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Start onboarding first.")
-    if int(session.get("current_step", 1)) != 4:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="You cannot complete this step yet.")
+@router.post("/onboarding/complete")
+def onboarding_complete(
+    data: str = Form(..., description="JSON string for CompletePayload"),
+    file: UploadFile | None = File(default=None),
+    user=Depends(get_current_user),
+):
+    """
+    Single-submit onboarding: accept all steps and complete verification in one go.
 
-    if not (payload.ach_routing or payload.wire_routing or payload.swift):
+    Accepts multipart/form-data with:
+      - data: JSON string matching CompletePayload
+      - file: optional UploadFile for ID document
+    """
+    try:
+        payload_raw = json.loads(data)
+        payload = CompletePayload(**payload_raw)
+    except Exception as exc:
+        # Surface validation errors; return a simple string to avoid serialization issues.
+        logger.exception("Invalid onboarding payload: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Provide at least one rail (ACH routing, wire routing, or SWIFT).",
-        )
+            detail=str(exc) or "Invalid onboarding payload",
+        ) from exc
 
-    rail = "ACH" if payload.ach_routing else ("WIRE_DOM" if payload.wire_routing else "SWIFT")
-    last4 = payload.account_number[-4:]
+    # Handle ID document (uploaded file takes precedence).
+    file_id = payload.identity.id_document_id or payload.id_document_id
+    if file is not None:
+        file_id = _store_uploaded_file(file, user_id=user["id"])
 
-    org = queries.get_organization(str(session["org_id"]), user["id"])
-    if not org:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found.")
+    # Basic role/risk determination and verification method
+    risk_level = "low" if payload.role.role == "owner" else "high"
+    # Default verification path: owners go through a call; reps provide ID.
+    verification_method = payload.verification_method or ("call" if payload.role.role == "owner" else "id")
+
+    org_id = uuid.uuid4()
+    session_id = uuid.uuid4()
+    verification_status = "verified"
+    if verification_method == "call":
+        # TODO: once call scheduling is integrated, keep status pending until call completion.
+        verification_status = "pending_call"
 
     try:
-        payment_account_id = queries.create_payment_account(
+        # Step 1: organization
+        queries.create_organization_step1(
+            org_id=org_id,
             user_id=user["id"],
-            org_id=str(session["org_id"]),
-            rail=rail,
-            bank_name=payload.bank_name.strip(),
-            account_name=org.get("legal_name") or "Account",
-            ach_routing=payload.ach_routing if rail == "ACH" else None,
-            ach_account=payload.account_number if rail == "ACH" else None,
-            wire_routing=payload.wire_routing if rail == "WIRE_DOM" else None,
-            wire_account=payload.account_number if rail == "WIRE_DOM" else None,
-            bank_address=None,
-            swift_bic=payload.swift if rail == "SWIFT" else None,
-            iban=payload.account_number if rail == "SWIFT" else None,
-            bank_country=None,
-            bank_city=None,
+            legal_name=payload.org.legal_name.strip(),
+            dba=(payload.org.dba or "").strip() or None,
+            ein=payload.org.ein,
+            formation_date=payload.org.formation_date,
+            formation_state=payload.org.formation_state.strip(),
+            entity_type=payload.org.entity_type.strip(),
+            address=payload.org.address.model_dump(),
+            industry=payload.org.industry.strip(),
+            website=payload.org.website,
+            description=(payload.org.description or "").strip() or None,
+        )
+
+        # Step 2: role
+        queries.create_onboarding_session(
+            session_id=session_id,
+            org_id=org_id,
+            user_id=user["id"],
+            state="STEP_2_COMPLETE",
+            current_step=3,
+            address_locked=True,
+        )
+        queries.update_onboarding_role(
+            session_id=session_id,
+            user_id=user["id"],
+            role=payload.role.role,
+            title=payload.role.title,
+            risk_level=risk_level,
+        )
+
+        # Step 3: identity
+        require_document = verification_method != "call"
+        if require_document and not file_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Upload a government ID document.")
+        if file_id:
+            if not queries.onboarding_file_exists(file_id=file_id, user_id=user["id"]):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid document reference. Please re-upload.")
+        verification_id = uuid.uuid4()
+        queries.create_identity_verification(
+            verification_id=verification_id,
+            session_id=session_id,
+            org_id=org_id,
+            user_id=user["id"],
+            full_name=payload.identity.full_name.strip(),
+            title=(payload.identity.title or "").strip() or None,
+            id_document_id=file_id or "call_verification",
+            attestation=payload.identity.attestation,
             status="pending",
         )
-    except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to save bank details") from exc
 
-    queries.set_onboarding_payment_account(uuid.UUID(str(session["id"])), payment_account_id)
-    queries.advance_onboarding_session(uuid.UUID(str(session["id"])), state="STEP_4_COMPLETE", next_step=5)
-    return {"next_step": 5, "bank_name": payload.bank_name.strip(), "account_last4": last4}
-
-
-class SendOtpPayload(BaseModel):
-    method: str = Field(..., pattern=r"^(email|sms)$")
-
-
-@router.post("/verify/send-otp")
-def send_verification_otp(payload: SendOtpPayload, background_tasks: BackgroundTasks, request: Request, user=Depends(get_current_user)):
-    session = queries.get_active_onboarding_session(user["id"])
-    if not session:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Start onboarding first.")
-    if int(session.get("current_step", 1)) < 5:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Complete onboarding steps before verification.")
-
-    role_info = (session.get("step_statuses") or {}).get("role") or {}
-    role = role_info.get("role")
-    if role == "authorized_rep" or str(session.get("risk_level", "")).lower() == "high":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="High-risk verification requires a scheduled call.")
-
-    ip = (request.client.host if request.client else "unknown").strip()
-    user_rule = RateLimit(limit=int(os.getenv("RL_VERIFY_OTP_USER_LIMIT", "5")), window_seconds=int(os.getenv("RL_VERIFY_OTP_USER_WINDOW_SECONDS", "600")))
-    ip_rule = RateLimit(limit=int(os.getenv("RL_VERIFY_OTP_IP_LIMIT", "30")), window_seconds=int(os.getenv("RL_VERIFY_OTP_IP_WINDOW_SECONDS", "600")))
-    ok, retry = check_rate_limit(f"verify_send_otp:user:{int(user['id'])}", user_rule)
-    if not ok:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many OTP requests. Try again soon.", headers={"Retry-After": str(retry)})
-    ok, retry = check_rate_limit(f"verify_send_otp:ip:{ip}", ip_rule)
-    if not ok:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many OTP requests. Try again soon.", headers={"Retry-After": str(retry)})
-
-    existing = queries.get_latest_verification_attempt(user["id"], uuid.UUID(str(session["id"])))
-    destination = user["email"] if payload.method == "email" else None
-
-    otp_id, code = queries.create_verification_otp(user_id=user["id"], ttl=timedelta(minutes=OTP_TTL_MINUTES))
-
-    if existing and existing.get("method") == payload.method and existing.get("status") == "sent":
-        if int(existing.get("resend_count", 0)) >= MAX_OTP_RESENDS:
-            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Resend limit reached. Try again later.")
-        queries.bump_verification_resend(uuid.UUID(str(existing["id"])))
-        queries.update_verification_attempt_otp(uuid.UUID(str(existing["id"])), otp_id=otp_id)
-    else:
-        attempt_id = uuid.uuid4()
-        queries.create_verification_attempt(
-            attempt_id=attempt_id,
-            session_id=uuid.UUID(str(session["id"])),
-            org_id=uuid.UUID(str(session["org_id"])),
+        # Step 4: bank account
+        if not (payload.bank.ach_routing or payload.bank.wire_routing or payload.bank.swift):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Provide at least one rail (ACH routing, wire routing, or SWIFT).",
+            )
+        rail = "ACH" if payload.bank.ach_routing else ("WIRE_DOM" if payload.bank.wire_routing else "SWIFT")
+        payment_account_id = queries.create_payment_account(
             user_id=user["id"],
-            method=payload.method,
-            destination=destination,
-            otp_id=otp_id,
+            org_id=str(org_id),
+            rail=rail,
+            bank_name=payload.bank.bank_name.strip(),
+            account_name=payload.org.legal_name.strip(),
+            ach_routing=payload.bank.ach_routing if rail == "ACH" else None,
+            ach_account=payload.bank.account_number if rail == "ACH" else None,
+            wire_routing=payload.bank.wire_routing if rail == "WIRE_DOM" else None,
+            wire_account=payload.bank.account_number if rail == "WIRE_DOM" else None,
+            bank_address=None,
+            swift_bic=payload.bank.swift if rail == "SWIFT" else None,
+            iban=payload.bank.account_number if rail == "SWIFT" else None,
+            bank_country=None,
+            bank_city=None,
+            status="active",
         )
 
-    if payload.method == "email":
-        # Avoid blocking the request on network I/O to the email provider.
-        background_tasks.add_task(
-            send_email,
-            to_address=user["email"],
-            subject="Your Aplite verification code",
-            body=f"Your verification code is {code}. It expires in 10 minutes.",
-        )
-    else:
-        # MVP: SMS not integrated; log to stdout via the backend logger.
-        queries.send_verification_message_sms(code=code)
+        # Issue UPI immediately (no gating in this flow).
+        core_id = generate_core_entity_id()
+        parent_upi = user.get("master_upi") or ""
+        if not parent_upi:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Missing master UPI for user.")
+        upi = generate_upi(core_id, payment_index=1, user_id=user["id"])
+        queries.set_organization_upi(str(org_id), upi, payment_account_id, verification_status="verified", status="active")
 
-    return {"detail": "OTP sent", "expires_in_minutes": OTP_TTL_MINUTES}
+        # NOTE: We still advance to VERIFIED for now to keep the flow unblocked; call/doc gating can change this later.
+        queries.advance_onboarding_session(session_id=session_id, state="VERIFIED", next_step=5)
+        queries.set_onboarding_payment_account(session_id=session_id, payment_account_id=payment_account_id)
 
+    except HTTPException:
+        raise
+    except RuntimeError as exc:
+        # Surface runtime issues (e.g., missing UPI secret) for easier debugging.
+        logger.exception("Onboarding completion failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc) or "Unable to complete onboarding",
+        ) from exc
+    except Exception as exc:
+        logger.exception("Onboarding completion failed")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to complete onboarding") from exc
 
-class ConfirmOtpPayload(BaseModel):
-    code: str = Field(min_length=6, max_length=6)
-
-
-@router.post("/verify/confirm-otp")
-def confirm_verification_otp(payload: ConfirmOtpPayload, user=Depends(get_current_user)):
-    session = queries.get_active_onboarding_session(user["id"])
-    if not session:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Start onboarding first.")
-    role_info = (session.get("step_statuses") or {}).get("role") or {}
-    role = role_info.get("role")
-    if role == "authorized_rep" or str(session.get("risk_level", "")).lower() == "high":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="High-risk verification requires a scheduled call.")
-    attempt = queries.get_latest_verification_attempt(user["id"], uuid.UUID(str(session["id"])))
-    if not attempt or attempt.get("status") != "sent":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No pending OTP verification.")
-
-    if int(attempt.get("attempts", 0)) >= MAX_OTP_ATTEMPTS:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Attempt limit reached. Request a new code.")
-
-    ok = queries.verify_otp(otp_id=attempt["otp_id"], code=payload.code)
-    queries.bump_verification_attempt(uuid.UUID(str(attempt["id"])))
-    if not ok:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired code. Check and try again.")
-
-    queries.mark_verification_attempt_verified(uuid.UUID(str(attempt["id"])))
-    upi = queries.complete_onboarding_and_issue_identifier(uuid.UUID(str(session["id"])))
-    return {"status": "VERIFIED", "upi": upi}
-
-
-@router.get("/verify/available-slots")
-def available_slots(user=Depends(get_current_user)):
-    # MVP: deterministic slots (next 3 business days, 4 slots/day).
-    now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
-    slots: list[str] = []
-    for day_offset in range(1, 6):
-        start = now + timedelta(days=day_offset)
-        for hour in (14, 15, 16, 17):
-            slots.append(start.replace(hour=hour).isoformat())
-    return {"slots": slots}
-
-
-class ScheduleCallPayload(BaseModel):
-    scheduled_at: datetime
-
-
-@router.post("/verify/schedule-call")
-def schedule_call(payload: ScheduleCallPayload, user=Depends(get_current_user)):
-    session = queries.get_active_onboarding_session(user["id"])
-    if not session:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Start onboarding first.")
-
-    call_id = uuid.uuid4()
-    queries.create_verification_call(
-        call_id=call_id,
-        session_id=uuid.UUID(str(session["id"])),
-        org_id=uuid.UUID(str(session["org_id"])),
-        user_id=user["id"],
-        scheduled_at=payload.scheduled_at,
-    )
-    return {"detail": "Call scheduled", "call_id": str(call_id)}
-
-
-@router.post("/verify/complete-call")
-def complete_call(session_id: str, user=Depends(get_current_user)):
-    # MVP/internal: allow the logged-in user to complete call verification in dev.
-    try:
-        sid = uuid.UUID(session_id)
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid session_id.")
-    session = queries.get_onboarding_session_by_id(sid)
-    if not session or int(session.get("user_id", -1)) != int(user["id"]):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.")
-    upi = queries.complete_onboarding_and_issue_identifier(sid)
-    return {"status": "VERIFIED", "upi": upi}
+    return {
+        "status": "PENDING_CALL" if verification_method == "call" else "VERIFIED",
+        "org_id": str(org_id),
+        "session_id": str(session_id),
+        "upi": upi,
+        "payment_account_id": payment_account_id,
+    }

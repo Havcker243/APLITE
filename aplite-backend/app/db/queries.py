@@ -280,14 +280,13 @@ def create_payment_account(*, conn: psycopg2.extensions.connection | None = None
             cur.execute(
                 """
                 insert into payment_accounts
-                (org_id, user_id, business_id, payment_index, rail, bank_name, account_name, enc, status, created_at)
-                values (%s,%s,%s,%s,%s,%s,%s,%s,%s, now())
+                (org_id, user_id, payment_index, rail, bank_name, account_name, enc, status, created_at)
+                values (%s,%s,%s,%s,%s,%s,%s,%s, now())
                 returning id
                 """,
                 (
                     payload["org_id"],
                     payload["user_id"],
-                    payload.get("business_id"),
                     payload["payment_index"],
                     payload["rail"],
                     payload["bank_name"],
@@ -732,6 +731,39 @@ def get_active_onboarding_session(user_id: int) -> Optional[OnboardingSessionRec
                 (user_id,),
             )
             return cur.fetchone()
+
+
+def reset_active_onboarding(user_id: int) -> bool:
+    """
+    Delete any in-progress onboarding session (and its org) for the user.
+
+    Used to ensure a clean restart when a user begins onboarding again.
+    """
+    if not _table_exists("onboarding_sessions"):
+        return False
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select * from onboarding_sessions
+                where user_id = %s and completed_at is null
+                order by last_saved_at desc
+                limit 1
+                """,
+                (user_id,),
+            )
+            session = cur.fetchone()
+            if not session:
+                return False
+            if str(session.get("state")) == "VERIFIED":
+                return False
+            org_id = session.get("org_id")
+
+            cur.execute("delete from onboarding_sessions where id = %s", (str(session["id"]),))
+            if org_id:
+                cur.execute("delete from organizations where id = %s and user_id = %s", (str(org_id), user_id))
+            conn.commit()
+            return True
 
 
 def get_latest_onboarding_session(user_id: int) -> Optional[OnboardingSessionRecord]:

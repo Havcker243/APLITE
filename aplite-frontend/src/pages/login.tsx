@@ -64,7 +64,12 @@ export default function LoginPage() {
     try {
       const response = await loginVerify({ login_id: loginId, code: otp.trim() });
       setAuth(response);
-      const next = typeof router.query.next === "string" ? router.query.next : response.needs_onboarding ? "/onboard" : "/dashboard";
+      const next =
+        typeof router.query.next === "string"
+          ? router.query.next
+          : response.needs_onboarding
+          ? "/onboard"
+          : "/dashboard";
       router.push(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to verify code");
