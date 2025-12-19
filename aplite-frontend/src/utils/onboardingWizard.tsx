@@ -138,16 +138,24 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   }, [completedThrough]);
 
   async function refreshSession() {
-    if (!ready || !token) return;
+    if (!ready || !token) return 1;
     try {
       const current = await onboardingCurrent();
       setSession(current);
       const serverStep = Math.min(Math.max(Number(current.current_step || 1), 1), 5) as OnboardingStep;
       setCurrentStep(serverStep);
       setCompletedThrough((prev) => Math.max(prev, serverStep - 1));
+      const roleInfo = current.step_statuses?.role || {};
+      if (roleInfo.role && (!step2.role || step2.role !== roleInfo.role)) {
+        setStep2((prev) => ({ ...prev, role: roleInfo.role, title: roleInfo.title || "" }));
+      }
+      return serverStep;
     } catch {
+      // If no active session, reset progress so stale local storage doesn't mis-route.
       setSession(null);
       setCurrentStep(1);
+      setCompletedThrough(0);
+      return 1;
     }
   }
 
@@ -184,4 +192,3 @@ export function useOnboardingWizard() {
   if (!ctx) throw new Error("useOnboardingWizard must be used within OnboardingProvider");
   return ctx;
 }
-

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import { OnboardingShell } from "../../components/onboarding/OnboardingShell";
 import { onboardingStep2 } from "../../utils/api";
@@ -9,17 +9,27 @@ import { LoadingScreen } from "../../components/LoadingScreen";
 export default function OnboardStep2() {
   const router = useRouter();
   const { token, ready } = useAuth();
-  const { step2, setStep2, refreshSession, currentStep } = useOnboardingWizard();
+  const { step2, setStep2, refreshSession, currentStep } =
+    useOnboardingWizard();
 
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
 
-  if (!ready || !token) return <LoadingScreen />;
-  if (currentStep < 2) {
-    router.replace("/onboard/step-1");
-    return null;
-  }
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  
+  useEffect(() => {
+    if (!mounted || !ready || !token) return;
+    if (currentStep < 2) {
+      router.replace("/onboard/step-1");
+    }
+  }, [mounted, ready, token, currentStep, router]);
+
+  if (!ready || !token || !mounted) return <LoadingScreen />;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -28,7 +38,10 @@ export default function OnboardStep2() {
     setError(null);
     try {
       if (!step2.role) throw new Error("Select your role to continue.");
-      await onboardingStep2({ role: step2.role as any, title: step2.role === "authorized_rep" ? step2.title : undefined });
+      await onboardingStep2({
+        role: step2.role as any,
+        title: step2.role === "authorized_rep" ? step2.title : undefined,
+      });
       setSaved("Saved");
       await refreshSession();
       router.push("/onboard/step-3");
@@ -40,7 +53,11 @@ export default function OnboardStep2() {
   }
 
   return (
-    <OnboardingShell title="Stage 2" subtitle="Confirm authorization to bind this business." activeStep={2}>
+    <OnboardingShell
+      title="Stage 2"
+      subtitle="Confirm authorization to bind this business."
+      activeStep={2}
+    >
       {saved && (
         <div className="status-pill" role="status" aria-live="polite">
           {saved}
@@ -54,28 +71,45 @@ export default function OnboardStep2() {
 
       <form className="card form-card" onSubmit={handleSubmit}>
         <h2 style={{ marginTop: 0 }}>Confirm Authorization</h2>
-        <p className="hero-subtitle">Select who has legal authority to bind this business.</p>
+        <p className="hero-subtitle">
+          Select who has legal authority to bind this business.
+        </p>
 
         <div className="select-card-grid" style={{ marginTop: 14 }}>
           <div
-            className={`select-card${step2.role === "owner" ? " select-card--selected" : ""}`}
+            className={`select-card${
+              step2.role === "owner" ? " select-card--selected" : ""
+            }`}
             role="button"
             tabIndex={0}
             onClick={() => setStep2((p) => ({ ...p, role: "owner" }))}
-            onKeyDown={(e) => e.key === "Enter" && setStep2((p) => ({ ...p, role: "owner" }))}
+            onKeyDown={(e) =>
+              e.key === "Enter" && setStep2((p) => ({ ...p, role: "owner" }))
+            }
           >
             <p className="select-card-title">I am the Business Owner</p>
-            <p className="select-card-desc">Lower-risk path when the owner is completing onboarding.</p>
+            <p className="select-card-desc">
+              Lower-risk path when the owner is completing onboarding.
+            </p>
           </div>
           <div
-            className={`select-card${step2.role === "authorized_rep" ? " select-card--selected" : ""}`}
+            className={`select-card${
+              step2.role === "authorized_rep" ? " select-card--selected" : ""
+            }`}
             role="button"
             tabIndex={0}
             onClick={() => setStep2((p) => ({ ...p, role: "authorized_rep" }))}
-            onKeyDown={(e) => e.key === "Enter" && setStep2((p) => ({ ...p, role: "authorized_rep" }))}
+            onKeyDown={(e) =>
+              e.key === "Enter" &&
+              setStep2((p) => ({ ...p, role: "authorized_rep" }))
+            }
           >
-            <p className="select-card-title">I am an Authorized Representative</p>
-            <p className="select-card-desc">Higher scrutiny. Executive title is required.</p>
+            <p className="select-card-title">
+              I am an Authorized Representative
+            </p>
+            <p className="select-card-desc">
+              Higher scrutiny. Executive title is required.
+            </p>
           </div>
         </div>
 
@@ -84,7 +118,15 @@ export default function OnboardStep2() {
             <label className="input-label" htmlFor="title">
               Executive Title
             </label>
-            <select id="title" className="input-control" value={step2.title} onChange={(e) => setStep2((p) => ({ ...p, title: e.target.value }))} required>
+            <select
+              id="title"
+              className="input-control"
+              value={step2.title}
+              onChange={(e) =>
+                setStep2((p) => ({ ...p, title: e.target.value }))
+              }
+              required
+            >
               <option value="">Select…</option>
               <option value="CEO">CEO</option>
               <option value="COO">COO</option>
@@ -96,8 +138,19 @@ export default function OnboardStep2() {
           </div>
         )}
 
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginTop: 18 }}>
-          <button type="button" className="button button-secondary" onClick={() => router.push("/onboard/step-1")}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            marginTop: 18,
+          }}
+        >
+          <button
+            type="button"
+            className="button button-secondary"
+            onClick={() => router.push("/onboard/step-1")}
+          >
             Back
           </button>
           <button className="button" type="submit" disabled={loading}>

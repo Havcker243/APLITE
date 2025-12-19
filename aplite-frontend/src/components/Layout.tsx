@@ -1,10 +1,8 @@
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/router";
 import React, { PropsWithChildren, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../utils/auth";
 import { fetchProfileDetails } from "../utils/api";
-import apliteLogo from "../RealLogo.png";
 
 const THEME_STORAGE_KEY = "aplite_theme";
 
@@ -13,7 +11,16 @@ export function Layout({ children }: PropsWithChildren) {
   const { user, token, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    if (typeof window === "undefined") return "dark";
+    try {
+      const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+      if (stored === "dark" || stored === "light") return stored;
+    } catch {
+      // ignore storage failures
+    }
+    return "dark";
+  });
   const [isVerified, setIsVerified] = useState<boolean>(false);
 
   const accountLabel = useMemo(() => {
@@ -44,18 +51,7 @@ export function Layout({ children }: PropsWithChildren) {
   }, [token]);
 
   useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-      if (stored === "dark" || stored === "light") {
-        setTheme(stored);
-      }
-    } catch {
-      // ignore storage failures
-    }
-  }, []);
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme === "dark" ? "dark" : "";
+    document.documentElement.dataset.theme = theme === "dark" ? "dark" : "light";
     try {
       window.localStorage.setItem(THEME_STORAGE_KEY, theme);
     } catch {
@@ -112,7 +108,7 @@ export function Layout({ children }: PropsWithChildren) {
       </a>
       <header className="site-header">
         <Link href={user ? "/dashboard" : "/"} className="logo" aria-label="Aplite home">
-          <Image src={apliteLogo} alt="Aplite" className="logo-img" priority />
+          <img src="/logo.png" alt="Aplite" className="logo-img" loading="lazy" decoding="async" />
           <span>Aplite</span>
         </Link>
         <nav className="site-nav" aria-label="Primary navigation">

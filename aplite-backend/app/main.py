@@ -1,5 +1,12 @@
+import asyncio
+import logging
+import os
+import time
+import uuid
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.db.connection import request_connection
 from app.routes.auth import router as auth_router
@@ -26,6 +33,35 @@ app.include_router(auth_router)
 app.include_router(accounts_router)
 app.include_router(public_router)
 app.include_router(onboarding_router)
+
+logger = logging.getLogger("aplite")
+if not logger.handlers:
+    logging.basicConfig(level=logging.INFO)
+
+
+@app.middleware("http")
+async def logging_timeout_middleware(request: Request, call_next):
+    request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+    start = time.perf_counter()
+    timeout = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "30"))
+    try:
+        response = await asyncio.wait_for(call_next(request), timeout=timeout if timeout > 0 else None)
+    except asyncio.TimeoutError:
+        logger.warning("request timeout", extra={"path": request.url.path, "method": request.method, "request_id": request_id})
+        return JSONResponse(status_code=504, content={"detail": "Request timed out", "request_id": request_id})
+    duration_ms = (time.perf_counter() - start) * 1000
+    logger.info(
+        "request",
+        extra={
+            "path": request.url.path,
+            "method": request.method,
+            "status": getattr(response, "status_code", "unknown"),
+            "duration_ms": round(duration_ms, 2),
+            "request_id": request_id,
+        },
+    )
+    response.headers["X-Request-ID"] = request_id
+    return response
 
 
 @app.middleware("http")

@@ -15,10 +15,12 @@ pip install -r requirements-backend.txt
 ```
 
 ## Database schema
-Apply the minimal schema:
+Apply the current schema (matches Supabase snapshot):
 ```bash
-psql "$DATABASE_URL" -f data/schema.sql
+psql "$DATABASE_URL" -f ../schema-final.sql
 ```
+
+> Note: `aplite-backend/data/schema.sql` is an older draft and is missing columns used by onboarding (e.g., `organizations.upi`, `verification_status`, `status`, `sessions.expires_at`). Always use `schema-final.sql`.
 
 ## Run the server
 ```bash

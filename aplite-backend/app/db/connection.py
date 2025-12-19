@@ -100,3 +100,22 @@ def request_connection() -> Iterator[psycopg2.extensions.connection]:
     finally:
         _request_conn.reset(token)
         pool.putconn(conn)
+
+
+@contextmanager
+def transaction() -> Iterator[psycopg2.extensions.connection]:
+    """
+    Convenience context manager for executing multiple statements atomically.
+
+    Uses the shared pool connection helpers and guarantees rollback on error.
+    """
+    with get_connection() as conn:
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            raise

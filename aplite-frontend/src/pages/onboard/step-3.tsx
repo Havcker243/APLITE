@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import { OnboardingShell } from "../../components/onboarding/OnboardingShell";
 import { onboardingStep3, onboardingUploadId } from "../../utils/api";
@@ -9,17 +9,30 @@ import { LoadingScreen } from "../../components/LoadingScreen";
 export default function OnboardStep3() {
   const router = useRouter();
   const { token, ready } = useAuth();
-  const { step3, setStep3, refreshSession, currentStep } = useOnboardingWizard();
+  const { step3, setStep3, refreshSession, currentStep, session, step2 } = useOnboardingWizard();
 
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const role = useMemo(
+    () => (session?.step_statuses?.role?.role as "owner" | "authorized_rep" | undefined) || (step2.role as any) || "",
+    [session, step2.role]
+  );
+  const callBased = role === "authorized_rep";
 
-  if (!ready || !token) return <LoadingScreen />;
-  if (currentStep < 3) {
-    router.replace(currentStep <= 1 ? "/onboard/step-1" : "/onboard/step-2");
-    return null;
-  }
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    if (currentStep < 3) {
+      router.replace(currentStep <= 1 ? "/onboard/step-1" : "/onboard/step-2");
+    }
+  }, [mounted, currentStep, router]);
+
+  if (!ready || !token || !session || !mounted) return <LoadingScreen />;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -28,7 +41,7 @@ export default function OnboardStep3() {
     setError(null);
     try {
       let fileId = step3.file_id;
-      if (!fileId) {
+      if (!fileId && !callBased) {
         if (!step3.file) throw new Error("Upload a government ID document (jpg, png, or pdf).");
         const res = await onboardingUploadId(step3.file);
         fileId = res.file_id;
@@ -38,7 +51,7 @@ export default function OnboardStep3() {
       await onboardingStep3({
         full_name: step3.full_name,
         title: step3.title || undefined,
-        id_document_id: fileId!,
+        id_document_id: callBased ? undefined : fileId!,
         attestation: step3.attestation,
       });
       setSaved("Saved");
@@ -66,7 +79,9 @@ export default function OnboardStep3() {
 
       <form className="card form-card" onSubmit={handleSubmit}>
         <h2 style={{ marginTop: 0 }}>Identity Verification</h2>
-        <p className="hero-subtitle">Tie a real human to this authority. Files are stored privately (MVP local storage).</p>
+        <p className="hero-subtitle">
+          {callBased ? "For authorized representatives, we’ll verify via a live call. Upload is optional here." : "Tie a real human to this authority. Files are stored privately (MVP local storage)."}
+        </p>
 
         <div className="form-section">
           <div className="form-grid" style={{ gridTemplateColumns: "1fr", marginTop: 14 }}>
@@ -78,28 +93,30 @@ export default function OnboardStep3() {
             </div>
             <div className="input-group">
               <label className="input-label" htmlFor="person_title">
-                Title (optional)
+                Title {callBased ? "(exec role)" : "(optional)"}
               </label>
-              <input id="person_title" className="input-control" value={step3.title} onChange={(e) => setStep3((p) => ({ ...p, title: e.target.value }))} />
+              <input id="person_title" className="input-control" value={step3.title} onChange={(e) => setStep3((p) => ({ ...p, title: e.target.value }))} required={callBased} />
             </div>
-            <div className="input-group">
-              <label className="input-label" htmlFor="id_file">
-                Government ID (jpg, png, pdf)
-              </label>
-              <input
-                id="id_file"
-                type="file"
-                accept="image/jpeg,image/png,application/pdf"
-                className="input-control"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  setStep3((p) => ({ ...p, file, file_id: undefined }));
-                }}
-                required={!step3.file_id}
-              />
-              {step3.file_id && <p className="hero-subtitle">Uploaded document reference: {step3.file_id}</p>}
-            </div>
+            {!callBased && (
+              <div className="input-group">
+                <label className="input-label" htmlFor="id_file">
+                  Government ID (jpg, png, pdf)
+                </label>
+                <input
+                  id="id_file"
+                  type="file"
+                  accept="image/jpeg,image/png,application/pdf"
+                  className="input-control"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setStep3((p) => ({ ...p, file, file_id: undefined }));
+                  }}
+                  required={!step3.file_id}
+                />
+                {step3.file_id && <p className="hero-subtitle">Uploaded document reference: {step3.file_id}</p>}
+              </div>
+            )}
 
             <label style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
               <input type="checkbox" checked={step3.attestation} onChange={(e) => setStep3((p) => ({ ...p, attestation: e.target.checked }))} />

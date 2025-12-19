@@ -38,8 +38,15 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     setInfo(null);
+    const email = form.email.trim();
+    const password = form.password;
+    if (!email || !password) {
+      setLoading(false);
+      setError("Enter your email and password to continue.");
+      return;
+    }
     try {
-      const response = await loginStart(form);
+      const response = await loginStart({ email, password });
       setLoginId(response.login_id);
       setInfo("Check your email for the 6-digit code.");
     } catch (err) {
@@ -57,7 +64,7 @@ export default function LoginPage() {
     try {
       const response = await loginVerify({ login_id: loginId, code: otp.trim() });
       setAuth(response);
-      const next = typeof router.query.next === "string" ? router.query.next : "/dashboard";
+      const next = typeof router.query.next === "string" ? router.query.next : response.needs_onboarding ? "/onboard" : "/dashboard";
       router.push(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to verify code");

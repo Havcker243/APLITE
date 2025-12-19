@@ -32,48 +32,59 @@ export default function HomePage() {
         </div>
       </div>
 
-      <div className="card-grid" style={{ marginTop: 28 }}>
-        <div className="card">
-          <p className="section-title">Why Aplite</p>
-          <h3 style={{ marginTop: 0 }}>Developer-first payouts</h3>
-          <p className="hero-subtitle">
-            Issue and resolve identifiers without juggling bank files. Encryption at rest, HMAC-signed UPIs, OTP-gated onboarding, and audit-friendly history.
-          </p>
+      <div className="pill-row">
+        <div className="pill">
+          <p className="pill-title">Developer-first</p>
+          <p className="pill-subtitle">Issue/resolve without bank-file chaos.</p>
         </div>
-        <div className="card">
-          <p className="section-title">Compliance-ready</p>
-          <h3 style={{ marginTop: 0 }}>KYB/KYC in one flow</h3>
-          <p className="hero-subtitle">
-            Collect business identity, authorization, ID documents, and payout rails in sequential steps with OTP verification before issuing UPIs.
-          </p>
+        <div className="pill">
+          <p className="pill-title">KYB in one flow</p>
+          <p className="pill-subtitle">Business, authorization, ID, rails, OTP.</p>
         </div>
-        <div className="card">
-          <p className="section-title">Operations</p>
-          <h3 style={{ marginTop: 0 }}>Resolve with confidence</h3>
-          <p className="hero-subtitle">
-            Every resolve validates ownership, verification status, and signature, returning encrypted coordinates only for verified accounts.
-          </p>
+        <div className="pill">
+          <p className="pill-title">Verified resolves</p>
+          <p className="pill-subtitle">Encrypted coords for verified accounts only.</p>
         </div>
       </div>
 
       <div className="card" style={{ marginTop: 28 }}>
         <p className="section-title">How it works</p>
-        <div className="table">
-          <div className="table-row">
-            <span>1) Create</span>
-            <span>Sign up to mint a master UPI namespace.</span>
+        <div className="timeline">
+          <div className="timeline-item">
+            <div className="timeline-dot">1</div>
+            <div>
+              <p className="pill-title" style={{ marginBottom: 4 }}>
+                Create
+              </p>
+              <p className="hero-subtitle">Sign up to mint a master UPI namespace.</p>
+            </div>
           </div>
-          <div className="table-row">
-            <span>2) Onboard</span>
-            <span>Complete KYB (entity, authorization, identity, bank rails) and verify via OTP.</span>
+          <div className="timeline-item">
+            <div className="timeline-dot">2</div>
+            <div>
+              <p className="pill-title" style={{ marginBottom: 4 }}>
+                Onboard
+              </p>
+              <p className="hero-subtitle">Entity, authorization, ID doc, bank rails, OTP verify.</p>
+            </div>
           </div>
-          <div className="table-row">
-            <span>3) Issue</span>
-            <span>Generate child UPIs bound to specific payout rails.</span>
+          <div className="timeline-item">
+            <div className="timeline-dot">3</div>
+            <div>
+              <p className="pill-title" style={{ marginBottom: 4 }}>
+                Issue
+              </p>
+              <p className="hero-subtitle">Generate child UPIs per payout rail.</p>
+            </div>
           </div>
-          <div className="table-row">
-            <span>4) Resolve</span>
-            <span>Share UPIs and resolve them to coordinates on demand.</span>
+          <div className="timeline-item">
+            <div className="timeline-dot">4</div>
+            <div>
+              <p className="pill-title" style={{ marginBottom: 4 }}>
+                Resolve
+              </p>
+              <p className="hero-subtitle">Share UPIs; resolve to encrypted coordinates on demand.</p>
+            </div>
           </div>
         </div>
       </div>

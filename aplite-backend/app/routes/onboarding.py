@@ -108,12 +108,14 @@ class Step2Payload(BaseModel):
 class Step3Payload(BaseModel):
     full_name: str = Field(min_length=2, max_length=120)
     title: str | None = Field(default=None, max_length=80)
-    id_document_id: str = Field(min_length=8, max_length=200)
+    id_document_id: str | None = Field(default=None, min_length=8, max_length=200)
     attestation: bool
 
     @field_validator("id_document_id")
     @classmethod
-    def validate_id_document_id(cls, value: str) -> str:
+    def validate_id_document_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
         value = value.strip()
         if not re.match(r"^id_[0-9a-f]{32}$", value):
             raise ValueError("Invalid document reference. Please re-upload.")
@@ -178,6 +180,7 @@ class CurrentOnboardingResponse(BaseModel):
     current_step: int
     risk_level: str
     address_locked: bool
+    step_statuses: dict
     org: dict
 
 
@@ -194,6 +197,7 @@ def onboarding_current(user=Depends(get_current_user)):
         "current_step": int(session["current_step"]),
         "risk_level": session.get("risk_level", "low"),
         "address_locked": bool(session.get("address_locked", False)),
+        "step_statuses": session.get("step_statuses") or {},
         "org": org,
     }
 
@@ -202,10 +206,12 @@ def onboarding_current(user=Depends(get_current_user)):
 def onboarding_step1(payload: Step1Payload, user=Depends(get_current_user)):
     active = queries.get_active_onboarding_session(user["id"])
     if active and int(active.get("current_step", 1)) > 1:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Step 1 is already completed for this onboarding session. Continue onboarding.",
-        )
+        # Step 1 already completed; return existing session to let the UI continue.
+        return {
+            "org_id": str(active["org_id"]),
+            "session_id": str(active["id"]),
+            "next_step": int(active.get("current_step", 2)),
+        }
 
     org_id = uuid.uuid4()
     session_id = uuid.uuid4()
@@ -263,7 +269,7 @@ def onboarding_step2(payload: Step2Payload, user=Depends(get_current_user)):
     if int(session.get("current_step", 1)) != 2:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="You cannot complete this step yet.")
 
-    risk_level = "low" if payload.role == "owner" else "medium"
+    risk_level = "low" if payload.role == "owner" else "high"
     queries.update_onboarding_role(
         session_id=uuid.UUID(str(session["id"])),
         user_id=user["id"],
@@ -321,6 +327,7 @@ async def onboarding_upload_id(file: UploadFile = File(...), user=Depends(get_cu
     return {"file_id": file_id}
 
 
+# Step 3: owners must upload ID; authorized reps can take the call-based path (no ID upload).
 @router.post("/onboarding/step-3")
 def onboarding_step3(payload: Step3Payload, user=Depends(get_current_user)):
     if not payload.attestation:
@@ -332,9 +339,19 @@ def onboarding_step3(payload: Step3Payload, user=Depends(get_current_user)):
     if int(session.get("current_step", 1)) != 3:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="You cannot complete this step yet.")
 
-    # Ensure the uploaded document exists for this user.
-    if not queries.onboarding_file_exists(file_id=payload.id_document_id, user_id=user["id"]):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid document reference. Please re-upload.")
+    role_info = (session.get("step_statuses") or {}).get("role") or {}
+    role = role_info.get("role")
+    require_document = role != "authorized_rep"
+
+    if require_document:
+        if not payload.id_document_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Upload a government ID document.")
+        if not queries.onboarding_file_exists(file_id=payload.id_document_id, user_id=user["id"]):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid document reference. Please re-upload.")
+        doc_ref = payload.id_document_id
+    else:
+        # For authorized reps, allow call-based verification and skip document upload.
+        doc_ref = payload.id_document_id or "call_verification"
 
     verification_id = uuid.uuid4()
     queries.create_identity_verification(
@@ -344,7 +361,7 @@ def onboarding_step3(payload: Step3Payload, user=Depends(get_current_user)):
         user_id=user["id"],
         full_name=payload.full_name.strip(),
         title=(payload.title or "").strip() or None,
-        id_document_id=payload.id_document_id,
+        id_document_id=doc_ref,
         attestation=payload.attestation,
         status="pending",
     )
@@ -368,20 +385,35 @@ def onboarding_step4(payload: Step4Payload, user=Depends(get_current_user)):
             detail="Provide at least one rail (ACH routing, wire routing, or SWIFT).",
         )
 
-    mapping_id = uuid.uuid4()
+    rail = "ACH" if payload.ach_routing else ("WIRE_DOM" if payload.wire_routing else "SWIFT")
     last4 = payload.account_number[-4:]
-    queries.create_bank_rail_mapping(
-        mapping_id=mapping_id,
-        session_id=uuid.UUID(str(session["id"])),
-        org_id=uuid.UUID(str(session["org_id"])),
-        user_id=user["id"],
-        bank_name=payload.bank_name.strip(),
-        account_number=payload.account_number,
-        last4=last4,
-        ach_routing=payload.ach_routing,
-        wire_routing=payload.wire_routing,
-        swift=payload.swift,
-    )
+
+    org = queries.get_organization(str(session["org_id"]), user["id"])
+    if not org:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found.")
+
+    try:
+        payment_account_id = queries.create_payment_account(
+            user_id=user["id"],
+            org_id=str(session["org_id"]),
+            rail=rail,
+            bank_name=payload.bank_name.strip(),
+            account_name=org.get("legal_name") or "Account",
+            ach_routing=payload.ach_routing if rail == "ACH" else None,
+            ach_account=payload.account_number if rail == "ACH" else None,
+            wire_routing=payload.wire_routing if rail == "WIRE_DOM" else None,
+            wire_account=payload.account_number if rail == "WIRE_DOM" else None,
+            bank_address=None,
+            swift_bic=payload.swift if rail == "SWIFT" else None,
+            iban=payload.account_number if rail == "SWIFT" else None,
+            bank_country=None,
+            bank_city=None,
+            status="pending",
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to save bank details") from exc
+
+    queries.set_onboarding_payment_account(uuid.UUID(str(session["id"])), payment_account_id)
     queries.advance_onboarding_session(uuid.UUID(str(session["id"])), state="STEP_4_COMPLETE", next_step=5)
     return {"next_step": 5, "bank_name": payload.bank_name.strip(), "account_last4": last4}
 
@@ -397,6 +429,11 @@ def send_verification_otp(payload: SendOtpPayload, background_tasks: BackgroundT
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Start onboarding first.")
     if int(session.get("current_step", 1)) < 5:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Complete onboarding steps before verification.")
+
+    role_info = (session.get("step_statuses") or {}).get("role") or {}
+    role = role_info.get("role")
+    if role == "authorized_rep" or str(session.get("risk_level", "")).lower() == "high":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="High-risk verification requires a scheduled call.")
 
     ip = (request.client.host if request.client else "unknown").strip()
     user_rule = RateLimit(limit=int(os.getenv("RL_VERIFY_OTP_USER_LIMIT", "5")), window_seconds=int(os.getenv("RL_VERIFY_OTP_USER_WINDOW_SECONDS", "600")))
@@ -454,6 +491,10 @@ def confirm_verification_otp(payload: ConfirmOtpPayload, user=Depends(get_curren
     session = queries.get_active_onboarding_session(user["id"])
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Start onboarding first.")
+    role_info = (session.get("step_statuses") or {}).get("role") or {}
+    role = role_info.get("role")
+    if role == "authorized_rep" or str(session.get("risk_level", "")).lower() == "high":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="High-risk verification requires a scheduled call.")
     attempt = queries.get_latest_verification_attempt(user["id"], uuid.UUID(str(session["id"])))
     if not attempt or attempt.get("status") != "sent":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No pending OTP verification.")

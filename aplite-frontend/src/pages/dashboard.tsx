@@ -2,11 +2,17 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import React, { useEffect, useMemo, useState } from "react";
 import { BusinessForm, BusinessFormData } from "../components/BusinessForm";
-import { HistoryPanel } from "../components/HistoryPanel";
 import { ResolveForm } from "../components/ResolveForm";
 import { ResolutionResult } from "../components/ResolutionResult";
 import { ResultCard } from "../components/ResultCard";
-import { BusinessSummary, deactivateBusiness, fetchBusinesses, listAccounts, onboardBusiness, resolveUPI } from "../utils/api";
+import { LoadingScreen } from "../components/LoadingScreen";
+
+import {
+  listAccounts,
+  onboardBusiness,
+  resolveUPI,
+  fetchProfileDetails,
+} from "../utils/api";
 import { useAuth } from "../utils/auth";
 import { requireVerifiedOrRedirect } from "../utils/requireVerified";
 
@@ -128,52 +134,46 @@ export default function DashboardPage() {
   const [form, setForm] = useState<BusinessFormData>(defaultForm);
   const [loading, setLoading] = useState(false);
   const [upi, setUpi] = useState<string | null>(null);
+  const [orgName, setOrgName] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
-  const [history, setHistory] = useState<BusinessSummary[]>([]);
-  const [historyError, setHistoryError] = useState<string | null>(null);
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<any[]>([]);
   const [accountsError, setAccountsError] = useState<string | null>(null);
 
   const [resolveUpi, setResolveUpi] = useState("");
-  const [resolveRail, setResolveRail] = useState<"ACH" | "WIRE_DOM" | "SWIFT">("ACH");
+  const [resolveRail, setResolveRail] = useState<"ACH" | "WIRE_DOM" | "SWIFT">(
+    "ACH"
+  );
   const [resolveResult, setResolveResult] = useState<any>(null);
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [resolving, setResolving] = useState(false);
-  const [deactivating, setDeactivating] = useState<number | null>(null);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (!ready) return;
+    if (!mounted || !ready) return;
     if (!token) {
       router.replace("/login");
       return;
     }
-    void requireVerifiedOrRedirect({ token, router });
-    void loadHistory();
-    void loadAccounts();
-  }, [ready, token]);
+    requireVerifiedOrRedirect({ token, router });
+    loadOrg();
+    loadAccounts();
+  }, [mounted, ready, token, router]);
 
-  async function loadHistory() {
-    try {
-      const records = await fetchBusinesses(8);
-      setHistory(records);
-      setHistoryError(null);
-    } catch (err) {
-      setHistoryError(err instanceof Error ? err.message : "Unable to load history");
-    }
-  }
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
-  async function handleDeactivate(id: number) {
-    if (!window.confirm("Deactivate this UPI? This will block resolves.")) return;
-    setDeactivating(id);
+  async function loadOrg() {
     try {
-      await deactivateBusiness(id);
-      await loadHistory();
-    } catch (err) {
-      setHistoryError(err instanceof Error ? err.message : "Unable to deactivate");
-    } finally {
-      setDeactivating(null);
+      const details = await fetchProfileDetails();
+      const org = details.organization;
+      setOrgName(org?.legal_name || "");
+      setUpi(org?.upi || org?.issued_upi || null);
+    } catch {
+      setOrgName("");
+      setUpi(null);
     }
   }
 
@@ -183,11 +183,15 @@ export default function DashboardPage() {
       setAccounts(res);
       setAccountsError(null);
     } catch (err) {
-      setAccountsError(err instanceof Error ? err.message : "Unable to load accounts");
+      setAccountsError(
+        err instanceof Error ? err.message : "Unable to load accounts"
+      );
     }
   }
 
-  function handleChange(event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
+  function handleChange(
+    event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) {
     const { name, value } = event.target;
     setForm((prev) => ({ ...prev, [name]: value }));
   }
@@ -206,56 +210,49 @@ export default function DashboardPage() {
     }
     setValidationErrors([]);
 
+    if (form.account_mode === "existing") {
+      setError(
+        "Using a saved account for issuance is not supported yet. Please add payment details below."
+      );
+      setLoading(false);
+      return;
+    }
+
     try {
-      const payload =
-        form.account_mode === "existing"
-          ? {
-              legal_name: form.legal_name,
-              ein: form.ein,
-              business_type: form.business_type,
-              website: form.website,
-              address: form.address,
-              country: form.country,
-              payment_account_id: Number(form.payment_account_id),
-            }
-          : {
-              legal_name: form.legal_name,
-              ein: form.ein,
-              business_type: form.business_type,
-              website: form.website,
-              address: form.address,
-              country: form.country,
-              account: {
-                rail: form.rail,
-                bank_name: form.bank_name,
-                account_name: form.account_name || form.legal_name,
-                ach_routing: form.ach_routing,
-                ach_account: form.ach_account,
-                wire_routing: form.wire_routing,
-                wire_account: form.wire_account,
-                bank_address: form.bank_address || form.address,
-                swift_bic: form.swift_bic,
-                iban: form.iban,
-                bank_country: form.bank_country || form.country,
-                bank_city: form.bank_city,
-              },
-            };
+      const payload = {
+        legal_name: form.legal_name,
+        ein: form.ein,
+        business_type: form.business_type,
+        website: form.website,
+        address: form.address,
+        country: form.country,
+        account: {
+          rail: form.rail,
+          bank_name: form.bank_name,
+          account_name: form.account_name || form.legal_name,
+          ach_routing: form.ach_routing,
+          ach_account: form.ach_account,
+          wire_routing: form.wire_routing,
+          wire_account: form.wire_account,
+          bank_address: form.bank_address || form.address,
+          swift_bic: form.swift_bic,
+          iban: form.iban,
+          bank_country: form.bank_country || form.country,
+          bank_city: form.bank_city,
+        },
+      };
 
       const response = await onboardBusiness(payload as any);
       setUpi(response.upi);
-      await loadHistory();
+      await loadOrg();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to create business");
+      setError(
+        err instanceof Error ? err.message : "Unable to create business"
+      );
       setUpi(null);
     } finally {
       setLoading(false);
     }
-  }
-
-  function handleHistoryCopy(upiCode: string) {
-    navigator.clipboard?.writeText(upiCode).catch(() => undefined);
-    setCopyNotice("Copied");
-    setTimeout(() => setCopyNotice(null), 2000);
   }
 
   async function handleResolve(event: React.FormEvent<HTMLFormElement>) {
@@ -271,19 +268,27 @@ export default function DashboardPage() {
     }
 
     try {
-      const response = await resolveUPI({ upi: resolveUpi.trim(), rail: resolveRail });
+      const response = await resolveUPI({
+        upi: resolveUpi.trim(),
+        rail: resolveRail,
+      });
       setResolveResult(response);
     } catch (err) {
-      setResolveError(err instanceof Error ? err.message : "Unable to resolve UPI");
+      setResolveError(
+        err instanceof Error ? err.message : "Unable to resolve UPI"
+      );
     } finally {
       setResolving(false);
     }
   }
 
-  const maskedMasterUpi = useMemo(() => maskUpi(user?.master_upi ?? ""), [user]);
+  const maskedMasterUpi = useMemo(
+    () => maskUpi(user?.master_upi ?? ""),
+    [user]
+  );
 
-  if (!token) {
-    return null;
+  if (!ready || !token || !mounted) {
+    return <LoadingScreen />;
   }
 
   return (
@@ -292,7 +297,10 @@ export default function DashboardPage() {
         <div>
           <p className="section-title">Your workspace</p>
           <h1 className="hero-title">UPI management</h1>
-          <p className="hero-subtitle">Create identifiers, attach payout rails, resolve details, and copy coordinates securely.</p>
+          <p className="hero-subtitle">
+            Create identifiers, attach payout rails, resolve details, and copy
+            coordinates securely.
+          </p>
         </div>
       </section>
 
@@ -300,11 +308,15 @@ export default function DashboardPage() {
         <div className="card">
           <p className="section-title">Master UPI</p>
           <h2 style={{ marginTop: 0 }}>{maskedMasterUpi}</h2>
-          <p className="hero-subtitle">This is the parent identifier for your workspace.</p>
+          <p className="hero-subtitle">
+            This is the parent identifier for your workspace.
+          </p>
           <button
             type="button"
             className="button button-secondary"
-            onClick={() => navigator.clipboard?.writeText(user?.master_upi ?? "")}
+            onClick={() =>
+              navigator.clipboard?.writeText(user?.master_upi ?? "")
+            }
             disabled={!user?.master_upi}
           >
             Copy Master UPI
@@ -313,7 +325,9 @@ export default function DashboardPage() {
         <div className="card">
           <p className="section-title">Need another user?</p>
           <h2 style={{ marginTop: 0 }}>Invite teammates securely</h2>
-          <p className="hero-subtitle">Contact our team to enable multi-user access with proper controls.</p>
+          <p className="hero-subtitle">
+            Contact our team to enable multi-user access with proper controls.
+          </p>
           <Link href="/" className="button button-secondary">
             Get Help
           </Link>
@@ -343,7 +357,13 @@ export default function DashboardPage() {
       )}
 
       <div className="card-grid" style={{ alignItems: "flex-start" }}>
-        <BusinessForm form={form} accounts={accounts} loading={loading} onChange={handleChange} onSubmit={handleSubmit} />
+        <BusinessForm
+          form={form}
+          accounts={accounts}
+          loading={loading}
+          onChange={handleChange}
+          onSubmit={handleSubmit}
+        />
 
         <div className="stacked-panels">
           {upi && <ResultCard upi={upi} />}
@@ -352,19 +372,33 @@ export default function DashboardPage() {
               {copyNotice}
             </div>
           )}
-          {historyError && (
-            <div className="error-box" role="alert" aria-live="assertive">
-              {historyError}
+          {orgName && upi && (
+            <div className="card">
+              <p className="section-title">{orgName}</p>
+              <h3 style={{ marginTop: 0 }}>{upi}</h3>
+              <button
+                type="button"
+                className="button button-secondary"
+                onClick={() => {
+                  navigator.clipboard?.writeText(upi).catch(() => undefined);
+                  setCopyNotice("Copied");
+                  setTimeout(() => setCopyNotice(null), 2000);
+                }}
+              >
+                Copy UPI
+              </button>
             </div>
           )}
-          <HistoryPanel entries={history} onCopy={handleHistoryCopy} onDeactivate={handleDeactivate} deactivatingId={deactivating} />
         </div>
       </div>
 
       <section className="hero" style={{ marginTop: 30 }}>
         <div>
           <p className="section-title">Resolve an identifier</p>
-          <p className="hero-subtitle">Validate a UPI created in this workspace and return its payout coordinates.</p>
+          <p className="hero-subtitle">
+            Validate a UPI created in this workspace and return its payout
+            coordinates.
+          </p>
         </div>
       </section>
 

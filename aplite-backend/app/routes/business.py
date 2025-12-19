@@ -50,125 +50,90 @@ class BusinessSummary(BaseModel):
 
 @router.post("/api/businesses")
 def create_business(payload: BusinessCreateRequest, user=Depends(get_current_user)):
+    # Org-centric: one UPI per org; treat this endpoint as "issue org UPI".
     if not queries.is_user_verified(user["id"]):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Your account must be verified before issuing UPIs.",
         )
-    if not payload.payment_account_id and not payload.account:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Select an existing account or provide new payment details.",
+
+    orgs = queries.list_organizations_for_user(user["id"])
+    if not orgs:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No organization found.")
+    org = orgs[0]
+
+    if org.get("upi"):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="UPI already issued for this organization.")
+
+    if not payload.account:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provide payment details to issue a UPI.")
+
+    acct = payload.account
+    if acct.rail == "ACH" and (not acct.ach_routing or not acct.ach_account):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="ACH accounts require routing and account numbers.")
+    if acct.rail == "WIRE_DOM" and (not acct.wire_routing or not acct.wire_account):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Wire accounts require routing and account numbers.")
+    if acct.rail == "SWIFT" and (not acct.swift_bic or not acct.iban):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="SWIFT accounts require BIC and IBAN.")
+
+    try:
+        core_id = generate_core_entity_id()
+        payment_account_id = queries.create_payment_account(
+            user_id=user["id"],
+            org_id=str(org["id"]),
+            rail=acct.rail,
+            bank_name=acct.bank_name,
+            account_name=acct.account_name or acct.bank_name,
+            ach_routing=acct.ach_routing,
+            ach_account=acct.ach_account,
+            wire_routing=acct.wire_routing,
+            wire_account=acct.wire_account,
+            bank_address=acct.bank_address or payload.address,
+            swift_bic=acct.swift_bic,
+            iban=acct.iban,
+            bank_country=acct.bank_country or payload.country,
+            bank_city=acct.bank_city,
+            status="active",
         )
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to create payment account") from exc
 
-    verification_status = "verified"
+    account = queries.get_payment_account_by_id(payment_account_id)
+    if not account:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to create account")
 
-    existing_account = None
-    account_id = None
-
-    if payload.payment_account_id:
-        existing_account = queries.get_payment_account_by_id(payload.payment_account_id)
-        if not existing_account or existing_account.get("user_id") != user["id"]:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment account not found")
-        account_id = existing_account["id"]
-
-    if payload.account and not existing_account:
-        # basic rail-specific validation
-        if payload.account.rail == "ACH" and (not payload.account.ach_routing or not payload.account.ach_account):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="ACH accounts require routing and account numbers.",
-            )
-        if payload.account.rail == "WIRE_DOM" and (not payload.account.wire_routing or not payload.account.wire_account):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Wire accounts require routing and account numbers.",
-            )
-        if payload.account.rail == "SWIFT" and (not payload.account.swift_bic or not payload.account.iban):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="SWIFT accounts require BIC and IBAN.",
-            )
-        try:
-            account_id = queries.create_payment_account(
-                user_id=user["id"],
-                business_id=None,
-                rail=payload.account.rail,
-                bank_name=payload.account.bank_name,
-                account_name=payload.account.account_name or payload.legal_name,
-                ach_routing=payload.account.ach_routing,
-                ach_account=payload.account.ach_account,
-                wire_routing=payload.account.wire_routing,
-                wire_account=payload.account.wire_account,
-                bank_address=payload.account.bank_address or payload.address,
-                swift_bic=payload.account.swift_bic,
-                iban=payload.account.iban,
-                bank_country=payload.account.bank_country or payload.country,
-                bank_city=payload.account.bank_city,
-            )
-            existing_account = queries.get_payment_account_by_id(account_id)
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(exc),
-            ) from exc
-        except Exception as exc:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Unable to create payment account",
-            ) from exc
-
-    if not existing_account:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Payment account missing")
-
-    payment_index = int(existing_account.get("payment_index", 1) or 1)
-    core_id = generate_core_entity_id()
+    payment_index = int(account.get("payment_index", 1) or 1)
     try:
         upi = generate_upi(core_id, payment_index, user_id=user["id"])
     except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Unable to generate UPI. Check server secret configuration.",
-        ) from exc
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to generate UPI") from exc
 
-    if queries.get_business_by_upi(upi):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="UPI already exists. Please retry onboarding.",
-        )
+    queries.set_organization_upi(str(org["id"]), upi, payment_account_id, verification_status="verified", status="active")
 
-    if queries.get_user_business_by_ein(user["id"], payload.ein):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Business with this EIN already exists.",
-        )
-
+    # Persist a business row for history/lookup parity with list/deactivate endpoints.
     try:
         business_id = queries.create_business(
             user_id=user["id"],
-            parent_upi=user["master_upi"],
+            parent_upi=user.get("master_upi") or "",
             upi=upi,
-            payment_account_id=account_id,
-            rails=[existing_account["rail"]],
+            payment_account_id=payment_account_id,
+            rails=[account["rail"]],
             core_entity_id=core_id,
-            legal_name=payload.legal_name,
-            ein=payload.ein,
-            business_type=payload.business_type,
-            website=payload.website,
-            address=payload.address,
-            country=payload.country,
-            verification_status=verification_status,
+            legal_name=payload.legal_name.strip(),
+            ein=payload.ein.strip(),
+            business_type=payload.business_type.strip(),
+            website=(payload.website or "").strip() or None,
+            address=payload.address.strip(),
+            country=payload.country.strip(),
+            verification_status="verified",
+            status="active",
         )
-        queries.update_payment_account(account_id, business_id=business_id)
-    except HTTPException:
-        raise
+        queries.update_payment_account(payment_account_id, business_id=business_id)
     except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Unable to create business at this time.",
-        ) from exc
+        # Do not fail the request after issuing UPI; log upstream (FastAPI will log).
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to persist business record") from exc
 
-    return {"upi": upi, "verification_status": verification_status, "rails": [existing_account["rail"]]}
+    return {"upi": upi, "verification_status": "verified", "rails": [account["rail"]], "business_id": business_id}
 
 
 @router.post("/api/businesses/{business_id}/deactivate")

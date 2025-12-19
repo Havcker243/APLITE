@@ -1,6 +1,26 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const TOKEN_STORAGE_KEY = "aplite_token";
 
 let authToken: string | null = null;
+try {
+  const stored = typeof window !== "undefined" ? window.localStorage.getItem(TOKEN_STORAGE_KEY) : null;
+  if (stored) authToken = stored;
+} catch {
+  /* ignore storage issues */
+}
+
+export function setAuthToken(token: string | null) {
+  authToken = token;
+  try {
+    if (token) {
+      window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    } else {
+      window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+    }
+  } catch {
+    /* ignore storage issues */
+  }
+}
 
 export type OnboardingStep1Payload = {
   legal_name: string;
@@ -35,6 +55,7 @@ export type OnboardingCurrentResponse = {
   current_step: number;
   risk_level: "low" | "medium" | "high";
   address_locked: boolean;
+  step_statuses: any;
   org: any;
 };
 
@@ -72,10 +93,12 @@ export type ProfileDetailsResponse = {
     payment_accounts: number;
     upis: number;
   };
+  needs_onboarding?: boolean;
+  onboarding_state?: string;
 };
 
 export type OnboardingStep2Payload = { role: "owner" | "authorized_rep"; title?: string };
-export type OnboardingStep3Payload = { full_name: string; title?: string; id_document_id: string; attestation: boolean };
+export type OnboardingStep3Payload = { full_name: string; title?: string; id_document_id?: string; attestation: boolean };
 export type OnboardingStep4Payload = {
   bank_name: string;
   account_number: string;
@@ -144,6 +167,7 @@ export type User = {
 export type AuthResponse = {
   token: string;
   user: User;
+  needs_onboarding?: boolean;
 };
 
 export type LoginStartResponse = {
@@ -165,18 +189,36 @@ export type ResolveResult = {
   coordinates: Record<string, string>;
 };
 
-export function setAuthToken(token: string | null) {
-  /** Set the bearer token used by all API calls in this module. */
-  authToken = token;
+// All requests prefer cookie-based auth but also attach Bearer when available.
+const defaultInit: RequestInit = { credentials: "include" };
+
+function withAuth(init?: RequestInit): RequestInit {
+  const headers: Record<string, string> = {};
+  if (init?.headers) {
+    if (init.headers instanceof Headers) {
+      init.headers.forEach((value, key) => {
+        headers[key] = value;
+      });
+    } else if (Array.isArray(init.headers)) {
+      for (const [key, value] of init.headers) {
+        headers[key] = value;
+      }
+    } else {
+      Object.assign(headers, init.headers as Record<string, string>);
+    }
+  }
+  if (authToken) {
+    headers["Authorization"] = `Bearer ${authToken}`;
+  }
+  return {
+    ...defaultInit,
+    ...init,
+    headers,
+  };
 }
 
-function authHeaders(): Record<string, string> {
-  /** Build Authorization headers (empty when logged out). */
-  const headers: Record<string, string> = {};
-  if (authToken) {
-    headers.Authorization = `Bearer ${authToken}`;
-  }
-  return headers;
+function authedFetch(input: RequestInfo | URL, init?: RequestInit) {
+  return fetch(input, withAuth(init));
 }
 
 async function parseError(res: Response, fallback: string) {
@@ -206,11 +248,9 @@ export async function signup(data: {
   confirm_password: string;
   accept_terms: boolean;
 }): Promise<AuthResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/auth/signup`, {
+  const res = await authedFetch(`${API_BASE_URL}/api/auth/signup`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
 
@@ -219,7 +259,9 @@ export async function signup(data: {
     throw new Error(message || "Failed to create account");
   }
 
-  return res.json();
+  const payload = await res.json();
+  if (payload?.token) setAuthToken(payload.token);
+  return payload;
 }
 
 export async function login(data: { email: string; password: string }): Promise<AuthResponse> {
@@ -229,7 +271,7 @@ export async function login(data: { email: string; password: string }): Promise<
 
 export async function loginStart(data: { email: string; password: string }): Promise<LoginStartResponse> {
   /** Start login: password + email OTP delivery (MVP). */
-  const res = await fetch(`${API_BASE_URL}/api/auth/login/start`, {
+  const res = await authedFetch(`${API_BASE_URL}/api/auth/login/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -253,7 +295,7 @@ export async function loginStart(data: { email: string; password: string }): Pro
 
 export async function loginVerify(data: { login_id: string; code: string }): Promise<AuthResponse> {
   /** Complete login by verifying the OTP; returns a session token + user. */
-  const res = await fetch(`${API_BASE_URL}/api/auth/login/verify`, {
+  const res = await authedFetch(`${API_BASE_URL}/api/auth/login/verify`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -272,30 +314,28 @@ export async function loginVerify(data: { login_id: string; code: string }): Pro
     }
     throw new Error(message);
   }
-  return res.json();
+  const payload = await res.json();
+  if (payload?.token) setAuthToken(payload.token);
+  return payload;
 }
 
 export async function logout(): Promise<void> {
   /** Best-effort logout: invalidates the server session token for the current user. */
-  if (!authToken) return;
   try {
-    await fetch(`${API_BASE_URL}/api/auth/logout`, {
+    await authedFetch(`${API_BASE_URL}/api/auth/logout`, {
       method: "POST",
-      headers: { ...authHeaders() },
     });
   } catch {
     // ignore network errors during logout
   }
+  setAuthToken(null);
 }
 
 export async function onboardBusiness(data: BusinessPayload) {
   /** Create a business and mint a new UPI under the authenticated user's workspace. */
-  const res = await fetch(`${API_BASE_URL}/api/businesses`, {
+  const res = await authedFetch(`${API_BASE_URL}/api/businesses`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders(),
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
 
@@ -309,12 +349,9 @@ export async function onboardBusiness(data: BusinessPayload) {
 
 export async function resolveUPI(data: ResolvePayload) {
   /** Resolve an owned UPI to payout coordinates for a specific rail. */
-  const res = await fetch(`${API_BASE_URL}/api/resolve`, {
+  const res = await authedFetch(`${API_BASE_URL}/api/resolve`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders(),
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
 
@@ -335,9 +372,7 @@ export async function resolveUPI(data: ResolvePayload) {
 export async function fetchBusinesses(limit?: number): Promise<BusinessSummary[]> {
   /** Load recently created businesses/UPIs for the authenticated user. */
   const params = limit ? `?limit=${limit}` : "";
-  const res = await fetch(`${API_BASE_URL}/api/businesses${params}`, {
-    headers: authHeaders(),
-  });
+  const res = await authedFetch(`${API_BASE_URL}/api/businesses${params}`);
 
   if (!res.ok) {
     throw new Error("Failed to load business history");
@@ -348,9 +383,9 @@ export async function fetchBusinesses(limit?: number): Promise<BusinessSummary[]
 
 export async function deactivateBusiness(id: number) {
   /** Deactivate a business/UPI so it can no longer be resolved. */
-  const res = await fetch(`${API_BASE_URL}/api/businesses/${id}/deactivate`, {
+  const res = await authedFetch(`${API_BASE_URL}/api/businesses/${id}/deactivate`, {
     method: "POST",
-    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" },
   });
   if (!res.ok) {
     const msg = await res.text();
@@ -361,11 +396,8 @@ export async function deactivateBusiness(id: number) {
 
 export async function fetchProfile(): Promise<User> {
   /** Fetch the current user's profile. */
-  const res = await fetch(`${API_BASE_URL}/api/profile`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders(),
-    },
+  const res = await authedFetch(`${API_BASE_URL}/api/profile`, {
+    headers: { "Content-Type": "application/json" },
   });
   if (!res.ok) {
     throw new Error("Failed to load profile");
@@ -375,11 +407,8 @@ export async function fetchProfile(): Promise<User> {
 
 export async function fetchProfileDetails(): Promise<ProfileDetailsResponse> {
   /** Fetch a richer profile snapshot including onboarding/organization info. */
-  const res = await fetch(`${API_BASE_URL}/api/profile/details`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders(),
-    },
+  const res = await authedFetch(`${API_BASE_URL}/api/profile/details`, {
+    headers: { "Content-Type": "application/json" },
   });
   if (!res.ok) {
     throw new Error("Failed to load profile details");
@@ -395,9 +424,9 @@ export async function updateOnboardingProfile(data: {
   description?: string | null;
 }) {
   /** Update onboarding/business profile fields displayed on the Profile page. */
-  const res = await fetch(`${API_BASE_URL}/api/profile/onboarding`, {
+  const res = await authedFetch(`${API_BASE_URL}/api/profile/onboarding`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
   if (!res.ok) {
@@ -425,12 +454,9 @@ export async function updateProfile(data: {
   state?: string;
   country?: string;
 }): Promise<User> {
-  const res = await fetch(`${API_BASE_URL}/api/profile`, {
+  const res = await authedFetch(`${API_BASE_URL}/api/profile`, {
     method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders(),
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
   if (!res.ok) {
@@ -441,7 +467,7 @@ export async function updateProfile(data: {
 
 export async function listAccounts() {
   /** List payout rails/accounts saved for the authenticated user. */
-  const res = await fetch(`${API_BASE_URL}/api/accounts`, { headers: authHeaders() });
+  const res = await authedFetch(`${API_BASE_URL}/api/accounts`);
   if (!res.ok) {
     throw new Error("Failed to load accounts");
   }
@@ -450,9 +476,9 @@ export async function listAccounts() {
 
 export async function createAccount(data: AccountPayload) {
   /** Create a new payout rail/account for the authenticated user. */
-  const res = await fetch(`${API_BASE_URL}/api/accounts`, {
+  const res = await authedFetch(`${API_BASE_URL}/api/accounts`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
   if (!res.ok) {
@@ -464,16 +490,16 @@ export async function createAccount(data: AccountPayload) {
 
 export async function onboardingCurrent(): Promise<OnboardingCurrentResponse> {
   /** Fetch the current active onboarding session (if any). */
-  const res = await fetch(`${API_BASE_URL}/onboarding/current`, { headers: { ...authHeaders() } });
+  const res = await authedFetch(`${API_BASE_URL}/onboarding/current`);
   if (!res.ok) throw new Error(await parseError(res, "Unable to load onboarding session"));
   return res.json();
 }
 
 export async function onboardingStep1(payload: OnboardingStep1Payload): Promise<OnboardingStep1Response> {
   /** Submit onboarding Step 1 (legal entity details). */
-  const res = await fetch(`${API_BASE_URL}/onboarding/step-1`, {
+  const res = await authedFetch(`${API_BASE_URL}/onboarding/step-1`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(await parseError(res, "Unable to save Step 1"));
@@ -482,9 +508,9 @@ export async function onboardingStep1(payload: OnboardingStep1Payload): Promise<
 
 export async function onboardingStep2(payload: OnboardingStep2Payload) {
   /** Submit onboarding Step 2 (authorization role). */
-  const res = await fetch(`${API_BASE_URL}/onboarding/step-2`, {
+  const res = await authedFetch(`${API_BASE_URL}/onboarding/step-2`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(await parseError(res, "Unable to save Step 2"));
@@ -495,9 +521,8 @@ export async function onboardingUploadId(file: File) {
   /** Upload an identity document for onboarding Step 3. */
   const formData = new FormData();
   formData.append("file", file);
-  const res = await fetch(`${API_BASE_URL}/onboarding/upload-id`, {
+  const res = await authedFetch(`${API_BASE_URL}/onboarding/upload-id`, {
     method: "POST",
-    headers: { ...authHeaders() },
     body: formData,
   });
   if (!res.ok) throw new Error(await parseError(res, "Unable to upload document"));
@@ -506,9 +531,9 @@ export async function onboardingUploadId(file: File) {
 
 export async function onboardingStep3(payload: OnboardingStep3Payload) {
   /** Submit onboarding Step 3 (identity verification attestation + document reference). */
-  const res = await fetch(`${API_BASE_URL}/onboarding/step-3`, {
+  const res = await authedFetch(`${API_BASE_URL}/onboarding/step-3`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(await parseError(res, "Unable to save Step 3"));
@@ -517,9 +542,9 @@ export async function onboardingStep3(payload: OnboardingStep3Payload) {
 
 export async function onboardingStep4(payload: OnboardingStep4Payload) {
   /** Submit onboarding Step 4 (bank rail mapping; account number encrypted server-side). */
-  const res = await fetch(`${API_BASE_URL}/onboarding/step-4`, {
+  const res = await authedFetch(`${API_BASE_URL}/onboarding/step-4`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(await parseError(res, "Unable to save Step 4"));
@@ -528,9 +553,9 @@ export async function onboardingStep4(payload: OnboardingStep4Payload) {
 
 export async function verifySendOtp(method: "email" | "sms") {
   /** Send an onboarding verification OTP (email or SMS; SMS is stubbed in MVP). */
-  const res = await fetch(`${API_BASE_URL}/verify/send-otp`, {
+  const res = await authedFetch(`${API_BASE_URL}/verify/send-otp`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ method }),
   });
   if (!res.ok) throw new Error(await parseError(res, "Unable to send OTP"));
@@ -539,9 +564,9 @@ export async function verifySendOtp(method: "email" | "sms") {
 
 export async function verifyConfirmOtp(code: string) {
   /** Confirm onboarding verification OTP; completes onboarding and issues a UPI. */
-  const res = await fetch(`${API_BASE_URL}/verify/confirm-otp`, {
+  const res = await authedFetch(`${API_BASE_URL}/verify/confirm-otp`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ code }),
   });
   if (!res.ok) throw new Error(await parseError(res, "Unable to confirm OTP"));
@@ -550,18 +575,26 @@ export async function verifyConfirmOtp(code: string) {
 
 export async function verifyAvailableSlots() {
   /** Fetch available verification-call slots (deterministic in MVP). */
-  const res = await fetch(`${API_BASE_URL}/verify/available-slots`, { headers: { ...authHeaders() } });
+  const res = await authedFetch(`${API_BASE_URL}/verify/available-slots`);
   if (!res.ok) throw new Error(await parseError(res, "Unable to load slots"));
   return res.json() as Promise<{ slots: string[] }>;
 }
 
 export async function verifyScheduleCall(scheduled_at: string) {
   /** Schedule a verification call for onboarding. */
-  const res = await fetch(`${API_BASE_URL}/verify/schedule-call`, {
+  const res = await authedFetch(`${API_BASE_URL}/verify/schedule-call`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ scheduled_at }),
   });
   if (!res.ok) throw new Error(await parseError(res, "Unable to schedule call"));
+  return res.json();
+}
+
+export async function verifyCompleteCall(session_id: string) {
+  /** Mark a verification call complete (dev/MVP helper). */
+  const params = new URLSearchParams({ session_id });
+  const res = await authedFetch(`${API_BASE_URL}/verify/complete-call?${params.toString()}`, { method: "POST" });
+  if (!res.ok) throw new Error(await parseError(res, "Unable to complete call verification"));
   return res.json();
 }

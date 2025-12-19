@@ -29,16 +29,18 @@ export default function AccountsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
 
   useEffect(() => {
-    if (!ready) return;
+    if (!mounted || !ready) return;
     if (!token) {
       router.replace("/login");
       return;
     }
     void requireVerifiedOrRedirect({ token, router });
     void loadAccounts();
-  }, [ready, token]);
+  }, [mounted, ready, token]);
 
   async function loadAccounts() {
     try {

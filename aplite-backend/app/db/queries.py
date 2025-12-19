@@ -16,7 +16,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, TypedDict
 
-from app.db.connection import get_connection
+import psycopg2
+
+from app.db.connection import get_connection, transaction
 from app.utils import crypto
 from app.utils.email import send_email
 from app.utils.security import hash_session_token
@@ -59,6 +61,7 @@ class BusinessRecord(TypedDict, total=False):
 
 class PaymentAccountRecord(TypedDict, total=False):
     id: int
+    org_id: str
     user_id: int
     business_id: int
     payment_index: int
@@ -75,6 +78,7 @@ class PaymentAccountRecord(TypedDict, total=False):
     bank_country: Optional[str]
     bank_city: Optional[str]
     enc: Dict[str, Dict[str, str]]
+    status: str
 
 
 class UserRecord(TypedDict, total=False):
@@ -156,14 +160,22 @@ class VerificationAttemptRecord(TypedDict, total=False):
     verified_at: Optional[str]
 
 
-def _next_payment_index_for_user(user_id: int) -> int:
-    """Return the next payment_index for a user's accounts."""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("select coalesce(max(payment_index), 0) as max_pi from payment_accounts where user_id = %s", (user_id,))
-            row = cur.fetchone()
-            current = int(row["max_pi"] or 0) if row else 0
-            return current + 1
+def _next_payment_index_for_org(org_id: str, *, conn: psycopg2.extensions.connection | None = None) -> int:
+    """Return the next payment_index for an org's accounts."""
+    params = (str(org_id),)
+    if conn is None:
+        with get_connection() as conn_local:
+            with conn_local.cursor() as cur:
+                cur.execute("select coalesce(max(payment_index), 0) as max_pi from payment_accounts where org_id = %s", params)
+                row = cur.fetchone()
+                current = int(row["max_pi"] or 0) if row else 0
+                return current + 1
+
+    with conn.cursor() as cur:
+        cur.execute("select coalesce(max(payment_index), 0) as max_pi from payment_accounts where org_id = %s", params)
+        row = cur.fetchone()
+        current = int(row["max_pi"] or 0) if row else 0
+        return current + 1
 
 
 def _decrypt_payment_account(row: Optional[PaymentAccountRecord]) -> Optional[PaymentAccountRecord]:
@@ -182,10 +194,10 @@ def _decrypt_payment_account(row: Optional[PaymentAccountRecord]) -> Optional[Pa
     return decrypted
 
 
-def create_business(**payload: Any) -> int:
+def create_business(*, conn: psycopg2.extensions.connection | None = None, commit: bool = True, **payload: Any) -> int:
     """Persist a business row and return its ID."""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
+    def _insert(target_conn: psycopg2.extensions.connection) -> int:
+        with target_conn.cursor() as cur:
             cur.execute(
                 """
                 insert into businesses
@@ -211,9 +223,19 @@ def create_business(**payload: Any) -> int:
                     payload.get("status", "active"),
                 ),
             )
-            conn.commit()
             row = cur.fetchone()
             return int(row["id"])
+
+    if conn is None:
+        with get_connection() as conn_local:
+            business_id = _insert(conn_local)
+            conn_local.commit()
+            return business_id
+
+    business_id = _insert(conn)
+    if commit:
+        conn.commit()
+    return business_id
 
 
 def update_business_status(business_id: int, *, status: str) -> Optional[BusinessRecord]:
@@ -224,12 +246,14 @@ def update_business_status(business_id: int, *, status: str) -> Optional[Busines
             return cur.fetchone()
 
 
-def create_payment_account(**payload: Any) -> int:
+def create_payment_account(*, conn: psycopg2.extensions.connection | None = None, commit: bool = True, **payload: Any) -> int:
     """Persist a payment account row and return its ID."""
     if "user_id" not in payload:
         raise ValueError("user_id is required for payment accounts")
+    if "org_id" not in payload:
+        raise ValueError("org_id is required for payment accounts")
     if "payment_index" not in payload:
-        payload["payment_index"] = _next_payment_index_for_user(payload["user_id"])
+        payload["payment_index"] = _next_payment_index_for_org(str(payload["org_id"]), conn=conn)
 
     sensitive_fields = [
         "ach_routing",
@@ -251,16 +275,17 @@ def create_payment_account(**payload: Any) -> int:
     if enc:
         payload["enc"] = enc
 
-    with get_connection() as conn:
-        with conn.cursor() as cur:
+    def _insert(target_conn: psycopg2.extensions.connection) -> int:
+        with target_conn.cursor() as cur:
             cur.execute(
                 """
                 insert into payment_accounts
-                (user_id, business_id, payment_index, rail, bank_name, account_name, enc, created_at)
-                values (%s,%s,%s,%s,%s,%s,%s, now())
+                (org_id, user_id, business_id, payment_index, rail, bank_name, account_name, enc, status, created_at)
+                values (%s,%s,%s,%s,%s,%s,%s,%s,%s, now())
                 returning id
                 """,
                 (
+                    payload["org_id"],
                     payload["user_id"],
                     payload.get("business_id"),
                     payload["payment_index"],
@@ -268,11 +293,22 @@ def create_payment_account(**payload: Any) -> int:
                     payload["bank_name"],
                     payload.get("account_name"),
                     json.dumps(payload.get("enc", {})),
+                    payload.get("status", "active"),
                 ),
             )
-            conn.commit()
             row = cur.fetchone()
             return int(row["id"])
+
+    if conn is None:
+        with get_connection() as conn_local:
+            account_id = _insert(conn_local)
+            conn_local.commit()
+            return account_id
+
+    account_id = _insert(conn)
+    if commit:
+        conn.commit()
+    return account_id
 
 
 def list_businesses() -> List[BusinessRecord]:
@@ -297,10 +333,7 @@ def _table_exists(table_name: str) -> bool:
 
 def _list_public_clients_sql_verified_users(*, search: Optional[str], limit: int) -> List[Dict[str, Any]]:
     """
-    Return a public directory of verified clients (companies).
-
-    This endpoint intentionally only includes businesses whose owning user has
-    at least one onboarding session in VERIFIED state.
+    Public directory of verified orgs.
     """
     search_value = (search or "").strip()
     search_like = f"%{search_value.lower()}%" if search_value else None
@@ -310,26 +343,21 @@ def _list_public_clients_sql_verified_users(*, search: Optional[str], limit: int
             cur.execute(
                 """
                 select
-                    b.id,
-                    b.legal_name,
-                    coalesce(nullif(u.company_name,''), nullif(u.company,''), b.legal_name) as company_name,
-                    b.country,
+                    o.id,
+                    o.legal_name,
+                    coalesce(nullif(u.company_name,''), nullif(u.company,''), o.legal_name) as company_name,
+                    coalesce(o.address->>'country', u.country) as country,
                     u.state,
                     u.summary,
                     u.established_year,
-                    b.status,
-                    b.website
-                from businesses b
-                join users u on u.id = b.user_id
-                where (b.status is null or b.status <> 'deactivated')
-                  and exists (
-                    select 1
-                    from onboarding_sessions s
-                    where s.user_id = u.id
-                      and s.state = 'VERIFIED'
-                  )
-                  and (%s is null or lower(coalesce(nullif(u.company_name,''), nullif(u.company,''), b.legal_name)) like %s)
-                order by b.id desc
+                    o.status,
+                    o.website
+                from organizations o
+                join users u on u.id = o.user_id
+                where (o.status is null or o.status <> 'deactivated')
+                  and (o.verification_status = 'verified')
+                  and (%s is null or lower(coalesce(nullif(u.company_name,''), nullif(u.company,''), o.legal_name)) like %s)
+                order by o.created_at desc
                 limit %s
                 """,
                 (search_like, search_like, int(limit)),
@@ -337,40 +365,8 @@ def _list_public_clients_sql_verified_users(*, search: Optional[str], limit: int
             return cur.fetchall()
 
 def _list_public_clients_sql_verified_businesses(*, search: Optional[str], limit: int) -> List[Dict[str, Any]]:
-    """
-    Legacy-compatible public directory query.
-
-    Some early MVP schemas may not include onboarding tables; in that case we
-    approximate "verified" using `businesses.verification_status = 'verified'`.
-    """
-    search_value = (search or "").strip()
-    search_like = f"%{search_value.lower()}%" if search_value else None
-
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                select
-                    b.id,
-                    b.legal_name,
-                    coalesce(nullif(u.company_name,''), nullif(u.company,''), b.legal_name) as company_name,
-                    b.country,
-                    u.state,
-                    u.summary,
-                    u.established_year,
-                    b.status,
-                    b.website
-                from businesses b
-                join users u on u.id = b.user_id
-                where (b.status is null or b.status <> 'deactivated')
-                  and (b.verification_status = 'verified')
-                  and (%s is null or lower(coalesce(nullif(u.company_name,''), nullif(u.company,''), b.legal_name)) like %s)
-                order by b.id desc
-                limit %s
-                """,
-                (search_like, search_like, int(limit)),
-            )
-            return cur.fetchall()
+    # Legacy path unused in org-centric model; fall back to org query.
+    return _list_public_clients_sql_verified_users(search=search, limit=limit)
 
 def list_public_clients(*, search: Optional[str], limit: int) -> List[Dict[str, Any]]:
     """
@@ -385,6 +381,12 @@ def list_public_clients(*, search: Optional[str], limit: int) -> List[Dict[str, 
             return _list_public_clients_sql_verified_users(search=search, limit=limit)
         return _list_public_clients_sql_verified_businesses(search=search, limit=limit)
     except Exception:
+        # Ensure the failed transaction doesn't poison the connection before fallback.
+        try:
+            with get_connection() as conn:
+                conn.rollback()
+        except Exception:
+            pass
         results: List[Dict[str, Any]] = []
         for biz in list_businesses():
             if biz.get("status") == "deactivated":
@@ -487,10 +489,22 @@ def get_payment_account(
             return _decrypt_payment_account(row) if row else None
 
 
-def list_payment_accounts_for_user(user_id: int) -> List[PaymentAccountRecord]:
+def list_payment_accounts_for_owner(user_id: int) -> List[PaymentAccountRecord]:
+    """
+    Return payment accounts for orgs owned by the user.
+    """
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("select * from payment_accounts where user_id = %s order by id desc", (user_id,))
+            cur.execute(
+                """
+                select pa.*
+                from payment_accounts pa
+                join organizations o on o.id = pa.org_id
+                where o.user_id = %s
+                order by pa.id desc
+                """,
+                (user_id,),
+            )
             rows = cur.fetchall()
             return [_decrypt_payment_account(row) for row in rows]
 
@@ -503,7 +517,18 @@ def get_payment_account_by_id(account_id: int) -> Optional[PaymentAccountRecord]
             return _decrypt_payment_account(row) if row else None
 
 
-def update_payment_account(account_id: int, **fields: Any) -> Optional[PaymentAccountRecord]:
+def get_payment_account_by_org_and_index(org_id: str, payment_index: int, rail: str) -> Optional[PaymentAccountRecord]:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "select * from payment_accounts where org_id = %s and payment_index = %s and rail = %s and status <> 'disabled'",
+                (str(org_id), int(payment_index), rail),
+            )
+            row = cur.fetchone()
+            return _decrypt_payment_account(row) if row else None
+
+
+def update_payment_account(account_id: int, *, conn: psycopg2.extensions.connection | None = None, commit: bool = True, **fields: Any) -> Optional[PaymentAccountRecord]:
     # simplistic partial update for business_id
     set_fields = []
     params: List[Any] = []
@@ -511,14 +536,31 @@ def update_payment_account(account_id: int, **fields: Any) -> Optional[PaymentAc
         set_fields.append(f"{key} = %s")
         params.append(value)
     if not set_fields:
-        return get_payment_account_by_id(account_id)
-    params.append(account_id)
-    with get_connection() as conn:
+        if conn is None:
+            return get_payment_account_by_id(account_id)
         with conn.cursor() as cur:
-            cur.execute(f"update payment_accounts set {', '.join(set_fields)} where id = %s returning *", params)
-            conn.commit()
+            cur.execute("select * from payment_accounts where id = %s", (account_id,))
             row = cur.fetchone()
             return _decrypt_payment_account(row) if row else None
+
+    params.append(account_id)
+
+    def _update(target_conn: psycopg2.extensions.connection) -> Optional[PaymentAccountRecord]:
+        with target_conn.cursor() as cur:
+            cur.execute(f"update payment_accounts set {', '.join(set_fields)} where id = %s returning *", params)
+            row = cur.fetchone()
+            return _decrypt_payment_account(row) if row else None
+
+    if conn is None:
+        with get_connection() as conn_local:
+            updated = _update(conn_local)
+            conn_local.commit()
+            return updated
+
+    updated = _update(conn)
+    if commit:
+        conn.commit()
+    return updated
 
 
 def create_user(**payload: Any) -> int:
@@ -715,9 +757,12 @@ def get_user_stats(user_id: int) -> Dict[str, int]:
     """Return a few small counts used by the UI (accounts, issued UPIs)."""
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("select count(*) as n from payment_accounts where user_id = %s", (user_id,))
+            cur.execute(
+                "select count(*) as n from payment_accounts pa join organizations o on o.id = pa.org_id where o.user_id = %s",
+                (user_id,),
+            )
             accounts = int((cur.fetchone() or {}).get("n", 0) or 0)
-            cur.execute("select count(*) as n from businesses where user_id = %s", (user_id,))
+            cur.execute("select count(*) as n from organizations where user_id = %s and coalesce(nullif(upi,''), null) is not null", (user_id,))
             upis = int((cur.fetchone() or {}).get("n", 0) or 0)
     return {"payment_accounts": accounts, "upis": upis}
 
@@ -871,6 +916,51 @@ def get_organization(org_id: str, user_id: int) -> Optional[OrganizationRecord]:
         with conn.cursor() as cur:
             cur.execute("select * from organizations where id = %s and user_id = %s", (str(org_id), user_id))
             return cur.fetchone()
+
+
+def list_organizations_for_user(user_id: int) -> List[OrganizationRecord]:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("select * from organizations where user_id = %s order by created_at desc", (user_id,))
+            return cur.fetchall()
+
+
+def get_organization_by_upi(upi: str) -> Optional[OrganizationRecord]:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("select * from organizations where upi = %s", (upi,))
+            return cur.fetchone()
+
+
+def set_organization_upi(org_id: str, upi: str, payment_account_id: int, *, verification_status: str = "verified", status: str = "active") -> None:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "update organizations set upi=%s, verification_status=%s, status=%s, updated_at=now() where id=%s",
+                (upi, verification_status, status, str(org_id)),
+            )
+            cur.execute("update payment_accounts set status='active' where id=%s", (payment_account_id,))
+            conn.commit()
+
+
+def set_onboarding_payment_account(session_id: uuid.UUID, payment_account_id: int) -> None:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "update onboarding_sessions set step_statuses = jsonb_set(coalesce(step_statuses,'{}'::jsonb), '{payment_account_id}', %s::jsonb, true), last_saved_at=now() where id=%s",
+                (json.dumps(payment_account_id), str(session_id)),
+            )
+            conn.commit()
+
+
+def get_onboarding_payment_account(session_id: uuid.UUID) -> Optional[int]:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("select (step_statuses->>'payment_account_id')::int as account_id from onboarding_sessions where id = %s", (str(session_id),))
+            row = cur.fetchone()
+            if not row:
+                return None
+            return row.get("account_id")
 
 
 def create_onboarding_session(
@@ -1205,10 +1295,7 @@ def complete_onboarding_and_issue_identifier(session_id: uuid.UUID) -> str:
     """
     Mark onboarding VERIFIED and issue a business UPI for the org.
 
-    MVP behavior:
-    - chooses one rail in priority order: ACH -> WIRE_DOM -> SWIFT
-    - creates a payment_account row (encrypted coordinates)
-    - creates a businesses row and returns the new upi
+    Refactored: one UPI per org, payment account created in Step 4.
     """
     session = get_onboarding_session_by_id(session_id)
     if not session:
@@ -1218,87 +1305,30 @@ def complete_onboarding_and_issue_identifier(session_id: uuid.UUID) -> str:
     if not org:
         raise RuntimeError("Organization not found.")
 
-    # Fetch latest bank mapping
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "select * from bank_rail_mappings where session_id = %s order by created_at desc limit 1",
-                (str(session_id),),
-            )
-            bank = cur.fetchone()
+    payment_account_id = get_onboarding_payment_account(uuid.UUID(str(session["id"])))
+    if not payment_account_id:
+        raise RuntimeError("Payment account missing for onboarding session.")
 
-    if not bank:
-        raise RuntimeError("Bank mapping missing.")
+    account = get_payment_account_by_id(payment_account_id)
+    if not account:
+        raise RuntimeError("Payment account not found.")
+    if str(account.get("org_id")) != str(org["id"]):
+        raise RuntimeError("Payment account does not belong to this organization.")
 
-    rail = "ACH" if bank.get("ach_routing") else ("WIRE_DOM" if bank.get("wire_routing") else "SWIFT")
-
-    # Decrypt account number just-in-time to populate payment_accounts enc structure.
-    enc = bank.get("account_number_enc") or {}
-    account_number = None
-    try:
-        account_number = crypto.decrypt_value(enc["n"], enc["c"])
-    except Exception:
-        account_number = None
-    if not account_number:
-        raise RuntimeError("Unable to read bank account number.")
-
-    bank_address = ""
-    try:
-        addr = org.get("address") or {}
-        bank_address = ", ".join(filter(None, [addr.get("street1"), addr.get("city"), addr.get("state"), addr.get("zip")]))
-    except Exception:
-        bank_address = ""
-
-    payment_account_id = create_payment_account(
-        user_id=int(session["user_id"]),
-        business_id=None,
-        rail=rail,
-        bank_name=bank.get("bank_name") or "",
-        account_name=org.get("legal_name") or "Account",
-        ach_routing=bank.get("ach_routing") if rail == "ACH" else None,
-        ach_account=account_number if rail == "ACH" else None,
-        wire_routing=bank.get("wire_routing") if rail == "WIRE_DOM" else None,
-        wire_account=account_number if rail == "WIRE_DOM" else None,
-        bank_address=bank_address or None,
-        swift_bic=bank.get("swift") if rail == "SWIFT" else None,
-        iban=account_number if rail == "SWIFT" else None,
-        bank_country=None,
-        bank_city=None,
-    )
-
+    payment_index = int(account.get("payment_index", 1) or 1)
     core_id = generate_core_entity_id()
-    user = get_user_by_id(int(session["user_id"])) or {}
+    owner_user_id = int(org.get("user_id") or session["user_id"])
+    user = get_user_by_id(owner_user_id) or {}
     parent_upi = user.get("master_upi") or ""
     if not parent_upi:
         raise RuntimeError("Missing master UPI for user.")
 
-    # Align payment_index with the created payment account (so resolve matches PI embedded in UPI).
-    account = get_payment_account_by_id(payment_account_id) or {}
-    payment_index = int(account.get("payment_index", 1) or 1)
+    upi = generate_upi(core_id, payment_index, user_id=owner_user_id)
 
-    upi = generate_upi(core_id, payment_index, user_id=int(session["user_id"]))
-
-    create_business(
-        user_id=int(session["user_id"]),
-        parent_upi=parent_upi,
-        upi=upi,
-        payment_account_id=payment_account_id,
-        rails=[rail],
-        core_entity_id=core_id,
-        legal_name=org.get("legal_name") or "",
-        ein=org.get("ein") or "",
-        business_type=org.get("entity_type") or "",
-        website=org.get("website"),
-        address=bank_address or "",
-        country="US",
-        verification_status="verified",
-        status="active",
-    )
-    update_payment_account(payment_account_id, business_id=get_business_by_upi(upi)["id"])
+    set_organization_upi(str(org["id"]), upi, payment_account_id, verification_status="verified", status="active")
 
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("update organizations set issued_upi=%s, updated_at=now() where id=%s", (upi, org["id"]))
             cur.execute(
                 "update onboarding_sessions set state='VERIFIED', completed_at=now(), last_saved_at=now() where id=%s",
                 (str(session_id),),

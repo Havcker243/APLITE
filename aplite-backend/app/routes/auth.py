@@ -4,7 +4,7 @@ import hmac
 import os
 import secrets
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Header, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Header, Request, Response, status
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, EmailStr, Field
 
@@ -44,6 +44,7 @@ class LoginVerifyRequest(BaseModel):
 class AuthResponse(BaseModel):
     token: str
     user: dict
+    needs_onboarding: bool | None = None
 
 
 class ProfileUpdateRequest(BaseModel):
@@ -102,15 +103,33 @@ def _issue_session(user_id: int) -> str:
     return token
 
 
+def _set_session_cookie(response: Response, token: str):
+    """Set an HttpOnly session cookie alongside the token response."""
+    secure_cookie = os.getenv("SESSION_COOKIE_SECURE", "0") not in ("0", "false", "False")
+    response.set_cookie(
+        key="aplite_session",
+        value=token,
+        httponly=True,
+        secure=secure_cookie,
+        samesite="lax",
+        max_age=int(os.getenv("SESSION_TTL_HOURS", "168")) * 3600,
+        path="/",
+    )
+
+
+def _clear_session_cookie(response: Response):
+    response.delete_cookie("aplite_session", path="/")
+
+
 def _sanitize_user(user: dict) -> dict:
     sanitized = dict(user)
     sanitized.pop("password_hash", None)
     return sanitized
 
 
-def get_current_user(authorization: str | None = Header(default=None)):
+def get_current_user(request: Request, authorization: str | None = Header(default=None)):
     """FastAPI dependency: authenticate the request and return the current user row."""
-    token = _bearer_token_from_header(authorization)
+    token = _bearer_token_from_header(authorization) or request.cookies.get("aplite_session")
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing or invalid token")
     session = queries.get_session(token)
@@ -133,7 +152,7 @@ def get_current_user(authorization: str | None = Header(default=None)):
 
 
 @router.post("/api/auth/signup", response_model=AuthResponse)
-def signup(payload: SignupRequest):
+def signup(payload: SignupRequest, response: Response):
     """Create a new user and return a session token + sanitized user profile."""
     if not payload.accept_terms:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Please accept the terms to continue")
@@ -165,8 +184,10 @@ def signup(payload: SignupRequest):
     master_upi = generate_upi(core_id, payment_index=0, user_id=user_id)
     queries.update_user_master_upi(user_id, master_upi)
     token = _issue_session(user_id)
+    _set_session_cookie(response, token)
     user = queries.get_user_by_id(user_id) or {}
-    return {"token": token, "user": _sanitize_user(user)}
+    needs_onboarding = True  # brand-new users must onboard
+    return {"token": token, "user": _sanitize_user(user), "needs_onboarding": needs_onboarding}
 
 
 @router.post("/api/auth/login/start")
@@ -206,8 +227,20 @@ def login_start(payload: LoginStartRequest, background_tasks: BackgroundTasks, r
 
 
 @router.post("/api/auth/login/verify", response_model=AuthResponse)
-def login_verify(payload: LoginVerifyRequest):
+def login_verify(payload: LoginVerifyRequest, response: Response):
     """Complete login: verify OTP and return a new session token."""
+    attempts_rule = RateLimit(
+        limit=int(os.getenv("RL_LOGIN_OTP_ATTEMPTS", "5")),
+        window_seconds=int(os.getenv("RL_LOGIN_OTP_WINDOW_SECONDS", "600")),
+    )
+    ok, retry_after = check_rate_limit(f"login_verify:{payload.login_id}", attempts_rule)
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many verification attempts. Request a new code.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
     record = queries.get_otp(payload.login_id)
     if not record:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired login request")
@@ -243,15 +276,20 @@ def login_verify(payload: LoginVerifyRequest):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User not found")
 
     token = _issue_session(record["user_id"])
-    return {"token": token, "user": _sanitize_user(user)}
+    _set_session_cookie(response, token)
+    # Determine if user has completed onboarding.
+    latest_session = queries.get_latest_onboarding_session(record["user_id"]) if record else None
+    needs_onboarding = not latest_session or str(latest_session.get("state")) != "VERIFIED"
+    return {"token": token, "user": _sanitize_user(user), "needs_onboarding": needs_onboarding}
 
 
 @router.post("/api/auth/logout")
-def logout(user=Depends(get_current_user), authorization: str | None = Header(default=None)):
+def logout(response: Response, user=Depends(get_current_user), authorization: str | None = Header(default=None)):
     """Invalidate the current session token (best-effort)."""
-    token = _bearer_token_from_header(authorization)
+    token = _bearer_token_from_header(authorization) or ""
     if token:
         queries.delete_session(token)
+    _clear_session_cookie(response)
     return {"detail": "Logged out"}
 
 
@@ -283,7 +321,18 @@ def get_profile_details(user=Depends(get_current_user)):
         org = None
 
     stats = queries.get_user_stats(user["id"])
-    return jsonable_encoder({"user": _sanitize_user(user), "onboarding": latest_session, "organization": org, "stats": stats})
+    onboarding_state = str(latest_session.get("state")) if latest_session else "NOT_STARTED"
+    needs_onboarding = onboarding_state != "VERIFIED"
+    return jsonable_encoder(
+        {
+            "user": _sanitize_user(user),
+            "onboarding": latest_session,
+            "organization": org,
+            "stats": stats,
+            "needs_onboarding": needs_onboarding,
+            "onboarding_state": onboarding_state,
+        }
+    )
 
 
 @router.put("/api/profile/onboarding")

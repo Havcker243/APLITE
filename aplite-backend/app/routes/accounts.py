@@ -25,7 +25,7 @@ class AccountCreateRequest(BaseModel):
 
 @router.get("/api/accounts")
 def list_accounts(user=Depends(get_current_user)):
-    return queries.list_payment_accounts_for_user(user["id"])
+    return queries.list_payment_accounts_for_owner(user["id"])
 
 
 @router.post("/api/accounts", status_code=status.HTTP_201_CREATED)
@@ -35,10 +35,16 @@ def create_account(payload: AccountCreateRequest, user=Depends(get_current_user)
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Your account must be verified before adding payout rails.",
         )
+
+    orgs = queries.list_organizations_for_user(user["id"])
+    if not orgs:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No organization found for this user.")
+    org = orgs[0]
+
     try:
         account_id = queries.create_payment_account(
             user_id=user["id"],
-            business_id=None,
+            org_id=str(org["id"]),
             rail=payload.rail,
             bank_name=payload.bank_name,
             account_name=payload.account_name or f"{payload.bank_name} account",
@@ -51,6 +57,7 @@ def create_account(payload: AccountCreateRequest, user=Depends(get_current_user)
             iban=payload.iban,
             bank_country=payload.bank_country,
             bank_city=payload.bank_city,
+            status="active",
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

@@ -55,7 +55,8 @@ export default function SignupPage() {
         established_year: form.established_year ? Number(form.established_year) : undefined,
       });
       login(response);
-      const next = typeof router.query.next === "string" ? router.query.next : "/onboard";
+      const needsOnboarding = Boolean(response.needs_onboarding);
+      const next = typeof router.query.next === "string" ? router.query.next : needsOnboarding ? "/onboard" : "/dashboard";
       router.push(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create account");

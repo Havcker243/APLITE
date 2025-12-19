@@ -18,12 +18,6 @@ class ResolveUPIRequest(BaseModel):
 @router.post("/api/resolve")
 def resolve_upi(payload: ResolveUPIRequest, user=Depends(get_current_user)):
     """Resolve a UPI (owned by the caller) into payout coordinates for the requested rail."""
-    if not queries.is_user_verified(user["id"]):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Your account must be verified before resolving UPIs.",
-        )
-
     upi_value = payload.upi.upper()
 
     if not validate_upi_format(upi_value):
@@ -34,26 +28,23 @@ def resolve_upi(payload: ResolveUPIRequest, user=Depends(get_current_user)):
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    business = queries.get_user_business_by_upi(user["id"], upi_value)
-    if business is None or business.get("status") == "deactivated":
+    org = queries.get_organization_by_upi(upi_value)
+    if not org or org.get("status") == "deactivated":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="UPI not found")
 
-    owner = queries.get_user_by_id(business.get("user_id")) or user
+    if int(org.get("user_id", -1)) != int(user["id"]):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not own this UPI.")
+
+    owner = queries.get_user_by_id(org.get("user_id")) or user
     if not queries.is_user_verified(int(owner.get("id", 0))):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Recipient account is not verified.")
 
     if not verify_upi(upi_value, int(owner["id"])):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="UPI not found")
 
-    account_id = business.get("payment_account_id")
-    account = queries.get_payment_account_by_id(account_id) if account_id else None
-    if account and (account.get("rail") != payload.rail or account.get("payment_index") != parsed.payment_index):
-        account = None
+    account = queries.get_payment_account_by_org_and_index(str(org["id"]), parsed.payment_index, payload.rail)
     if account is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Payment details not found for this rail",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment details not found for this rail")
 
     if payload.rail == "ACH":
         coordinates = {
@@ -78,10 +69,16 @@ def resolve_upi(payload: ResolveUPIRequest, user=Depends(get_current_user)):
             "bank_city": account.get("bank_city"),
         }
 
+    business = {
+        "legal_name": org.get("legal_name") or "",
+        # Country is stored inside the onboarding address blob; fall back to user country.
+        "country": (org.get("address") or {}).get("country") or owner.get("country") or "",
+    }
+
     return {
         "upi": upi_value,
         "rail": payload.rail,
-        "business": {"legal_name": business["legal_name"], "country": business["country"]},
+        "business": business,
         "profile": {
             "company_name": owner.get("company_name") or owner.get("company"),
             "summary": owner.get("summary") or "",

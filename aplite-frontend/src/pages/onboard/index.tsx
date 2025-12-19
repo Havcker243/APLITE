@@ -18,15 +18,21 @@ export default function OnboardIndex() {
   const { currentStep, refreshSession } = useOnboardingWizard();
 
   useEffect(() => {
-    if (!ready) return;
-    if (!token) {
-      router.replace("/signup?next=/onboard");
-      return;
+  if (!ready || !token) return;
+
+  let cancelled = false;
+
+  (async () => {
+    const step = await refreshSession();
+    if (!cancelled) {
+      router.replace(stepPath(step ?? currentStep));
     }
-    void refreshSession().finally(() => {
-      router.replace(stepPath(currentStep));
-    });
-  }, [ready, token, router, refreshSession, currentStep]);
+  })();
+
+  return () => {
+    cancelled = true;
+  };
+}, [ready, token]);
 
   if (!ready) return <LoadingScreen />;
   if (!token) return <LoadingScreen />;

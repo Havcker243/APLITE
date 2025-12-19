@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { fetchPublicClients } from "../utils/api";
 
 type Client = {
@@ -41,13 +41,29 @@ export default function ClientsPage() {
     void load(query.trim());
   }
 
+  const normalizedClients = useMemo(
+    () =>
+      clients.map((client) => {
+        const website = client.website
+          ? client.website.startsWith("http")
+            ? client.website
+            : `https://${client.website}`
+          : null;
+        const location = [client.state, client.country].filter(Boolean).join(", ");
+        const displayName = client.company_name || client.legal_name || "Unnamed client";
+        const status = client.status || "active";
+        return { ...client, website, location, displayName, status };
+      }),
+    [clients]
+  );
+
   return (
     <div className="page-container">
       <section className="hero">
         <div>
-          <p className="section-title">Our present users</p>
-          <h1 className="hero-title">Discover verified clients</h1>
-          <p className="hero-subtitle">Search public profiles of companies using Aplite.</p>
+          <p className="section-title">Directory</p>
+          <h1 className="hero-title">Verified clients</h1>
+          <p className="hero-subtitle">Browse public profiles for companies that completed onboarding.</p>
         </div>
       </section>
 
@@ -57,7 +73,7 @@ export default function ClientsPage() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="card form-card" style={{ maxWidth: 640 }}>
+      <form onSubmit={handleSubmit} className="card form-card" style={{ maxWidth: 720 }}>
         <div className="form-grid" style={{ gridTemplateColumns: "1fr" }}>
           <input
             className="input-control"
@@ -73,38 +89,47 @@ export default function ClientsPage() {
         </div>
       </form>
 
-      <div className="card" style={{ marginTop: 20 }}>
-        <p className="section-title">Clients</p>
-        <div className="table">
-          <div className="table-head">
-            <span>Name</span>
-            <span>Location</span>
-            <span>Founded</span>
-            <span>Status</span>
-            <span>Summary</span>
-          </div>
-          {clients.map((client) => (
-            <div key={client.id} className="table-row">
-              <span>
-                {client.company_name || client.legal_name}
-                {client.website && (
-                  <>
-                    {" "}
-                    ·{" "}
-                    <a href={client.website} target="_blank" rel="noreferrer" className="nav-link" style={{ padding: 0 }}>
-                      Website
-                    </a>
-                  </>
-                )}
-              </span>
-              <span>{[client.state, client.country].filter(Boolean).join(", ") || "—"}</span>
-              <span>{client.established_year || "—"}</span>
-              <span className="status-pill">{client.status || "active"}</span>
-              <span className="history-meta">{client.summary || "—"}</span>
+      <div className="card-grid" style={{ marginTop: 20 }}>
+        {loading &&
+          Array.from({ length: 4 }).map((_, idx) => (
+            <div key={idx} className="card card--compact" style={{ minHeight: 150, opacity: 0.8, display: "grid", gap: 8 }}>
+              <div className="skeleton" style={{ width: "60%", height: 18 }} />
+              <div className="skeleton" style={{ width: "40%", height: 14 }} />
+              <div className="skeleton" style={{ width: "100%", height: 44 }} />
+              <div className="skeleton" style={{ width: "30%", height: 12 }} />
             </div>
           ))}
-          {!clients.length && !loading && <div className="history-meta">No clients found.</div>}
-        </div>
+
+        {!loading &&
+          normalizedClients.map((client) => (
+            <div key={client.id} className="card card--compact" style={{ display: "grid", gap: 8 }}>
+              <div className="meta-row">
+                <div>
+                  <p className="section-title" style={{ marginBottom: 6 }}>
+                    {client.country || "Global"}
+                  </p>
+                  <h3 style={{ margin: 0 }}>{client.displayName}</h3>
+                  <p className="hero-subtitle" style={{ marginTop: 4 }}>
+                    {client.location || "Location pending"}
+                    {client.established_year ? ` • Est. ${client.established_year}` : ""}
+                  </p>
+                </div>
+                <span className="status-pill status-pill--success">{client.status}</span>
+              </div>
+              <p className="hero-subtitle text-clamp" style={{ margin: 0 }}>
+                {client.summary || "No public summary provided."}
+              </p>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {client.website && (
+                  <a href={client.website} target="_blank" rel="noreferrer" className="button button-secondary" style={{ marginTop: 0, padding: "8px 14px" }}>
+                    Visit site
+                  </a>
+                )}
+              </div>
+            </div>
+          ))}
+
+        {!loading && !normalizedClients.length && <div className="hero-subtitle">No clients found.</div>}
       </div>
     </div>
   );
