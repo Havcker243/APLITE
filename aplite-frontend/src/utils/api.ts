@@ -418,6 +418,34 @@ export async function fetchProfileDetails(): Promise<ProfileDetailsResponse> {
   return res.json();
 }
 
+export async function createChildUpi(data: {
+  name: string;
+  type: string;
+  website?: string;
+  account_id?: number;
+  account?: AccountPayload;
+}) {
+  /** Issue a child/org UPI for the current user's org, using an existing or new payment account. */
+  const res = await authedFetch(`${API_BASE_URL}/api/orgs/child-upi`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    throw new Error(await parseError(res, "Unable to create child UPI"));
+  }
+  return res.json() as Promise<{ upi: string; payment_account_id: number }>;
+}
+
+export async function listChildUpis() {
+  /** List payment accounts/child UPIs for the current org. */
+  const res = await authedFetch(`${API_BASE_URL}/api/orgs/child-upis`);
+  if (!res.ok) {
+    throw new Error(await parseError(res, "Unable to load child UPIs"));
+  }
+  return res.json() as Promise<Array<{ upi: string; payment_account_id: number; rail: string; bank_name?: string; created_at?: string }>>;
+}
+
 export async function updateOnboardingProfile(data: {
   dba?: string | null;
   address?: { street1: string; street2?: string | null; city: string; state: string; zip: string; country: string } | null;
@@ -513,7 +541,7 @@ export async function onboardingUploadId(file: File) {
     body: formData,
   });
   if (!res.ok) throw new Error(await parseError(res, "Unable to upload document"));
-  return res.json() as Promise<{ file_id: string }>;
+  return res.json() as Promise<{ file_id: string; storage?: string }>;
 }
 
 export async function onboardingComplete(payload: {

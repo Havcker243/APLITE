@@ -508,6 +508,20 @@ def list_payment_accounts_for_owner(user_id: int) -> List[PaymentAccountRecord]:
             return [_decrypt_payment_account(row) for row in rows]
 
 
+def list_payment_accounts_for_org(org_id: str) -> List[PaymentAccountRecord]:
+    """
+    Return payment accounts for a specific org.
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "select * from payment_accounts where org_id = %s and status <> 'disabled' order by created_at desc",
+                (str(org_id),),
+            )
+            rows = cur.fetchall()
+            return [_decrypt_payment_account(row) for row in rows]
+
+
 def get_payment_account_by_id(account_id: int) -> Optional[PaymentAccountRecord]:
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -1097,6 +1111,7 @@ def onboarding_file_exists(*, file_id: str, user_id: int) -> bool:
     if not re.match(r"^id_[0-9a-f]{32}$", file_id):
         return False
 
+    # First, check metadata file to confirm ownership.
     base = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "uploads"))
     meta_path = os.path.abspath(os.path.join(base, f"{file_id}.json"))
     if not meta_path.startswith(base + os.sep):
@@ -1106,9 +1121,39 @@ def onboarding_file_exists(*, file_id: str, user_id: int) -> bool:
     try:
         with open(meta_path, "r", encoding="utf-8") as f:
             meta = json.load(f)
-        return int(meta.get("user_id", -1)) == int(user_id)
+        if int(meta.get("user_id", -1)) != int(user_id):
+            return False
     except Exception:
         return False
+
+    # If Supabase/S3 is configured, ensure the object exists as well.
+    bucket = os.getenv("DATABASE_BUCKET_NAME")
+    endpoint = os.getenv("DATABASE_BUCKET_S3_ENDPOINT")
+    access_key = os.getenv("DATABASE_BUCKET_S3_ACCESS_KEY_ID")
+    secret_key = os.getenv("DATABASE_BUCKET_S3_SECRET_ACCESS_KEY")
+    region = os.getenv("DATABASE_BUCKET_S3_REGION", "us-east-1")
+    if bucket and endpoint and access_key and secret_key:
+        try:
+            import boto3
+            from botocore.client import Config as BotoConfig
+
+            s3 = boto3.client(
+                "s3",
+                endpoint_url=endpoint,
+                region_name=region,
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                config=BotoConfig(signature_version="s3v4"),
+            )
+            key = f"ids/{file_id}.bin"
+            s3.head_object(Bucket=bucket, Key=key)
+            return True
+        except Exception:
+            return False
+
+    # Fallback: ensure local file exists.
+    bin_path = os.path.abspath(os.path.join(base, f"{file_id}.bin"))
+    return bin_path.startswith(base + os.sep) and os.path.exists(bin_path)
 
 
 def create_identity_verification(

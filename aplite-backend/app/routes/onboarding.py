@@ -6,6 +6,8 @@ import logging
 import re
 import uuid
 import json
+from typing import Optional
+import psycopg2
 from psycopg2.errors import UniqueViolation
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status, Form
@@ -15,6 +17,8 @@ from pydantic import BaseModel, Field, field_validator
 from app.db import queries
 from app.routes.auth import get_current_user
 from app.utils.upi import generate_core_entity_id, generate_upi
+import boto3
+from botocore.client import Config as BotoConfig
 
 router = APIRouter()
 logger = logging.getLogger("aplite")
@@ -223,45 +227,11 @@ async def onboarding_upload_id(file: UploadFile = File(...), user=Depends(get_cu
     if content_type not in ("image/jpeg", "image/png", "application/pdf"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported file type. Use jpg, png, or pdf.")
 
-    file_id = f"id_{uuid.uuid4().hex}"
-
-    # Stream to disk to avoid buffering full uploads in memory.
-    max_bytes = 10 * 1024 * 1024
-    base = queries.onboarding_upload_base_dir()
-    os.makedirs(base, exist_ok=True)
-    bin_path = os.path.abspath(os.path.join(base, f"{file_id}.bin"))
-    tmp_path = os.path.abspath(os.path.join(base, f"{file_id}.bin.tmp"))
-    if not bin_path.startswith(base + os.sep) or not tmp_path.startswith(base + os.sep):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid upload id")
-
-    written = 0
-    try:
-        with open(tmp_path, "wb") as out:
-            while True:
-                chunk = await file.read(1024 * 1024)  # 1MB chunks
-                if not chunk:
-                    break
-                written += len(chunk)
-                if written > max_bytes:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File too large (max 10MB).")
-                out.write(chunk)
-        os.replace(tmp_path, bin_path)
-        queries.store_onboarding_file_metadata(
-            file_id=file_id,
-            filename=file.filename,
-            content_type=content_type,
-            user_id=user["id"],
-        )
-    finally:
-        try:
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
-        except Exception:
-            pass
-    return {"file_id": file_id}
+    file_id, storage = _store_uploaded_file(file, user_id=user["id"])
+    return {"file_id": file_id, "storage": storage}
 
 
-def _store_uploaded_file(file: UploadFile, user_id: int) -> str:
+def _store_uploaded_file(file: UploadFile, user_id: int) -> tuple[str, str]:
     if not file.filename:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing file.")
     content_type = (file.content_type or "").lower()
@@ -269,39 +239,57 @@ def _store_uploaded_file(file: UploadFile, user_id: int) -> str:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported file type. Use jpg, png, or pdf.")
 
     file_id = f"id_{uuid.uuid4().hex}"
-    max_bytes = 10 * 1024 * 1024
-    base = queries.onboarding_upload_base_dir()
-    os.makedirs(base, exist_ok=True)
-    bin_path = os.path.abspath(os.path.join(base, f"{file_id}.bin"))
-    tmp_path = os.path.abspath(os.path.join(base, f"{file_id}.bin.tmp"))
-    if not bin_path.startswith(base + os.sep) or not tmp_path.startswith(base + os.sep):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid upload id")
 
-    written = 0
-    try:
-        with open(tmp_path, "wb") as out:
-            while True:
-                chunk = file.file.read(1024 * 1024)
-                if not chunk:
-                    break
-                written += len(chunk)
-                if written > max_bytes:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File too large (max 10MB).")
-                out.write(chunk)
-        os.replace(tmp_path, bin_path)
-        queries.store_onboarding_file_metadata(
-            file_id=file_id,
-            filename=file.filename,
-            content_type=content_type,
-            user_id=user_id,
-        )
-    finally:
+    # Read file into memory (max 10MB) for upload.
+    max_bytes = 10 * 1024 * 1024
+    data = file.file.read(max_bytes + 1)
+    if data is None:
+        data = b""
+    if len(data) > max_bytes:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File too large (max 10MB).")
+
+    # Attempt to upload to Supabase S3-compatible bucket; fallback to local disk.
+    bucket = os.getenv("DATABASE_BUCKET_NAME")
+    endpoint = os.getenv("DATABASE_BUCKET_S3_ENDPOINT")
+    access_key = os.getenv("DATABASE_BUCKET_S3_ACCESS_KEY_ID")
+    secret_key = os.getenv("DATABASE_BUCKET_S3_SECRET_ACCESS_KEY")
+    region = os.getenv("DATABASE_BUCKET_S3_REGION", "us-east-1")
+    key = f"ids/{file_id}.bin"
+    uploaded = False
+    storage = "local"
+    if bucket and endpoint and access_key and secret_key:
         try:
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
-        except Exception:
-            pass
-    return file_id
+            s3 = boto3.client(
+                "s3",
+                endpoint_url=endpoint,
+                region_name=region,
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                config=BotoConfig(signature_version="s3v4"),
+            )
+            s3.put_object(Bucket=bucket, Key=key, Body=data, ContentType=content_type)
+            uploaded = True
+            storage = "s3"
+        except Exception as exc:
+            logger.exception("Failed to upload ID document to Supabase storage: %s", exc)
+
+    if not uploaded:
+        base = queries.onboarding_upload_base_dir()
+        os.makedirs(base, exist_ok=True)
+        bin_path = os.path.abspath(os.path.join(base, f"{file_id}.bin"))
+        if not bin_path.startswith(base + os.sep):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid upload id")
+        with open(bin_path, "wb") as out:
+            out.write(data)
+
+    # Always store metadata locally to validate ownership.
+    queries.store_onboarding_file_metadata(
+        file_id=file_id,
+        filename=file.filename,
+        content_type=content_type,
+        user_id=user_id,
+    )
+    return file_id, storage
 
 
 @router.post("/onboarding/complete")
@@ -331,7 +319,7 @@ def onboarding_complete(
     # Handle ID document (uploaded file takes precedence).
     file_id = payload.identity.id_document_id or payload.id_document_id
     if file is not None:
-        file_id = _store_uploaded_file(file, user_id=user["id"])
+        file_id, _ = _store_uploaded_file(file, user_id=user["id"])
 
     # Basic role/risk determination and verification method
     risk_level = "low" if payload.role.role == "owner" else "high"
@@ -438,6 +426,12 @@ def onboarding_complete(
 
     except HTTPException:
         raise
+    except (UniqueViolation, psycopg2.IntegrityError) as exc:
+        logger.exception("Onboarding failed due to duplicate org/EIN")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An organization with this EIN already exists for this account.",
+        ) from exc
     except RuntimeError as exc:
         # Surface runtime issues (e.g., missing UPI secret) for easier debugging.
         logger.exception("Onboarding completion failed: %s", exc)

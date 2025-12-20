@@ -43,14 +43,16 @@ export default function OnboardStep3() {
     setError(null);
     try {
       let fileId = step3.file_id;
+      let storageHint = saved || null;
       if (!fileId && !callBased) {
         if (!step3.file) throw new Error("Upload a government ID document (jpg, png, or pdf).");
         const res = await onboardingUploadId(step3.file);
         fileId = res.file_id;
+        storageHint = res.storage ? `Uploaded (${res.storage === "s3" ? "cloud" : res.storage})` : "Uploaded";
         setStep3((prev) => ({ ...prev, file_id: fileId }));
       }
 
-      setSaved("Saved locally");
+      setSaved(storageHint || "Saved locally");
       markStepComplete(3);
       router.push("/onboard/step-4");
     } catch (err) {

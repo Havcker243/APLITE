@@ -381,3 +381,93 @@ def update_profile(payload: ProfileUpdateRequest, user=Depends(get_current_user)
     if not updated:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return _sanitize_user(updated)
+
+
+class ChildUpiRequest(BaseModel):
+    name: str
+    type: str
+    website: str | None = None
+    account_id: int | None = None
+    rail: str | None = Field(default=None, pattern=r"^(ACH|WIRE_DOM|SWIFT)?$")
+    bank_name: str | None = None
+    account_name: str | None = None
+    ach_routing: str | None = None
+    ach_account: str | None = None
+    wire_routing: str | None = None
+    wire_account: str | None = None
+    swift_bic: str | None = None
+    iban: str | None = None
+    bank_country: str | None = None
+    bank_city: str | None = None
+    bank_address: str | None = None
+
+
+@router.post("/api/orgs/child-upi")
+def create_child_upi(payload: ChildUpiRequest, user=Depends(get_current_user)):
+    """
+    Issue a child/org UPI for the current user's verified org, using an existing or new payment account.
+    """
+    latest_session = queries.get_latest_onboarding_session(user["id"])
+    if not latest_session or str(latest_session.get("state")).upper() != "VERIFIED":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Complete onboarding first.")
+
+    org_id = latest_session["org_id"]
+    payment_account_id = None
+    if payload.account_id:
+        acct = queries.get_payment_account_by_id(int(payload.account_id))
+        if not acct or str(acct.get("org_id")) != str(org_id):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid payment account.")
+        payment_account_id = int(acct["id"])
+    else:
+        if not payload.rail or not payload.bank_name:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Rail and bank name are required.")
+        try:
+            payment_account_id = queries.create_payment_account(
+                user_id=user["id"],
+                org_id=str(org_id),
+                rail=payload.rail,
+                bank_name=payload.bank_name.strip(),
+                account_name=payload.account_name or payload.name,
+                ach_routing=payload.ach_routing if payload.rail == "ACH" else None,
+                ach_account=payload.ach_account if payload.rail == "ACH" else None,
+                wire_routing=payload.wire_routing if payload.rail == "WIRE_DOM" else None,
+                wire_account=payload.wire_account if payload.rail == "WIRE_DOM" else None,
+                bank_address=payload.bank_address,
+                swift_bic=payload.swift_bic if payload.rail == "SWIFT" else None,
+                iban=payload.iban if payload.rail == "SWIFT" else None,
+                bank_country=payload.bank_country,
+                bank_city=payload.bank_city,
+                status="active",
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unable to create payment account") from exc
+
+    try:
+        upi = queries.generate_upi_for_account(user_id=user["id"], org_id=str(org_id), payment_account_id=payment_account_id)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unable to generate UPI") from exc
+    return {"upi": upi, "payment_account_id": payment_account_id}
+
+
+@router.get("/api/orgs/child-upis")
+def list_child_upis(user=Depends(get_current_user)):
+    """
+    List payment accounts/UPIs for the current user's verified org.
+    """
+    latest_session = queries.get_latest_onboarding_session(user["id"])
+    if not latest_session or str(latest_session.get("state")).upper() != "VERIFIED":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Complete onboarding first.")
+    org_id = latest_session["org_id"]
+    accounts = queries.list_payment_accounts_for_org(org_id)
+    results: list[dict] = []
+    for acct in accounts:
+        results.append(
+            {
+                "upi": acct.get("upi") or "",
+                "payment_account_id": acct.get("id"),
+                "rail": acct.get("rail", ""),
+                "bank_name": acct.get("bank_name"),
+                "created_at": acct.get("created_at").isoformat() if acct.get("created_at") else "",
+            }
+        )
+    return results
