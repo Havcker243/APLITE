@@ -22,22 +22,22 @@ const initialState = {
 
 export default function SignupPage() {
   const router = useRouter();
-  const { login, token, ready } = useAuth();
+  const { login, token, loading, refreshProfile } = useAuth();
   const [form, setForm] = useState(initialState);
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isUS = isUnitedStates(form.country);
   const isCA = isCanada(form.country);
 
   useEffect(() => {
-    if (!ready) return;
+    if (loading) return;
     if (!token) return;
     const next = typeof router.query.next === "string" ? router.query.next : "/dashboard";
     router.replace(next);
-  }, [ready, token, router]);
+  }, [loading, token, router]);
 
-  if (ready && token) return null;
+  if (!loading && token) return null;
 
   function handleChange(event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
     const target = event.target as HTMLInputElement;
@@ -47,7 +47,7 @@ export default function SignupPage() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setLoading(true);
+    setSubmitting(true);
     setError(null);
     try {
       const response = await signup({
@@ -55,13 +55,14 @@ export default function SignupPage() {
         established_year: form.established_year ? Number(form.established_year) : undefined,
       });
       login(response);
-      const needsOnboarding = Boolean(response.needs_onboarding);
-      const next = typeof router.query.next === "string" ? router.query.next : needsOnboarding ? "/onboard" : "/dashboard";
+      const details = await refreshProfile();
+      const status = String(details?.onboarding_status || "NOT_STARTED");
+      const next = typeof router.query.next === "string" ? router.query.next : status !== "VERIFIED" ? "/onboard" : "/dashboard";
       router.push(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create account");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   }
 
@@ -225,8 +226,8 @@ export default function SignupPage() {
           <span className="input-label">I agree to the Terms of Service</span>
         </label>
 
-        <button type="submit" className="button" disabled={loading}>
-          {loading && <span className="spinner" aria-hidden="true" />}
+        <button type="submit" className="button" disabled={submitting}>
+          {submitting && <span className="spinner" aria-hidden="true" />}
           Create Account
         </button>
 

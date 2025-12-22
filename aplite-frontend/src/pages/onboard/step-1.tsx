@@ -3,13 +3,50 @@ import { useRouter } from "next/router";
 import { OnboardingShell } from "../../components/onboarding/OnboardingShell";
 // Step 1 is now local-only; final submit happens on the Verify page.
 import { useAuth } from "../../utils/auth";
+import { onboardingUploadFormation } from "../../utils/api";
 import { COUNTRIES, isCanada, isUnitedStates, US_STATES, CA_PROVINCES } from "../../utils/geo";
-import { normalizeEIN, useOnboardingWizard } from "../../utils/onboardingWizard";
+import { FormationDocType, normalizeEIN, useOnboardingWizard } from "../../utils/onboardingWizard";
 import { LoadingScreen } from "../../components/LoadingScreen";
+
+const FORMATION_DOCS: Record<
+  string,
+  { required: boolean; options: Array<{ type: FormationDocType; label: string }> }
+> = {
+  LLC: {
+    required: true,
+    options: [
+      { type: "articles_of_organization", label: "Articles of Organization" },
+      { type: "certificate_of_formation", label: "Certificate of Formation" },
+    ],
+  },
+  "C-Corp": {
+    required: true,
+    options: [{ type: "articles_of_incorporation", label: "Articles of Incorporation" }],
+  },
+  "S-Corp": {
+    required: true,
+    options: [{ type: "articles_of_incorporation", label: "Articles of Incorporation" }],
+  },
+  "Non-Profit": {
+    required: true,
+    options: [{ type: "articles_of_incorporation", label: "Articles of Incorporation" }],
+  },
+  Partnership: {
+    required: true,
+    options: [
+      { type: "certificate_of_limited_partnership", label: "Certificate of Limited Partnership" },
+      { type: "partnership_equivalent", label: "Partnership Equivalent Document" },
+    ],
+  },
+  "Sole Proprietor": {
+    required: false,
+    options: [],
+  },
+};
 
 export default function OnboardStep1() {
   const router = useRouter();
-  const { token, ready } = useAuth();
+  const { token, loading } = useAuth();
   const {
     step1,
     setStep1,
@@ -28,18 +65,19 @@ export default function OnboardStep1() {
     markStepComplete,
   } = useOnboardingWizard();
 
-  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const bizIsUS = isUnitedStates(step1.country);
   const bizIsCA = isCanada(step1.country);
+  const formationConfig = FORMATION_DOCS[step1.entity_type] || { required: false, options: [] };
 
   React.useEffect(() => {
-    if (!ready || !token) return;
+    if (loading || !token) return;
     // Fire-and-forget to see if already verified; do not block render.
     void refreshSession();
-  }, [ready, token, refreshSession]);
+  }, [loading, token, refreshSession]);
 
   React.useEffect(() => {
     touchStep(1);
@@ -47,17 +85,46 @@ export default function OnboardStep1() {
 
   const today = React.useMemo(() => new Date().toISOString().split("T")[0], []);
 
-  if (!ready || !token) return <LoadingScreen />;
+  if (loading || !token) return <LoadingScreen />;
+
+  function updateFormationDoc(doc_type: FormationDocType, updates: { file?: File; file_id?: string }) {
+    setStep1((prev) => {
+      const docs = prev.formation_documents || [];
+      const idx = docs.findIndex((doc) => doc.doc_type === doc_type);
+      const nextDocs = [...docs];
+      if (idx >= 0) {
+        nextDocs[idx] = { ...nextDocs[idx], ...updates, doc_type };
+      } else {
+        nextDocs.push({ doc_type, ...updates });
+      }
+      return { ...prev, formation_documents: nextDocs };
+    });
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
+    setSaving(true);
     setSaved(null);
     setError(null);
     try {
       const industry = step1.industry === "Other" ? step1.industry_other : step1.industry;
       if (step1.industry === "Other" && !step1.industry_other.trim()) {
         throw new Error("Industry is required. Select an industry or specify Other.");
+      }
+      if (formationConfig.required) {
+        const requiredTypes = formationConfig.options.map((opt) => opt.type);
+        const provided = step1.formation_documents.filter((doc) => requiredTypes.includes(doc.doc_type));
+        const hasAny = provided.some((doc) => Boolean(doc.file_id || doc.file));
+        if (!hasAny) {
+          throw new Error("Upload at least one valid formation document for this entity type.");
+        }
+        for (const doc of provided) {
+          if (doc.file && !doc.file_id) {
+            // Upload now so the final submit only sends file_id references.
+            const res = await onboardingUploadFormation(doc.file, doc.doc_type);
+            updateFormationDoc(doc.doc_type, { file_id: res.file_id, file: undefined });
+          }
+        }
       }
       // Only validate required fields for Step 1; final submit happens on Verify.
       setSaved("Saved locally");
@@ -66,7 +133,7 @@ export default function OnboardStep1() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save step");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   }
 
@@ -163,7 +230,12 @@ export default function OnboardStep1() {
               <label className="input-label" htmlFor="entity_type">
                 Entity type
               </label>
-              <select id="entity_type" className="input-control" value={step1.entity_type} onChange={(e) => setStep1((p) => ({ ...p, entity_type: e.target.value }))}>
+              <select
+                id="entity_type"
+                className="input-control"
+                value={step1.entity_type}
+                onChange={(e) => setStep1((p) => ({ ...p, entity_type: e.target.value, formation_documents: [] }))}
+              >
                 <option value="LLC">LLC</option>
                 <option value="C-Corp">C-Corp</option>
                 <option value="S-Corp">S-Corp</option>
@@ -291,9 +363,40 @@ export default function OnboardStep1() {
           </div>
         </div>
 
+        {formationConfig.options.length > 0 && (
+          <div className="form-section">
+            <p className="section-title">Formation documents</p>
+            <p className="hero-subtitle">Upload at least one of the acceptable documents below.</p>
+            <div className="form-grid" style={{ gridTemplateColumns: "1fr", marginTop: 12 }}>
+              {formationConfig.options.map((option) => {
+                const doc = step1.formation_documents.find((item) => item.doc_type === option.type);
+                return (
+                  <div className="input-group" key={option.type}>
+                    <label className="input-label" htmlFor={`formation-${option.type}`}>
+                      {option.label}
+                    </label>
+                    <input
+                      id={`formation-${option.type}`}
+                      type="file"
+                      accept="image/jpeg,image/png,application/pdf"
+                      className="input-control"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        updateFormationDoc(option.type, { file, file_id: undefined });
+                      }}
+                    />
+                    {doc?.file_id && <span className="hero-subtitle">Uploaded: {doc.file_id}</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 18 }}>
           <button className="button" type="submit" disabled={loading}>
-            {loading && <span className="spinner" aria-hidden="true" />}
+            {saving && <span className="spinner" aria-hidden="true" />}
             Save & Continue
           </button>
         </div>

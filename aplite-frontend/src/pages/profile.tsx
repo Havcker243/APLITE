@@ -15,13 +15,13 @@ const initialState = {
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { token, ready } = useAuth();
+  const { token, loading } = useAuth();
   const [account, setAccount] = useState<User | null>(null);
   const [onboarding, setOnboarding] = useState<any | null>(null);
   const [organization, setOrganization] = useState<any | null>(null);
   const [stats, setStats] = useState<{ payment_accounts: number; upis: number } | null>(null);
   const [form, setForm] = useState(initialState);
-  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -29,13 +29,13 @@ export default function ProfilePage() {
   const isCA = isCanada(form.country);
 
   useEffect(() => {
-    if (!ready) return;
+    if (loading) return;
     if (!token) {
       router.replace("/login");
       return;
     }
     void loadProfile();
-  }, [ready, token]);
+  }, [loading, token, router]);
 
   async function loadProfile() {
     try {
@@ -70,7 +70,7 @@ export default function ProfilePage() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setLoading(true);
+    setSaving(true);
     setError(null);
     setSuccess(null);
     try {
@@ -101,7 +101,7 @@ export default function ProfilePage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update profile");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   }
 
@@ -332,8 +332,8 @@ export default function ProfilePage() {
           </label>
           <textarea id="summary" name="summary" value={form.summary} onChange={handleChange} className="input-control" rows={4} />
         </div>
-        <button className="button" type="submit" disabled={loading}>
-          {loading && <span className="spinner" aria-hidden="true" />}
+        <button className="button" type="submit" disabled={saving}>
+          {saving && <span className="spinner" aria-hidden="true" />}
           Save Changes
         </button>
       </form>

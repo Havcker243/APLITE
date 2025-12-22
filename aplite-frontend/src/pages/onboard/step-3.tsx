@@ -8,15 +8,17 @@ import { LoadingScreen } from "../../components/LoadingScreen";
 
 export default function OnboardStep3() {
   const router = useRouter();
-  const { token, ready } = useAuth();
+  const { token, loading } = useAuth();
   const { step3, setStep3, step2, completedThrough, touchStep, markStepComplete } = useOnboardingWizard();
 
-  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const role = useMemo(() => (step2.role as "owner" | "authorized_rep" | undefined) || "", [step2.role]);
   const callBased = role === "owner";
+  // Authorized reps must upload ID before moving forward.
+  const requiresIdUpload = role === "authorized_rep";
 
   useEffect(() => {
     setMounted(true);
@@ -34,17 +36,17 @@ export default function OnboardStep3() {
     }
   }, [mounted, completedThrough, router]);
 
-  if (!ready || !token || !mounted) return <LoadingScreen />;
+  if (loading || !token || !mounted) return <LoadingScreen />;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
+    setSaving(true);
     setSaved(null);
     setError(null);
     try {
       let fileId = step3.file_id;
       let storageHint = saved || null;
-      if (!fileId && !callBased) {
+      if (requiresIdUpload && !fileId) {
         if (!step3.file) throw new Error("Upload a government ID document (jpg, png, or pdf).");
         const res = await onboardingUploadId(step3.file);
         fileId = res.file_id;
@@ -58,7 +60,7 @@ export default function OnboardStep3() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save step");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   }
 
@@ -103,7 +105,7 @@ export default function OnboardStep3() {
                 required={callBased}
               />
             </div>
-            {!callBased && (
+            {requiresIdUpload && (
               <div className="input-group">
                 <label className="input-label" htmlFor="id_file">
                   Government ID (jpg, png, pdf)
@@ -137,8 +139,8 @@ export default function OnboardStep3() {
           <button type="button" className="button button-secondary" onClick={() => router.push("/onboard/step-2")}>
             Back
           </button>
-          <button className="button" type="submit" disabled={loading}>
-            {loading && <span className="spinner" aria-hidden="true" />}
+          <button className="button" type="submit" disabled={saving}>
+            {saving && <span className="spinner" aria-hidden="true" />}
             Save & Continue
           </button>
         </div>

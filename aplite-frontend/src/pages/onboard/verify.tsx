@@ -8,10 +8,10 @@ import { onboardingComplete } from "../../utils/api";
 
 export default function OnboardVerify() {
   const router = useRouter();
-  const { token, ready } = useAuth();
+  const { token, loading, refreshProfile } = useAuth();
   const { step1, step2, step3, step4, completedThrough, clearDraft, touchStep, markStepComplete } = useOnboardingWizard();
 
-  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -44,10 +44,10 @@ export default function OnboardVerify() {
 
   const verificationMethod = step2.role === "owner" ? "call" : "id";
 
-  if (!ready || !token || !mounted) return <LoadingScreen />;
+  if (loading || !token || !mounted) return <LoadingScreen />;
 
   async function handleSubmit() {
-    setLoading(true);
+    setSaving(true);
     setSaved(null);
     setError(null);
     try {
@@ -68,6 +68,9 @@ export default function OnboardVerify() {
           formation_date: step1.formation_date,
           formation_state: step1.formation_state,
           entity_type: step1.entity_type,
+          formation_documents: step1.formation_documents
+            .filter((doc) => doc.file_id)
+            .map((doc) => ({ doc_type: doc.doc_type, file_id: doc.file_id as string })),
           address: {
             street1: step1.street1,
             street2: step1.street2 || undefined,
@@ -103,6 +106,8 @@ export default function OnboardVerify() {
       };
 
       const res = await onboardingComplete(payload);
+      // Refresh server profile so routing uses the latest onboarding_status.
+      await refreshProfile();
       markStepComplete(5);
       clearDraft();
       setSaved(`Verified. Issued UPI: ${res.upi}`);
@@ -110,7 +115,7 @@ export default function OnboardVerify() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to complete onboarding");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   }
 
@@ -176,6 +181,17 @@ export default function OnboardVerify() {
               <div className="input-group">
                 <label className="input-label">Description</label>
                 <div className="hero-subtitle">{step1.description}</div>
+              </div>
+            )}
+            {step1.formation_documents.length > 0 && (
+              <div className="input-group">
+                <label className="input-label">Formation documents</label>
+                <div className="hero-subtitle">
+                  {step1.formation_documents
+                    .filter((doc) => doc.file_id)
+                    .map((doc) => doc.doc_type.replace(/_/g, " "))
+                    .join(", ") || "-"}
+                </div>
               </div>
             )}
           </div>
@@ -262,8 +278,8 @@ export default function OnboardVerify() {
           <button type="button" className="button button-secondary" onClick={() => router.push("/onboard/step-4")}>
             Back
           </button>
-          <button type="button" className="button" onClick={handleSubmit} disabled={loading}>
-            {loading && <span className="spinner" aria-hidden="true" />}
+          <button type="button" className="button" onClick={handleSubmit} disabled={saving}>
+            {saving && <span className="spinner" aria-hidden="true" />}
             Submit & Finish
           </button>
         </div>

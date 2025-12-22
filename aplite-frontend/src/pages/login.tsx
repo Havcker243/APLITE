@@ -11,22 +11,22 @@ const initialState = {
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login: setAuth, token, ready } = useAuth();
+  const { login: setAuth, token, loading, refreshProfile } = useAuth();
   const [form, setForm] = useState(initialState);
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loginId, setLoginId] = useState<string | null>(null);
   const [otp, setOtp] = useState("");
   const [info, setInfo] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!ready) return;
+    if (loading) return;
     if (!token) return;
     const next = typeof router.query.next === "string" ? router.query.next : "/dashboard";
     router.replace(next);
-  }, [ready, token, router]);
+  }, [loading, token, router]);
 
-  if (ready && token) return null;
+  if (!loading && token) return null;
 
   function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
     const { name, value } = event.target;
@@ -35,13 +35,13 @@ export default function LoginPage() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setLoading(true);
+    setSubmitting(true);
     setError(null);
     setInfo(null);
     const email = form.email.trim();
     const password = form.password;
     if (!email || !password) {
-      setLoading(false);
+      setSubmitting(false);
       setError("Enter your email and password to continue.");
       return;
     }
@@ -52,29 +52,31 @@ export default function LoginPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to start login");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   }
 
   async function handleVerify(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!loginId) return;
-    setLoading(true);
+    setSubmitting(true);
     setError(null);
     try {
       const response = await loginVerify({ login_id: loginId, code: otp.trim() });
       setAuth(response);
+      const details = await refreshProfile();
+      const status = String(details?.onboarding_status || "NOT_STARTED");
       const next =
         typeof router.query.next === "string"
           ? router.query.next
-          : response.needs_onboarding
+          : status !== "VERIFIED"
           ? "/onboard"
           : "/dashboard";
       router.push(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to verify code");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   }
 
@@ -151,8 +153,8 @@ export default function LoginPage() {
             </div>
           )}
         </div>
-        <button type="submit" className="button" disabled={loading}>
-          {loading && <span className="spinner" aria-hidden="true" />}
+        <button type="submit" className="button" disabled={submitting}>
+          {submitting && <span className="spinner" aria-hidden="true" />}
           {loginId ? "Verify Code" : "Login"}
         </button>
         <p className="hero-subtitle" style={{ marginTop: 10 }}>

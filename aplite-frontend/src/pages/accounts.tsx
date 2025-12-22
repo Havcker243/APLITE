@@ -23,24 +23,24 @@ const defaultAccount = {
 
 export default function AccountsPage() {
   const router = useRouter();
-  const { token, ready } = useAuth();
+  const { token, loading, profile } = useAuth();
   const [accounts, setAccounts] = useState<any[]>([]);
   const [form, setForm] = useState({ ...defaultAccount });
-  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
 
 
   useEffect(() => {
-    if (!mounted || !ready) return;
+    if (!mounted || loading) return;
     if (!token) {
       router.replace("/login");
       return;
     }
-    void requireVerifiedOrRedirect({ token, router });
+    requireVerifiedOrRedirect({ profile, router });
     void loadAccounts();
-  }, [mounted, ready, token]);
+  }, [mounted, loading, token, profile, router]);
 
   async function loadAccounts() {
     try {
@@ -58,7 +58,7 @@ export default function AccountsPage() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setLoading(true);
+    setSaving(true);
     setError(null);
     setSuccess(null);
     try {
@@ -82,7 +82,7 @@ export default function AccountsPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save account");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   }
 
@@ -206,8 +206,8 @@ export default function AccountsPage() {
           </div>
         )}
 
-        <button className="button" type="submit" disabled={loading}>
-          {loading && <span className="spinner" aria-hidden="true" />}
+        <button className="button" type="submit" disabled={saving}>
+          {saving && <span className="spinner" aria-hidden="true" />}
           Save Account
         </button>
       </form>

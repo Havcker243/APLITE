@@ -1085,11 +1085,26 @@ def onboarding_upload_base_dir() -> str:
     return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "uploads"))
 
 
-def store_onboarding_file_metadata(*, file_id: str, filename: str, content_type: str, user_id: int) -> None:
+def _is_valid_onboarding_file_id(file_id: str, *, allowed_prefixes: tuple[str, ...]) -> bool:
+    if not allowed_prefixes:
+        return False
+    prefix_group = "|".join(re.escape(prefix) for prefix in allowed_prefixes)
+    return bool(re.match(rf"^({prefix_group})_[0-9a-f]{{32}}$", file_id))
+
+
+def store_onboarding_file_metadata(
+    *,
+    file_id: str,
+    filename: str,
+    content_type: str,
+    user_id: int,
+    doc_category: str | None = None,
+    doc_type: str | None = None,
+) -> None:
     """
     Store onboarding upload metadata (used when the file bytes are written elsewhere).
     """
-    if not re.match(r"^id_[0-9a-f]{32}$", file_id):
+    if not _is_valid_onboarding_file_id(file_id, allowed_prefixes=("id", "form")):
         raise ValueError("Invalid file_id")
 
     base = onboarding_upload_base_dir()
@@ -1098,17 +1113,26 @@ def store_onboarding_file_metadata(*, file_id: str, filename: str, content_type:
     if not meta_path.startswith(base + os.sep):
         raise ValueError("Invalid file_id")
     with open(meta_path, "w", encoding="utf-8") as f:
-        json.dump({"user_id": user_id, "filename": filename, "content_type": content_type}, f)
+        json.dump(
+            {
+                "user_id": user_id,
+                "filename": filename,
+                "content_type": content_type,
+                "doc_category": doc_category,
+                "doc_type": doc_type,
+            },
+            f,
+        )
 
 
-def onboarding_file_exists(*, file_id: str, user_id: int) -> bool:
+def onboarding_file_exists(*, file_id: str, user_id: int, allowed_prefixes: tuple[str, ...] = ("id",)) -> bool:
     """
     Validate that an onboarding upload exists and is owned by the user.
 
     This is used to ensure `id_document_id` references are not forged and to
     prevent path traversal (strict file_id format + base-dir constraint).
     """
-    if not re.match(r"^id_[0-9a-f]{32}$", file_id):
+    if not _is_valid_onboarding_file_id(file_id, allowed_prefixes=allowed_prefixes):
         return False
 
     # First, check metadata file to confirm ownership.
@@ -1145,7 +1169,8 @@ def onboarding_file_exists(*, file_id: str, user_id: int) -> bool:
                 aws_secret_access_key=secret_key,
                 config=BotoConfig(signature_version="s3v4"),
             )
-            key = f"ids/{file_id}.bin"
+            key_prefix = "formations" if file_id.startswith("form_") else "ids"
+            key = f"{key_prefix}/{file_id}.bin"
             s3.head_object(Bucket=bucket, Key=key)
             return True
         except Exception:
@@ -1154,6 +1179,17 @@ def onboarding_file_exists(*, file_id: str, user_id: int) -> bool:
     # Fallback: ensure local file exists.
     bin_path = os.path.abspath(os.path.join(base, f"{file_id}.bin"))
     return bin_path.startswith(base + os.sep) and os.path.exists(bin_path)
+
+
+def set_onboarding_formation_documents(session_id: uuid.UUID, documents: list[dict]) -> None:
+    """Persist formation document references for audit and verification."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "update onboarding_sessions set step_statuses = jsonb_set(coalesce(step_statuses,'{}'::jsonb), '{formation_documents}', %s::jsonb, true), last_saved_at=now() where id=%s",
+                (json.dumps(documents), str(session_id)),
+            )
+            conn.commit()
 
 
 def create_identity_verification(

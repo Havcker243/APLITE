@@ -1,36 +1,51 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { AuthResponse, logout as apiLogout, User, fetchProfileDetails } from "./api";
+import { AuthResponse, logout as apiLogout, User, fetchProfileDetails, ProfileDetailsResponse } from "./api";
 import { setAuthToken } from "./api";
 
 type AuthContextType = {
   user: User | null;
   token: string | null;
-  ready: boolean;
-  accessLevel: "ONBOARDING" | "ACTIVE" | "SUSPENDED";
-  profileReady: boolean;
+  profile: ProfileDetailsResponse | null;
+  loading: boolean;
   login: (payload: AuthResponse) => void;
   logout: () => void;
-  needsOnboarding: boolean;
+  refreshProfile: () => Promise<ProfileDetailsResponse | null>;
 };
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   token: null,
-  ready: false,
-  profileReady: false,
-  accessLevel: "ONBOARDING",
+  profile: null,
+  loading: true,
   login: () => undefined,
   logout: () => undefined,
-  needsOnboarding: false,
+  refreshProfile: async () => null,
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  const [ready, setReady] = useState(false);
-  const [needsOnboarding, setNeedsOnboarding] = useState(false);
-  const [accessLevel, setAccessLevel] = useState<"ONBOARDING" | "ACTIVE" | "SUSPENDED">("ONBOARDING");
-  const [profileReady, setProfileReady] = useState(false);
+  const [profile, setProfile] = useState<ProfileDetailsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Pull the canonical profile snapshot from the server (single source of truth).
+  const refreshProfile = async () => {
+    setLoading(true);
+    try {
+      const details = await fetchProfileDetails();
+      setUser(details.user);
+      setProfile(details);
+      setToken((prev) => prev || "cookie");
+      return details;
+    } catch {
+      setUser(null);
+      setProfile(null);
+      setToken(null);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     // Try to hydrate session from stored token first; fall back to cookie.
@@ -39,41 +54,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setToken(stored);
       setAuthToken(stored);
     }
-    fetchProfileDetails()
-      .then((details) => {
-        setUser(details.user);
-        setToken((prev) => prev || "cookie");
-        const onboardingState = String(details.onboarding_state || "NOT_STARTED").toUpperCase();
-        const needs = onboardingState !== "VERIFIED";
-        setNeedsOnboarding(needs);
-        setAccessLevel((details.access_level as any) || (needs ? "ONBOARDING" : "ACTIVE"));
-      })
-      .catch(() => {
-        setUser(null);
-        setToken(null);
-        setNeedsOnboarding(false);
-        setAccessLevel("ONBOARDING");
-      })
-      .finally(() => {
-        setReady(true);
-        setProfileReady(true);
-      });
+    void refreshProfile();
   }, []);
 
   const handleLogin = (payload: AuthResponse) => {
     setUser(payload.user);
     setToken(payload.token || "cookie");
-    setNeedsOnboarding(Boolean(payload.needs_onboarding));
-    setAccessLevel(payload.needs_onboarding ? "ONBOARDING" : "ACTIVE");
-    setProfileReady(false); // will refresh on next details fetch
     if (payload.token) setAuthToken(payload.token);
+    void refreshProfile();
   };
 
   const handleLogout = () => {
     void apiLogout().finally(() => {
       setUser(null);
       setToken(null);
-      setNeedsOnboarding(false);
+      setProfile(null);
       setAuthToken(null);
       if (typeof window !== "undefined") {
         try {
@@ -88,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, ready, login: handleLogin, logout: handleLogout, needsOnboarding, accessLevel, profileReady }}>
+    <AuthContext.Provider value={{ user, token, profile, loading, login: handleLogin, logout: handleLogout, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );

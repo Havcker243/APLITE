@@ -1,16 +1,10 @@
-import { fetchProfileDetails } from "./api";
+import { ProfileDetailsResponse } from "./api";
 
-export async function requireVerifiedOrRedirect(opts: { token: string | null; router: any }) {
-  if (!opts.token) return;
-  try {
-    const details = await fetchProfileDetails();
-    const state = String(details?.onboarding?.state || "NOT_STARTED");
-    if (state !== "VERIFIED") {
-      opts.router.replace("/onboard");
-    }
-  } catch {
-    // If profile details can't load, keep user moving toward onboarding.
+// Single guard: trust backend onboarding_status to gate access.
+export function requireVerifiedOrRedirect(opts: { profile: ProfileDetailsResponse | null; router: any }) {
+  if (!opts.profile) return;
+  const status = String(opts.profile.onboarding_status || "NOT_STARTED");
+  if (status !== "VERIFIED") {
     opts.router.replace("/onboard");
   }
 }
-

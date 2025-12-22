@@ -9,22 +9,22 @@ import { requireVerifiedOrRedirect } from "../utils/requireVerified";
 const UPI_PATTERN = /^[A-Z0-9]{14}$/;
 
 export default function ResolvePage() {
-  const { token, ready } = useAuth();
+  const { token, loading, profile } = useAuth();
   const router = useRouter();
   const [upi, setUpi] = useState("");
   const [rail, setRail] = useState<"ACH" | "WIRE_DOM" | "SWIFT">("ACH");
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [resolving, setResolving] = useState(false);
 
   useEffect(() => {
-    if (!ready) return;
+    if (loading) return;
     if (!token) {
       router.replace("/login");
       return;
     }
-    void requireVerifiedOrRedirect({ token, router });
-  }, [ready, token]);
+    requireVerifiedOrRedirect({ profile, router });
+  }, [loading, token, profile, router]);
 
   async function handleResolve(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -34,14 +34,14 @@ export default function ResolvePage() {
       setError("UPI must be exactly 14 alphanumeric characters");
       return;
     }
-    setLoading(true);
+    setResolving(true);
     try {
       const response = await resolveUPI({ upi: upi.trim(), rail });
       setResult(response);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to resolve UPI");
     } finally {
-      setLoading(false);
+      setResolving(false);
     }
   }
 
@@ -65,7 +65,7 @@ export default function ResolvePage() {
         </div>
       )}
 
-      <ResolveForm upi={upi} rail={rail} loading={loading} onUpiChange={setUpi} onRailChange={setRail} onSubmit={handleResolve} />
+      <ResolveForm upi={upi} rail={rail} loading={resolving} onUpiChange={setUpi} onRailChange={setRail} onSubmit={handleResolve} />
 
       {result && <ResolutionResult result={result} />}
     </div>

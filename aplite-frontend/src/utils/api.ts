@@ -29,6 +29,10 @@ export type OnboardingStep1Payload = {
   formation_date: string;
   formation_state: string;
   entity_type: string;
+  formation_documents?: Array<{
+    doc_type: "articles_of_organization" | "certificate_of_formation" | "articles_of_incorporation" | "certificate_of_limited_partnership" | "partnership_equivalent";
+    file_id: string;
+  }>;
   address: {
     street1: string;
     street2?: string;
@@ -94,9 +98,7 @@ export type ProfileDetailsResponse = {
     payment_accounts: number;
     upis: number;
   };
-  needs_onboarding?: boolean;
-  onboarding_state?: string;
-  access_level?: "ONBOARDING" | "ACTIVE" | "SUSPENDED";
+  onboarding_status?: string;
 };
 
 export type OnboardingStep2Payload = { role: "owner" | "authorized_rep"; title?: string };
@@ -169,7 +171,6 @@ export type User = {
 export type AuthResponse = {
   token: string;
   user: User;
-  needs_onboarding?: boolean;
 };
 
 export type LoginStartResponse = {
@@ -541,6 +542,19 @@ export async function onboardingUploadId(file: File) {
     body: formData,
   });
   if (!res.ok) throw new Error(await parseError(res, "Unable to upload document"));
+  return res.json() as Promise<{ file_id: string; storage?: string }>;
+}
+
+export async function onboardingUploadFormation(file: File, doc_type: string) {
+  /** Upload a formation document for onboarding Step 1. */
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("doc_type", doc_type);
+  const res = await authedFetch(`${API_BASE_URL}/onboarding/upload-formation`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) throw new Error(await parseError(res, "Unable to upload formation document"));
   return res.json() as Promise<{ file_id: string; storage?: string }>;
 }
 

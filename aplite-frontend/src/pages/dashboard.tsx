@@ -93,10 +93,10 @@ function maskUpi(upi: string) {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, token, ready, accessLevel, profileReady } = useAuth();
+  const { user, token, loading, profile } = useAuth();
 
   const [form, setForm] = useState<ChildUpiForm>(defaultForm);
-  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [upi, setUpi] = useState<string | null>(null);
   const [orgName, setOrgName] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
@@ -119,20 +119,21 @@ export default function DashboardPage() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (!mounted || !ready || !profileReady) return;
+    if (!mounted || loading) return;
     if (!token) {
       router.replace("/login");
       return;
     }
-    if (accessLevel === "ONBOARDING") {
+    const status = String(profile?.onboarding_status || "NOT_STARTED");
+    if (status !== "VERIFIED") {
       router.replace("/onboard");
       return;
     }
-    requireVerifiedOrRedirect({ token, router });
+    requireVerifiedOrRedirect({ profile, router });
     loadOrg();
     loadAccounts();
     loadChildUpis();
-  }, [mounted, ready, profileReady, token, accessLevel, router]);
+  }, [mounted, loading, token, profile, router]);
 
   useEffect(() => {
     setMounted(true);
@@ -180,14 +181,14 @@ export default function DashboardPage() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setLoading(true);
+    setSaving(true);
     setError(null);
     setUpi(null);
 
     const errors = validateChildForm(form);
     if (errors.length) {
       setValidationErrors(errors);
-      setLoading(false);
+      setSaving(false);
       return;
     }
     setValidationErrors([]);
@@ -227,7 +228,7 @@ export default function DashboardPage() {
       );
       setUpi(null);
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   }
 
@@ -260,7 +261,7 @@ export default function DashboardPage() {
 
   const maskedMasterUpi = useMemo(() => maskUpi(user?.master_upi ?? ""), [user]);
 
-  if (!ready || !token || !mounted) {
+  if (loading || !token || !mounted) {
     return <LoadingScreen />;
   }
 
@@ -449,8 +450,8 @@ export default function DashboardPage() {
           </div>
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 18 }}>
-            <button className="button" type="submit" disabled={loading}>
-              {loading && <span className="spinner" aria-hidden="true" />}
+            <button className="button" type="submit" disabled={saving}>
+              {saving && <span className="spinner" aria-hidden="true" />}
               Create child UPI
             </button>
           </div>

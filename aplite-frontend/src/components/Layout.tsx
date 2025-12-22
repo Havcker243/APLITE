@@ -2,45 +2,22 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import React, { PropsWithChildren, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../utils/auth";
-import { fetchProfileDetails } from "../utils/api";
 import { LoadingScreen } from "./LoadingScreen";
 
 const THEME_STORAGE_KEY = "aplite_theme";
 
 export function Layout({ children }: PropsWithChildren) {
   const router = useRouter();
-  const { user, token, logout, accessLevel, profileReady } = useAuth();
+  const { user, token, logout, profile, loading } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">("dark");
-  const [isVerified, setIsVerified] = useState<boolean>(false);
 
   const accountLabel = useMemo(() => {
     if (!user) return "";
     const fullName = `${user.first_name || ""} ${user.last_name || ""}`.trim();
     return fullName || user.company_name || user.company || user.email;
   }, [user]);
-
-  useEffect(() => {
-    if (!token) {
-      setIsVerified(false);
-      return;
-    }
-    let canceled = false;
-    void fetchProfileDetails()
-      .then((details) => {
-        if (canceled) return;
-        const state = String(details?.onboarding?.state || "NOT_STARTED");
-        setIsVerified(state === "VERIFIED");
-      })
-      .catch(() => {
-        if (canceled) return;
-        setIsVerified(false);
-      });
-    return () => {
-      canceled = true;
-    };
-  }, [token]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -85,8 +62,9 @@ export function Layout({ children }: PropsWithChildren) {
     };
   }, [menuOpen]);
 
+  const onboardingStatus = String(profile?.onboarding_status || "NOT_STARTED");
   const links = user
-    ? accessLevel === "ONBOARDING"
+    ? onboardingStatus !== "VERIFIED"
       ? [
           { href: "/onboard", label: "Onboarding" },
           { href: "/profile", label: "Profile" },
@@ -105,7 +83,7 @@ export function Layout({ children }: PropsWithChildren) {
         { href: "/signup", label: "Get Started" },
       ];
 
-  if (token && !profileReady) {
+  if (token && loading) {
     return <LoadingScreen />;
   }
 

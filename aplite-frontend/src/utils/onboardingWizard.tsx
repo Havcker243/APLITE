@@ -4,6 +4,13 @@ import { useAuth } from "./auth";
 
 export type OnboardingStep = 1 | 2 | 3 | 4 | 5;
 
+export type FormationDocType =
+  | "articles_of_organization"
+  | "certificate_of_formation"
+  | "articles_of_incorporation"
+  | "certificate_of_limited_partnership"
+  | "partnership_equivalent";
+
 export type OnboardingStep1Draft = {
   legal_name: string;
   dba: string;
@@ -11,6 +18,7 @@ export type OnboardingStep1Draft = {
   formation_date: string;
   formation_state: string;
   entity_type: string;
+  formation_documents: Array<{ doc_type: FormationDocType; file?: File; file_id?: string }>;
   street1: string;
   street2: string;
   city: string;
@@ -39,6 +47,7 @@ type OnboardingContextValue = {
   refreshSession: () => Promise<OnboardingStep>;
   touchStep: (step: OnboardingStep) => void;
   markStepComplete: (step: OnboardingStep) => void;
+  clearDraft: () => void;
 
   step1: OnboardingStep1Draft;
   setStep1: React.Dispatch<React.SetStateAction<OnboardingStep1Draft>>;
@@ -69,6 +78,7 @@ const INITIAL_STEP1: OnboardingStep1Draft = {
   formation_date: "",
   formation_state: "",
   entity_type: "LLC",
+  formation_documents: [],
   street1: "",
   street2: "",
   city: "",
@@ -85,7 +95,7 @@ const INITIAL_STEP3: OnboardingStep3Draft = { full_name: "", title: "", file: un
 const INITIAL_STEP4: OnboardingStep4Draft = { bank_name: "", account_number: "", ach_routing: "", wire_routing: "", swift: "" };
 
 export function OnboardingProvider({ children }: { children: React.ReactNode }) {
-  const { token, ready } = useAuth();
+  const { token, loading } = useAuth();
 
   const [session, setSession] = useState<any | null>(null);
   const [currentStep, setCurrentStep] = useState<OnboardingStep>(1);
@@ -97,7 +107,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   const [step3, setStep3] = useState<OnboardingStep3Draft>(INITIAL_STEP3);
   const [step4, setStep4] = useState<OnboardingStep4Draft>(INITIAL_STEP4);
 
-  // Load draft from sessionStorage (refresh survival).
+  // Local drafts live in sessionStorage; server state is only checked for VERIFIED.
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
@@ -119,9 +129,16 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
+      const sanitizedStep1 = {
+        ...step1,
+        formation_documents: step1.formation_documents.map((doc) => ({
+          doc_type: doc.doc_type,
+          file_id: doc.file_id,
+        })),
+      };
       window.sessionStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ step1, step2, step3: { ...step3, file: undefined }, step4, completedThrough })
+        JSON.stringify({ step1: sanitizedStep1, step2, step3: { ...step3, file: undefined }, step4, completedThrough })
       );
     } catch {
       // ignore storage errors
@@ -152,7 +169,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   }, [token, clearDraft]);
 
   const refreshSession = React.useCallback(async (): Promise<OnboardingStep> => {
-    if (!ready || !token) return 1;
+    if (loading || !token) return 1;
     try {
       const current = await onboardingCurrent();
       setSession(current);
@@ -175,14 +192,14 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     } finally {
       setSessionReady(true);
     }
-  }, [ready, token]);
+  }, [loading, token]);
 
   useEffect(() => {
-    if (!ready || !token) return;
+    if (loading || !token) return;
     // Only fetch once to see if onboarding is already VERIFIED; otherwise rely on local flow.
     void refreshSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, token]);
+  }, [loading, token]);
 
   const touchStep = React.useCallback((step: OnboardingStep) => {
     setCompletedThrough((prev) => Math.max(prev, step - 1));
@@ -211,7 +228,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       step4,
       setStep4,
     }),
-    [session, currentStep, completedThrough, step1, step2, step3, step4]
+    [session, currentStep, completedThrough, sessionReady, step1, step2, step3, step4]
   );
 
   return <OnboardingContext.Provider value={value}>{children}</OnboardingContext.Provider>;

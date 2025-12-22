@@ -44,7 +44,6 @@ class LoginVerifyRequest(BaseModel):
 class AuthResponse(BaseModel):
     token: str
     user: dict
-    needs_onboarding: bool | None = None
 
 
 class ProfileUpdateRequest(BaseModel):
@@ -186,8 +185,7 @@ def signup(payload: SignupRequest, response: Response):
     token = _issue_session(user_id)
     _set_session_cookie(response, token)
     user = queries.get_user_by_id(user_id) or {}
-    needs_onboarding = True  # brand-new users must onboard
-    return {"token": token, "user": _sanitize_user(user), "needs_onboarding": needs_onboarding}
+    return {"token": token, "user": _sanitize_user(user)}
 
 
 @router.post("/api/auth/login/start")
@@ -279,8 +277,7 @@ def login_verify(payload: LoginVerifyRequest, response: Response):
     _set_session_cookie(response, token)
     # Determine if user has completed onboarding.
     latest_session = queries.get_latest_onboarding_session(record["user_id"]) if record else None
-    needs_onboarding = not latest_session or str(latest_session.get("state")) != "VERIFIED"
-    return {"token": token, "user": _sanitize_user(user), "needs_onboarding": needs_onboarding}
+    return {"token": token, "user": _sanitize_user(user)}
 
 
 @router.post("/api/auth/logout")
@@ -321,18 +318,15 @@ def get_profile_details(user=Depends(get_current_user)):
         org = None
 
     stats = queries.get_user_stats(user["id"])
-    onboarding_state = str(latest_session.get("state")) if latest_session else "NOT_STARTED"
-    needs_onboarding = onboarding_state != "VERIFIED"
-    access_level = "ONBOARDING" if needs_onboarding else "ACTIVE"
+    # Canonical onboarding status for the frontend guard.
+    onboarding_status = str(latest_session.get("state")) if latest_session else "NOT_STARTED"
     return jsonable_encoder(
         {
             "user": _sanitize_user(user),
             "onboarding": latest_session,
             "organization": org,
             "stats": stats,
-            "needs_onboarding": needs_onboarding,
-            "onboarding_state": onboarding_state,
-            "access_level": access_level,
+            "onboarding_status": onboarding_status,
         }
     )
 

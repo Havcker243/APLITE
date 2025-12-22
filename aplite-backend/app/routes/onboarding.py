@@ -45,6 +45,14 @@ class Address(BaseModel):
         return value
 
 
+class FormationDocument(BaseModel):
+    doc_type: str = Field(
+        ...,
+        pattern=r"^(articles_of_organization|certificate_of_formation|articles_of_incorporation|certificate_of_limited_partnership|partnership_equivalent)$",
+    )
+    file_id: str = Field(..., pattern=r"^form_[0-9a-f]{32}$")
+
+
 class Step1Payload(BaseModel):
     legal_name: str = Field(min_length=2, max_length=120)
     dba: str | None = Field(default=None, max_length=120)
@@ -56,6 +64,7 @@ class Step1Payload(BaseModel):
     industry: str = Field(min_length=1, max_length=80)
     website: str | None = Field(default=None, max_length=200)
     description: str | None = Field(default=None, max_length=800)
+    formation_documents: list[FormationDocument] | None = None
 
     @field_validator("ein")
     @classmethod
@@ -227,18 +236,51 @@ async def onboarding_upload_id(file: UploadFile = File(...), user=Depends(get_cu
     if content_type not in ("image/jpeg", "image/png", "application/pdf"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported file type. Use jpg, png, or pdf.")
 
-    file_id, storage = _store_uploaded_file(file, user_id=user["id"])
+    file_id, storage = _store_uploaded_file(file, user_id=user["id"], doc_category="id_document")
+    return {"file_id": file_id, "storage": storage}
+
+@router.post("/onboarding/upload-formation")
+async def onboarding_upload_formation(
+    doc_type: str = Form(...),
+    file: UploadFile = File(...),
+    user=Depends(get_current_user),
+):
+    # Formation docs are keyed separately so we can validate entity-specific requirements.
+    if doc_type not in {
+        "articles_of_organization",
+        "certificate_of_formation",
+        "articles_of_incorporation",
+        "certificate_of_limited_partnership",
+        "partnership_equivalent",
+    }:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported formation document type.")
+    file_id, storage = _store_uploaded_file(
+        file,
+        user_id=user["id"],
+        file_id_prefix="form",
+        key_prefix="formations",
+        doc_category="formation_document",
+        doc_type=doc_type,
+    )
     return {"file_id": file_id, "storage": storage}
 
 
-def _store_uploaded_file(file: UploadFile, user_id: int) -> tuple[str, str]:
+def _store_uploaded_file(
+    file: UploadFile,
+    user_id: int,
+    *,
+    file_id_prefix: str = "id",
+    key_prefix: str = "ids",
+    doc_category: str | None = None,
+    doc_type: str | None = None,
+) -> tuple[str, str]:
     if not file.filename:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing file.")
     content_type = (file.content_type or "").lower()
     if content_type not in ("image/jpeg", "image/png", "application/pdf"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported file type. Use jpg, png, or pdf.")
 
-    file_id = f"id_{uuid.uuid4().hex}"
+    file_id = f"{file_id_prefix}_{uuid.uuid4().hex}"
 
     # Read file into memory (max 10MB) for upload.
     max_bytes = 10 * 1024 * 1024
@@ -254,7 +296,7 @@ def _store_uploaded_file(file: UploadFile, user_id: int) -> tuple[str, str]:
     access_key = os.getenv("DATABASE_BUCKET_S3_ACCESS_KEY_ID")
     secret_key = os.getenv("DATABASE_BUCKET_S3_SECRET_ACCESS_KEY")
     region = os.getenv("DATABASE_BUCKET_S3_REGION", "us-east-1")
-    key = f"ids/{file_id}.bin"
+    key = f"{key_prefix}/{file_id}.bin"
     uploaded = False
     storage = "local"
     if bucket and endpoint and access_key and secret_key:
@@ -288,8 +330,31 @@ def _store_uploaded_file(file: UploadFile, user_id: int) -> tuple[str, str]:
         filename=file.filename,
         content_type=content_type,
         user_id=user_id,
+        doc_category=doc_category,
+        doc_type=doc_type,
     )
     return file_id, storage
+
+
+def _entity_type_key(value: str) -> str:
+    return "".join(ch for ch in value.strip().lower() if ch.isalnum())
+
+
+def _allowed_formation_docs(entity_type: str) -> set[str]:
+    key = _entity_type_key(entity_type)
+    if key == "llc":
+        return {"articles_of_organization", "certificate_of_formation"}
+    if key in {"ccorp", "scorp"}:
+        return {"articles_of_incorporation"}
+    if key in {"nonprofit", "nonprofitcorporation"}:
+        return {"articles_of_incorporation"}
+    if key == "partnership":
+        return {"certificate_of_limited_partnership", "partnership_equivalent"}
+    return set()
+
+
+def _formation_docs_required(entity_type: str) -> bool:
+    return _entity_type_key(entity_type) != "soleproprietor"
 
 
 @router.post("/onboarding/complete")
@@ -319,7 +384,22 @@ def onboarding_complete(
     # Handle ID document (uploaded file takes precedence).
     file_id = payload.identity.id_document_id or payload.id_document_id
     if file is not None:
-        file_id, _ = _store_uploaded_file(file, user_id=user["id"])
+        file_id, _ = _store_uploaded_file(file, user_id=user["id"], doc_category="id_document")
+
+    # Validate formation documents against the declared entity type.
+    allowed_docs = _allowed_formation_docs(payload.org.entity_type)
+    formation_required = _formation_docs_required(payload.org.entity_type)
+    formation_docs = payload.org.formation_documents or []
+    if formation_required:
+        if not allowed_docs:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Formation documents required for this entity type.")
+        if not any(doc.doc_type in allowed_docs for doc in formation_docs):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Upload a valid formation document for this entity type.")
+    for doc in formation_docs:
+        if allowed_docs and doc.doc_type not in allowed_docs:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported formation document for this entity type.")
+        if not queries.onboarding_file_exists(file_id=doc.file_id, user_id=user["id"], allowed_prefixes=("form",)):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid formation document reference.")
 
     # Basic role/risk determination and verification method
     risk_level = "low" if payload.role.role == "owner" else "high"
@@ -359,6 +439,11 @@ def onboarding_complete(
             current_step=3,
             address_locked=True,
         )
+        if formation_docs:
+            queries.set_onboarding_formation_documents(
+                session_id=session_id,
+                documents=[doc.model_dump() for doc in formation_docs],
+            )
         queries.update_onboarding_role(
             session_id=session_id,
             user_id=user["id"],

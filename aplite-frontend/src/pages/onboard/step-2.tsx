@@ -8,7 +8,7 @@ import { LoadingScreen } from "../../components/LoadingScreen";
 
 export default function OnboardStep2() {
   const router = useRouter();
-  const { token, ready } = useAuth();
+  const { token, loading } = useAuth();
   const {
     step2,
     setStep2,
@@ -17,7 +17,7 @@ export default function OnboardStep2() {
     markStepComplete,
   } = useOnboardingWizard();
 
-  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -34,11 +34,11 @@ export default function OnboardStep2() {
     }
   }, [touchStep, completedThrough, router]);
 
-  if (!ready || !token || !mounted) return <LoadingScreen />;
+  if (loading || !token || !mounted) return <LoadingScreen />;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
+    setSaving(true);
     setSaved(null);
     setError(null);
     try {
@@ -49,7 +49,7 @@ export default function OnboardStep2() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save step");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   }
 
@@ -154,8 +154,8 @@ export default function OnboardStep2() {
           >
             Back
           </button>
-          <button className="button" type="submit" disabled={loading}>
-            {loading && <span className="spinner" aria-hidden="true" />}
+          <button className="button" type="submit" disabled={saving}>
+            {saving && <span className="spinner" aria-hidden="true" />}
             Save & Continue
           </button>
         </div>
