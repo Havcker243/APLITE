@@ -19,9 +19,6 @@ import { requireVerifiedOrRedirect } from "../utils/requireVerified";
 
 const UPI_PATTERN = /^[A-Z0-9]{14}$/;
 type ChildUpiForm = {
-  name: string;
-  type: string;
-  website: string;
   account_mode: "existing" | "new";
   payment_account_id: string;
   rail: "ACH" | "WIRE_DOM" | "SWIFT";
@@ -41,9 +38,6 @@ type ChildUpiForm = {
 const ROUTING_PATTERN = /^\d{9}$/;
 
 const defaultForm: ChildUpiForm = {
-  name: "",
-  type: "",
-  website: "",
   account_mode: "existing",
   payment_account_id: "",
   rail: "ACH",
@@ -62,9 +56,6 @@ const defaultForm: ChildUpiForm = {
 
 function validateChildForm(data: ChildUpiForm): string[] {
   const errors: string[] = [];
-  if (!data.name.trim()) errors.push("Name is required");
-  if (!data.type.trim()) errors.push("Type is required");
-
   if (data.account_mode === "existing") {
     if (!data.payment_account_id) errors.push("Select an existing payment account");
   } else {
@@ -195,31 +186,30 @@ export default function DashboardPage() {
 
     try {
       const payload: any = {
-        name: form.name,
-        type: form.type,
+        name: orgName || user?.company_name || user?.company || "Business",
+        type: "company",
       };
-      if (form.website.trim()) payload.website = form.website.trim();
       if (form.account_mode === "existing" && form.payment_account_id) {
         payload.account_id = Number(form.payment_account_id);
       } else {
-        payload.account = {
-          rail: form.rail,
-          bank_name: form.bank_name,
-          account_name: form.account_name || form.name,
-          ach_routing: form.ach_routing || undefined,
-          ach_account: form.ach_account || undefined,
-          wire_routing: form.wire_routing || undefined,
-          wire_account: form.wire_account || undefined,
-          bank_address: form.bank_address || undefined,
-          swift_bic: form.swift_bic || undefined,
-          iban: form.iban || undefined,
-          bank_country: form.bank_country || undefined,
-          bank_city: form.bank_city || undefined,
-        };
+        payload.rail = form.rail;
+        payload.bank_name = form.bank_name;
+        payload.account_name = form.account_name || payload.name;
+        payload.ach_routing = form.ach_routing || undefined;
+        payload.ach_account = form.ach_account || undefined;
+        payload.wire_routing = form.wire_routing || undefined;
+        payload.wire_account = form.wire_account || undefined;
+        payload.bank_address = form.bank_address || undefined;
+        payload.swift_bic = form.swift_bic || undefined;
+        payload.iban = form.iban || undefined;
+        payload.bank_country = form.bank_country || undefined;
+        payload.bank_city = form.bank_city || undefined;
       }
 
       const response = await createChildUpi(payload);
       setUpi(response.upi);
+      setForm(defaultForm);
+      setValidationErrors([]);
       await loadOrg();
       await loadChildUpis();
     } catch (err) {
@@ -308,25 +298,6 @@ export default function DashboardPage() {
           <p className="hero-subtitle">Create a UPI tied to an existing or new payout account.</p>
 
           <div className="form-grid" style={{ gridTemplateColumns: "1fr", marginTop: 10 }}>
-            <div className="input-group">
-              <label className="input-label" htmlFor="name">
-                Name
-              </label>
-              <input id="name" name="name" className="input-control" value={form.name} onChange={handleChange} required />
-            </div>
-            <div className="input-group">
-              <label className="input-label" htmlFor="type">
-                Type
-              </label>
-              <input id="type" name="type" className="input-control" value={form.type} onChange={handleChange} required />
-            </div>
-            <div className="input-group">
-              <label className="input-label" htmlFor="website">
-                Website (optional)
-              </label>
-              <input id="website" name="website" className="input-control" value={form.website} onChange={handleChange} />
-            </div>
-
             <div className="input-group">
               <label className="input-label">Payment account</label>
               <select

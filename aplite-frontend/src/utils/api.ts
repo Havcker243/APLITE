@@ -424,7 +424,18 @@ export async function createChildUpi(data: {
   type: string;
   website?: string;
   account_id?: number;
-  account?: AccountPayload;
+  rail?: "ACH" | "WIRE_DOM" | "SWIFT";
+  bank_name?: string;
+  account_name?: string;
+  ach_routing?: string;
+  ach_account?: string;
+  wire_routing?: string;
+  wire_account?: string;
+  bank_address?: string;
+  swift_bic?: string;
+  iban?: string;
+  bank_country?: string;
+  bank_city?: string;
 }) {
   /** Issue a child/org UPI for the current user's org, using an existing or new payment account. */
   const res = await authedFetch(`${API_BASE_URL}/api/orgs/child-upi`, {
@@ -435,7 +446,7 @@ export async function createChildUpi(data: {
   if (!res.ok) {
     throw new Error(await parseError(res, "Unable to create child UPI"));
   }
-  return res.json() as Promise<{ upi: string; payment_account_id: number }>;
+  return res.json() as Promise<{ child_upi_id: string; upi: string; payment_account_id: number }>;
 }
 
 export async function listChildUpis() {
@@ -444,7 +455,18 @@ export async function listChildUpis() {
   if (!res.ok) {
     throw new Error(await parseError(res, "Unable to load child UPIs"));
   }
-  return res.json() as Promise<Array<{ upi: string; payment_account_id: number; rail: string; bank_name?: string; created_at?: string }>>;
+  return res.json() as Promise<
+    Array<{
+      child_upi_id?: string;
+      upi: string;
+      payment_account_id: number;
+      rail: string;
+      bank_name?: string;
+      status?: string;
+      created_at?: string;
+      disabled_at?: string;
+    }>
+  >;
 }
 
 export async function updateOnboardingProfile(data: {

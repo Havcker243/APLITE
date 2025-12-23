@@ -855,3 +855,44 @@ textarea:focus-within {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+@media (max-width: 900px) {
+  .card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-card {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  .site-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .hero {
+    margin-bottom: 20px;
+  }
+
+  .card {
+    padding: 20px;
+  }
+
+  .form-grid {
+    gap: 14px;
+  }
+
+  .button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .history-item,
+  .meta-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

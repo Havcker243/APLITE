@@ -2,6 +2,7 @@ import React from "react";
 import { useRouter } from "next/router";
 import { OnboardingStepper } from "../OnboardingStepper";
 import { useOnboardingWizard } from "../../utils/onboardingWizard";
+import { useAuth } from "../../utils/auth";
 
 function stepPath(step: number) {
   if (step <= 1) return "/onboard/step-1";
@@ -23,7 +24,14 @@ export function OnboardingShell({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const { profile } = useAuth();
   const { completedThrough } = useOnboardingWizard();
+
+  React.useEffect(() => {
+    if (profile?.onboarding_status === "VERIFIED") {
+      router.replace("/dashboard");
+    }
+  }, [profile, router]);
 
   return (
     <div className="page-container onboarding-container">

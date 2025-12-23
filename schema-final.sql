@@ -97,6 +97,26 @@ create index if not exists idx_payment_accounts_org
     on payment_accounts(org_id);
 
 -- =========================
+-- CHILD UPIS (PER-ACCOUNT IDENTIFIERS)
+-- =========================
+create table if not exists child_upis (
+    id uuid primary key default gen_random_uuid(),
+    org_id uuid not null references organizations(id) on delete cascade,
+    payment_account_id bigint not null references payment_accounts(id) on delete cascade,
+    upi text not null,
+    status text not null default 'active' check (status in ('active','disabled')),
+    created_at timestamptz not null default now(),
+    disabled_at timestamptz,
+    unique (org_id, upi)
+);
+
+create index if not exists idx_child_upis_upi
+    on child_upis(upi);
+
+create index if not exists idx_child_upis_org_id
+    on child_upis(org_id);
+
+-- =========================
 -- ONBOARDING SESSIONS
 -- =========================
 create table if not exists onboarding_sessions (

@@ -31,8 +31,9 @@ Run from the repo root so `app` is on the import path. If needed, set `PYTHONPAT
 ## Key routes
 - Auth: `/api/auth/signup`, `/api/auth/login/start`, `/api/auth/login/verify`, `/api/auth/logout`
 - Profile: `GET/PUT /api/profile`
-- Onboarding: `/onboarding/current`, `/onboarding/step-1..4`, `/verify/send-otp`, `/verify/confirm-otp`, `/verify/available-slots`, `/verify/schedule-call`, `/verify/complete-call`
+- Onboarding: `/onboarding/current`, `/onboarding/complete`, `/onboarding/upload-id`, `/onboarding/upload-formation`
 - Payment accounts: `/api/accounts` (list/create)
+- Child UPIs: `/api/orgs/child-upi`, `/api/orgs/child-upis`, `/api/orgs/child-upis/{id}/disable`, `/api/orgs/child-upis/{id}/reactivate`
 - Businesses: `/api/businesses` (create/list), `/api/businesses/{id}/deactivate`
 - Resolve UPI: `/api/resolve`
 - Public clients: `/api/public/clients`

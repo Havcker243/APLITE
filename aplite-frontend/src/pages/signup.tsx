@@ -11,7 +11,6 @@ const initialState = {
   last_name: "",
   email: "",
   company_name: "",
-  summary: "",
   established_year: "",
   state: "",
   country: "",
@@ -116,20 +115,6 @@ export default function SignupPage() {
               Company Name
             </label>
             <input id="company_name" name="company_name" value={form.company_name} onChange={handleChange} className="input-control" required />
-          </div>
-          <div className="input-group">
-            <label className="input-label" htmlFor="summary">
-              Company Summary
-            </label>
-            <textarea
-              id="summary"
-              name="summary"
-              value={form.summary}
-              onChange={handleChange}
-              className="input-control"
-              placeholder="What does your company do?"
-              rows={4}
-            />
           </div>
           <div className="input-group">
             <label className="input-label" htmlFor="established_year">

@@ -33,6 +33,10 @@ export default function AccountsPage() {
 
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
     if (!mounted || loading) return;
     if (!token) {
       router.replace("/login");
@@ -214,24 +218,26 @@ export default function AccountsPage() {
 
       <div className="card" style={{ marginTop: 20 }}>
         <p className="section-title">Saved Accounts</p>
-        <div className="table">
-          <div className="table-head">
-            <span>ID</span>
-            <span>Rail</span>
-            <span>Bank</span>
-            <span>Name</span>
-            <span>Index</span>
-          </div>
-          {accounts.map((acct) => (
-            <div key={acct.id} className="table-row">
-              <span>{acct.id}</span>
-              <span>{acct.rail}</span>
-              <span>{acct.bank_name}</span>
-              <span>{acct.account_name}</span>
-              <span>{acct.payment_index}</span>
+        {accounts.length === 0 ? (
+          <p className="hero-subtitle">No saved accounts yet.</p>
+        ) : (
+          <div className="table">
+            <div className="table-head">
+              <span>#</span>
+              <span>Rail</span>
+              <span>Bank</span>
+              <span>Name</span>
             </div>
-          ))}
-        </div>
+            {accounts.map((acct, index) => (
+              <div key={acct.id} className="table-row">
+                <span>{index + 1}</span>
+                <span>{acct.rail}</span>
+                <span>{acct.bank_name}</span>
+                <span>{acct.account_name}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

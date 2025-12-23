@@ -3,7 +3,9 @@ import hashlib
 import hmac
 import os
 import secrets
+import logging
 
+from psycopg2.errors import UniqueViolation
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Header, Request, Response, status
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, EmailStr, Field
@@ -15,6 +17,7 @@ from app.utils.security import generate_session_token, hash_password, verify_pas
 from app.utils.upi import generate_core_entity_id, generate_upi
 
 router = APIRouter()
+logger = logging.getLogger("aplite")
 
 
 class SignupRequest(BaseModel):
@@ -401,19 +404,30 @@ def create_child_upi(payload: ChildUpiRequest, user=Depends(get_current_user)):
     """
     Issue a child/org UPI for the current user's verified org, using an existing or new payment account.
     """
+    logger.info("child-upi request received", extra={"user_id": user.get("id"), "payload": payload.model_dump()})
     latest_session = queries.get_latest_onboarding_session(user["id"])
     if not latest_session or str(latest_session.get("state")).upper() != "VERIFIED":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Complete onboarding first.")
 
     org_id = latest_session["org_id"]
     payment_account_id = None
+    payment_index = 1
     if payload.account_id:
         acct = queries.get_payment_account_by_id(int(payload.account_id))
         if not acct or str(acct.get("org_id")) != str(org_id):
+            logger.info(
+                "child-upi invalid account",
+                extra={"user_id": user.get("id"), "account_id": payload.account_id, "org_id": str(org_id)},
+            )
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid payment account.")
         payment_account_id = int(acct["id"])
+        payment_index = int(acct.get("payment_index", 1) or 1)
     else:
         if not payload.rail or not payload.bank_name:
+            logger.info(
+                "child-upi missing rail or bank",
+                extra={"user_id": user.get("id"), "rail": payload.rail, "bank_name": payload.bank_name},
+            )
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Rail and bank name are required.")
         try:
             payment_account_id = queries.create_payment_account(
@@ -434,13 +448,37 @@ def create_child_upi(payload: ChildUpiRequest, user=Depends(get_current_user)):
                 status="active",
             )
         except Exception as exc:
+            logger.exception("child-upi payment account create failed")
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unable to create payment account") from exc
+        acct = queries.get_payment_account_by_id(payment_account_id)
+        if not acct:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to load payment account")
+        payment_index = int(acct.get("payment_index", 1) or 1)
 
-    try:
-        upi = queries.generate_upi_for_account(user_id=user["id"], org_id=str(org_id), payment_account_id=payment_account_id)
-    except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unable to generate UPI") from exc
-    return {"upi": upi, "payment_account_id": payment_account_id}
+    child_upi_id = None
+    upi = None
+    for _ in range(3):
+        try:
+            core_id = generate_core_entity_id()
+            upi = generate_upi(core_id, payment_index, user_id=user["id"])
+            child_upi_id = queries.create_child_upi(
+                org_id=str(org_id),
+                payment_account_id=int(payment_account_id),
+                upi=upi,
+            )
+            break
+        except UniqueViolation:
+            upi = None
+            child_upi_id = None
+            continue
+        except Exception as exc:
+            logger.exception("child-upi upi generation failed")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unable to generate UPI") from exc
+
+    if not upi or not child_upi_id:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to generate unique UPI")
+
+    return {"child_upi_id": child_upi_id, "upi": upi, "payment_account_id": payment_account_id}
 
 
 @router.get("/api/orgs/child-upis")
@@ -452,16 +490,57 @@ def list_child_upis(user=Depends(get_current_user)):
     if not latest_session or str(latest_session.get("state")).upper() != "VERIFIED":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Complete onboarding first.")
     org_id = latest_session["org_id"]
-    accounts = queries.list_payment_accounts_for_org(org_id)
+    rows = queries.list_child_upis_for_org(org_id)
     results: list[dict] = []
-    for acct in accounts:
+    for row in rows:
         results.append(
             {
-                "upi": acct.get("upi") or "",
-                "payment_account_id": acct.get("id"),
-                "rail": acct.get("rail", ""),
-                "bank_name": acct.get("bank_name"),
-                "created_at": acct.get("created_at").isoformat() if acct.get("created_at") else "",
+                "child_upi_id": row.get("child_upi_id"),
+                "upi": row.get("upi") or "",
+                "payment_account_id": row.get("payment_account_id"),
+                "rail": row.get("rail", ""),
+                "bank_name": row.get("bank_name"),
+                "status": row.get("status"),
+                "created_at": row.get("created_at").isoformat() if row.get("created_at") else "",
+                "disabled_at": row.get("disabled_at").isoformat() if row.get("disabled_at") else "",
             }
         )
     return results
+
+
+@router.post("/api/orgs/child-upis/{child_upi_id}/disable")
+def disable_child_upi(child_upi_id: str, user=Depends(get_current_user)):
+    latest_session = queries.get_latest_onboarding_session(user["id"])
+    if not latest_session or str(latest_session.get("state")).upper() != "VERIFIED":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Complete onboarding first.")
+    org_id = latest_session["org_id"]
+    record = queries.get_child_upi_by_id(child_upi_id)
+    if not record or str(record.get("org_id")) != str(org_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="UPI not found")
+    updated = queries.disable_child_upi(child_upi_id)
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to disable UPI")
+    return {
+        "child_upi_id": str(updated.get("id")),
+        "status": updated.get("status"),
+        "disabled_at": updated.get("disabled_at").isoformat() if updated.get("disabled_at") else "",
+    }
+
+
+@router.post("/api/orgs/child-upis/{child_upi_id}/reactivate")
+def reactivate_child_upi(child_upi_id: str, user=Depends(get_current_user)):
+    latest_session = queries.get_latest_onboarding_session(user["id"])
+    if not latest_session or str(latest_session.get("state")).upper() != "VERIFIED":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Complete onboarding first.")
+    org_id = latest_session["org_id"]
+    record = queries.get_child_upi_by_id(child_upi_id)
+    if not record or str(record.get("org_id")) != str(org_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="UPI not found")
+    updated = queries.reactivate_child_upi(child_upi_id)
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to reactivate UPI")
+    return {
+        "child_upi_id": str(updated.get("id")),
+        "status": updated.get("status"),
+        "disabled_at": updated.get("disabled_at").isoformat() if updated.get("disabled_at") else "",
+    }

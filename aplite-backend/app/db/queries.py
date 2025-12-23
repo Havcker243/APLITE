@@ -81,6 +81,16 @@ class PaymentAccountRecord(TypedDict, total=False):
     status: str
 
 
+class ChildUpiRecord(TypedDict, total=False):
+    id: str
+    org_id: str
+    payment_account_id: int
+    upi: str
+    status: str
+    created_at: str
+    disabled_at: Optional[str]
+
+
 class UserRecord(TypedDict, total=False):
     id: int
     first_name: str
@@ -350,7 +360,9 @@ def _list_public_clients_sql_verified_users(*, search: Optional[str], limit: int
                     u.summary,
                     u.established_year,
                     o.status,
-                    o.website
+                    o.website,
+                    o.industry,
+                    o.description
                 from organizations o
                 join users u on u.id = o.user_id
                 where (o.status is null or o.status <> 'deactivated')
@@ -413,6 +425,8 @@ def list_public_clients(*, search: Optional[str], limit: int) -> List[Dict[str, 
                     "established_year": owner.get("established_year"),
                     "status": biz.get("status", "active"),
                     "website": biz.get("website"),
+                    "industry": None,
+                    "description": None,
                 }
             )
             if len(results) >= int(limit):
@@ -499,10 +513,10 @@ def list_payment_accounts_for_owner(user_id: int) -> List[PaymentAccountRecord]:
                 select pa.*
                 from payment_accounts pa
                 join organizations o on o.id = pa.org_id
-                where o.user_id = %s
+                where o.user_id = %s or pa.user_id = %s
                 order by pa.id desc
                 """,
-                (user_id,),
+                (user_id, user_id),
             )
             rows = cur.fetchall()
             return [_decrypt_payment_account(row) for row in rows]
@@ -539,6 +553,99 @@ def get_payment_account_by_org_and_index(org_id: str, payment_index: int, rail: 
             )
             row = cur.fetchone()
             return _decrypt_payment_account(row) if row else None
+
+
+def create_child_upi(
+    *,
+    org_id: str,
+    payment_account_id: int,
+    upi: str,
+    status: str = "active",
+) -> str:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                insert into child_upis (org_id, payment_account_id, upi, status)
+                values (%s, %s, %s, %s)
+                returning id
+                """,
+                (str(org_id), int(payment_account_id), upi, status),
+            )
+            row = cur.fetchone() or {}
+            conn.commit()
+            return str(row.get("id"))
+
+
+def get_child_upi_by_value(upi: str) -> Optional[ChildUpiRecord]:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "select * from child_upis where upi = %s",
+                (upi,),
+            )
+            return cur.fetchone()
+
+
+def get_child_upi_by_id(child_upi_id: str) -> Optional[ChildUpiRecord]:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "select * from child_upis where id = %s",
+                (str(child_upi_id),),
+            )
+            return cur.fetchone()
+
+
+def list_child_upis_for_org(org_id: str) -> List[Dict[str, Any]]:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select
+                  cu.id as child_upi_id,
+                  cu.upi,
+                  cu.status,
+                  cu.created_at,
+                  cu.disabled_at,
+                  pa.id as payment_account_id,
+                  pa.rail,
+                  pa.bank_name
+                from child_upis cu
+                join payment_accounts pa on pa.id = cu.payment_account_id
+                where cu.org_id = %s
+                order by cu.created_at desc
+                """,
+                (str(org_id),),
+            )
+            return cur.fetchall()
+
+
+def _set_child_upi_status(child_upi_id: str, *, status: str) -> Optional[ChildUpiRecord]:
+    disabled_at_sql = "now()" if status == "disabled" else "null"
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                update child_upis
+                set status = %s,
+                    disabled_at = {disabled_at_sql}
+                where id = %s
+                returning *
+                """,
+                (status, str(child_upi_id)),
+            )
+            row = cur.fetchone()
+            conn.commit()
+            return row
+
+
+def disable_child_upi(child_upi_id: str) -> Optional[ChildUpiRecord]:
+    return _set_child_upi_status(child_upi_id, status="disabled")
+
+
+def reactivate_child_upi(child_upi_id: str) -> Optional[ChildUpiRecord]:
+    return _set_child_upi_status(child_upi_id, status="active")
 
 
 def update_payment_account(account_id: int, *, conn: psycopg2.extensions.connection | None = None, commit: bool = True, **fields: Any) -> Optional[PaymentAccountRecord]:

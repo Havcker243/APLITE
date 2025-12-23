@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from typing import Literal, Optional
@@ -6,6 +8,7 @@ from app.db import queries
 from app.routes.auth import get_current_user
 
 router = APIRouter()
+logger = logging.getLogger("aplite")
 
 
 class AccountCreateRequest(BaseModel):
@@ -25,7 +28,9 @@ class AccountCreateRequest(BaseModel):
 
 @router.get("/api/accounts")
 def list_accounts(user=Depends(get_current_user)):
-    return queries.list_payment_accounts_for_owner(user["id"])
+    accounts = queries.list_payment_accounts_for_owner(user["id"])
+    logger.info("accounts list fetched", extra={"user_id": user.get("id"), "count": len(accounts)})
+    return accounts
 
 
 @router.post("/api/accounts", status_code=status.HTTP_201_CREATED)

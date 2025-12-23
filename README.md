@@ -18,7 +18,7 @@ From `aplite-backend/`:
 
 ```bash
 pip install -r requirements-backend.txt
-psql "$DATABASE_URL" -f data/schema.sql
+psql "$DATABASE_URL" -f ../schema-final.sql
 uvicorn app.main:app --reload
 ```
 
@@ -49,8 +49,9 @@ Frontend runs on `http://localhost:3000`.
 ## Key routes (backend)
 - Auth: `POST /api/auth/signup`, `POST /api/auth/login/start`, `POST /api/auth/login/verify`, `POST /api/auth/logout`
 - Profile: `GET /api/profile`, `PUT /api/profile`
-- Onboarding: `GET /onboarding/current`, `POST /onboarding/step-1..4`, `POST /verify/send-otp`, `POST /verify/confirm-otp`, `GET /verify/available-slots`, `POST /verify/schedule-call`, `POST /verify/complete-call`
+- Onboarding: `GET /onboarding/current`, `POST /onboarding/complete`, `POST /onboarding/upload-id`, `POST /onboarding/upload-formation`
 - Payment accounts: `GET /api/accounts`, `POST /api/accounts`
+- Child UPIs: `POST /api/orgs/child-upi`, `GET /api/orgs/child-upis`, `POST /api/orgs/child-upis/{id}/disable`, `POST /api/orgs/child-upis/{id}/reactivate`
 - Businesses: `GET /api/businesses`, `POST /api/businesses`, `POST /api/businesses/{id}/deactivate`
 - Resolve: `POST /api/resolve`
 - Public clients: `GET /api/public/clients`

@@ -6,6 +6,11 @@ It is written to be **implementation-ready** for the current repo:
 - Frontend: `aplite-frontend/` (Next.js pages router)
 - Styling: `aplite-frontend/src/styles/globals.css` + shared shell `aplite-frontend/src/components/Layout.tsx`
 
+## Current implementation notes
+- Onboarding is a single-submit flow (`/onboarding/complete`) with local drafts stored in sessionStorage.
+- Role flow (current): owners go through call verification; authorized reps upload ID.
+- Child UPIs exist and can be created from existing or new payment accounts.
+
 ---
 
 # A. Product UI Theme (Homepage + App Shell)
