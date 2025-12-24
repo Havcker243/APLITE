@@ -180,6 +180,67 @@ a {
   display: inline-flex;
 }
 
+
+.nav-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.nav-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-caret {
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+
+.nav-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 200px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--card-border);
+  background: var(--card);
+  box-shadow: var(--shadow-soft);
+  z-index: 30;
+  display: grid;
+  gap: 6px;
+}
+
+.nav-item {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--text);
+  transition: background 0.2s ease;
+}
+
+.nav-item:hover {
+  background: rgba(108, 124, 255, 0.08);
+}
+
+.upi-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+}
+
+.upi-trigger:hover {
+  color: var(--text);
+}
+
 .account-trigger {
   display: inline-flex;
   align-items: center;

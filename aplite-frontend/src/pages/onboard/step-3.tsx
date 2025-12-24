@@ -105,6 +105,19 @@ export default function OnboardStep3() {
                 required={callBased}
               />
             </div>
+            <div className="input-group">
+              <label className="input-label" htmlFor="phone">
+                Phone number
+              </label>
+              <input
+                id="phone"
+                className="input-control mono"
+                value={step3.phone}
+                onChange={(e) => setStep3((p) => ({ ...p, phone: e.target.value }))}
+                placeholder="+1 415 555 0123"
+                required
+              />
+            </div>
             {requiresIdUpload && (
               <div className="input-group">
                 <label className="input-label" htmlFor="id_file">

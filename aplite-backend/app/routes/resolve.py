@@ -15,6 +15,65 @@ class ResolveUPIRequest(BaseModel):
     rail: Literal["ACH", "WIRE_DOM", "SWIFT"]
 
 
+class LookupUPIRequest(BaseModel):
+    upi: str
+
+
+@router.post("/api/upi/lookup")
+def lookup_upi(payload: LookupUPIRequest, user=Depends(get_current_user)):
+    """Return the org + public profile for a verified UPI (exact match only)."""
+    upi_value = payload.upi.upper()
+
+    if not validate_upi_format(upi_value):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid UPI format")
+
+    org = None
+    child_upi = queries.get_child_upi_by_value(upi_value)
+    if child_upi:
+        if child_upi.get("status") != "active":
+            raise HTTPException(status_code=status.HTTP_410_GONE, detail="UPI is disabled")
+        org = queries.get_organization_by_id(str(child_upi.get("org_id")))
+    else:
+        org = queries.get_organization_by_upi(upi_value)
+
+    if not org or org.get("status") == "deactivated":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="UPI not found")
+    if str(org.get("verification_status") or "").lower() != "verified":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="UPI not found")
+
+    owner = queries.get_user_by_id(org.get("user_id")) or user
+    if not verify_upi(upi_value, int(owner.get("id", 0) or 0)):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="UPI not found")
+
+    return {
+        "upi": upi_value,
+        "org": {
+            "id": str(org.get("id")),
+            "legal_name": org.get("legal_name") or "",
+            "dba": org.get("dba"),
+            "ein": org.get("ein") or "",
+            "formation_date": org.get("formation_date"),
+            "formation_state": org.get("formation_state"),
+            "entity_type": org.get("entity_type"),
+            "address": org.get("address") or {},
+            "industry": org.get("industry"),
+            "website": org.get("website"),
+            "description": org.get("description"),
+            "verification_status": org.get("verification_status"),
+            "status": org.get("status") or "",
+            "created_at": org.get("created_at"),
+            "updated_at": org.get("updated_at"),
+        },
+        "profile": {
+            "company_name": owner.get("company_name") or owner.get("company"),
+            "summary": owner.get("summary") or "",
+            "established_year": owner.get("established_year"),
+            "state": owner.get("state"),
+            "country": owner.get("country"),
+        },
+    }
+
+
 @router.post("/api/resolve")
 def resolve_upi(payload: ResolveUPIRequest, user=Depends(get_current_user)):
     """Resolve a UPI (owned by the caller) into payout coordinates for the requested rail."""
@@ -27,9 +86,9 @@ def resolve_upi(payload: ResolveUPIRequest, user=Depends(get_current_user)):
     if child_upi:
         if child_upi.get("status") != "active":
             raise HTTPException(status_code=status.HTTP_410_GONE, detail="UPI is disabled")
-        org = queries.get_organization(str(child_upi.get("org_id")), user["id"])
-        if not org or int(org.get("user_id", -1)) != int(user["id"]):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not own this UPI.")
+        org = queries.get_organization_by_id(str(child_upi.get("org_id")))
+        if not org:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="UPI not found")
         owner = queries.get_user_by_id(org.get("user_id")) or user
         if not queries.is_user_verified(int(owner.get("id", 0))):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Recipient account is not verified.")
@@ -92,9 +151,6 @@ def resolve_upi(payload: ResolveUPIRequest, user=Depends(get_current_user)):
     org = queries.get_organization_by_upi(upi_value)
     if not org or org.get("status") == "deactivated":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="UPI not found")
-
-    if int(org.get("user_id", -1)) != int(user["id"]):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not own this UPI.")
 
     owner = queries.get_user_by_id(org.get("user_id")) or user
     if not queries.is_user_verified(int(owner.get("id", 0))):

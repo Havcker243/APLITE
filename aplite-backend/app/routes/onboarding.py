@@ -114,6 +114,7 @@ class Step3Payload(BaseModel):
     full_name: str = Field(min_length=2, max_length=120)
     title: str | None = Field(default=None, max_length=80)
     id_document_id: str | None = Field(default=None, min_length=8, max_length=200)
+    phone: str | None = Field(default=None, max_length=32)
     attestation: bool
 
     @field_validator("id_document_id")
@@ -408,10 +409,8 @@ def onboarding_complete(
 
     org_id = uuid.uuid4()
     session_id = uuid.uuid4()
-    verification_status = "verified"
-    if verification_method == "call":
-        # TODO: once call scheduling is integrated, keep status pending until call completion.
-        verification_status = "pending_call"
+    pending_call = verification_method == "call"
+    verification_status = "pending_call" if pending_call else "verified"
 
     try:
         # Step 1: organization
@@ -468,6 +467,7 @@ def onboarding_complete(
             full_name=payload.identity.full_name.strip(),
             title=(payload.identity.title or "").strip() or None,
             id_document_id=file_id or "call_verification",
+            phone=(payload.identity.phone or "").strip() or None,
             attestation=payload.identity.attestation,
             status="pending",
         )
@@ -497,16 +497,19 @@ def onboarding_complete(
             status="active",
         )
 
-        # Issue UPI immediately (no gating in this flow).
-        core_id = generate_core_entity_id()
-        parent_upi = user.get("master_upi") or ""
-        if not parent_upi:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Missing master UPI for user.")
-        upi = generate_upi(core_id, payment_index=1, user_id=user["id"])
-        queries.set_organization_upi(str(org_id), upi, payment_account_id, verification_status="verified", status="active")
-
-        # NOTE: We still advance to VERIFIED for now to keep the flow unblocked; call/doc gating can change this later.
-        queries.advance_onboarding_session(session_id=session_id, state="VERIFIED", next_step=5)
+        upi = None
+        if pending_call:
+            queries.set_organization_verification_status(str(org_id), verification_status="pending_call", status="pending_call")
+            queries.advance_onboarding_session(session_id=session_id, state="PENDING_CALL", next_step=5)
+        else:
+            # Issue UPI immediately for verified submissions.
+            core_id = generate_core_entity_id()
+            parent_upi = user.get("master_upi") or ""
+            if not parent_upi:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Missing master UPI for user.")
+            upi = generate_upi(core_id, payment_index=1, user_id=user["id"])
+            queries.set_organization_upi(str(org_id), upi, payment_account_id, verification_status="verified", status="active")
+            queries.advance_onboarding_session(session_id=session_id, state="VERIFIED", next_step=5)
         queries.set_onboarding_payment_account(session_id=session_id, payment_account_id=payment_account_id)
 
     except HTTPException:

@@ -11,6 +11,8 @@ export function Layout({ children }: PropsWithChildren) {
   const { user, token, logout, profile, loading } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const [upiMenuOpen, setUpiMenuOpen] = useState(false);
+  const upiMenuRef = useRef<HTMLDivElement | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">("dark");
 
   const accountLabel = useMemo(() => {
@@ -42,25 +44,31 @@ export function Layout({ children }: PropsWithChildren) {
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setMenuOpen(false);
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+        setUpiMenuOpen(false);
+      }
     }
 
     function onMouseDown(event: MouseEvent) {
       const target = event.target as Node | null;
       if (!target) return;
-      if (!menuRef.current?.contains(target)) {
+      if (menuRef.current && !menuRef.current.contains(target)) {
         setMenuOpen(false);
+      }
+      if (upiMenuRef.current && !upiMenuRef.current.contains(target)) {
+        setUpiMenuOpen(false);
       }
     }
 
-    if (!menuOpen) return;
+    if (!menuOpen && !upiMenuOpen) return;
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("mousedown", onMouseDown);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("mousedown", onMouseDown);
     };
-  }, [menuOpen]);
+  }, [menuOpen, upiMenuOpen]);
 
   const onboardingStatus = String(profile?.onboarding_status || "NOT_STARTED");
   const links = user
@@ -73,7 +81,6 @@ export function Layout({ children }: PropsWithChildren) {
       : [
           { href: "/dashboard", label: "Workspace" },
           { href: "/accounts", label: "Accounts" },
-          { href: "/resolve", label: "Resolve UPI" },
           { href: "/clients", label: "Directory" },
         ]
     : [
@@ -106,6 +113,33 @@ export function Layout({ children }: PropsWithChildren) {
               </Link>
             );
           })}
+          {user && onboardingStatus === "VERIFIED" && (
+            <div className="nav-menu" ref={upiMenuRef}>
+              <button
+                type="button"
+                className="upi-trigger"
+                onClick={() => setUpiMenuOpen((prev) => !prev)}
+                aria-haspopup="menu"
+                aria-expanded={upiMenuOpen}
+              >
+                UPIs
+                <span className="nav-caret" aria-hidden="true">
+                  v
+                </span>
+              </button>
+              {upiMenuOpen && (
+                <div className="nav-dropdown" role="menu" aria-label="UPI menu">
+                  <Link href="/resolve?mode=resolve" role="menuitem" className="nav-item" onClick={() => setUpiMenuOpen(false)}>
+                    Resolve payout
+                  </Link>
+                  <Link href="/resolve?mode=lookup" role="menuitem" className="nav-item" onClick={() => setUpiMenuOpen(false)}>
+                    Lookup profile
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
+
           <button
             type="button"
             className="nav-link"

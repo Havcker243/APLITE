@@ -6,9 +6,11 @@ It is written to be **implementation-ready** for the current repo:
 - Frontend: `aplite-frontend/` (Next.js pages router)
 - Styling: `aplite-frontend/src/styles/globals.css` + shared shell `aplite-frontend/src/components/Layout.tsx`
 
-## Current implementation notes
+## Current implementation notes (MVP)
 - Onboarding is a single-submit flow (`/onboarding/complete`) with local drafts stored in sessionStorage.
-- Role flow (current): owners go through call verification; authorized reps upload ID.
+- There are no per-step save/resume endpoints; `/onboarding/current` only reflects finalized sessions.
+- Role flow: owners go through call verification; authorized reps upload ID.
+- Step 5 is review + submit only (no OTP UI or call scheduling yet).
 - Child UPIs exist and can be created from existing or new payment accounts.
 
 ---
@@ -177,25 +179,24 @@ Instead of only forms everywhere, provide a **command entry point** where the us
 
 # B. FinTech B2B Onboarding Flow (5 Steps)
 
-## B0) Main onboarding requirements
+## B0) Main onboarding requirements (current MVP)
 
 Must have:
 - Multi-step wizard with progress indicator
 - Form validation + field formatting
 - Data persistence between steps
-- A way to resume onboarding later
-- Verification via email/SMS/call depending on risk
-- Audit trail of what the user submitted and when
+- Local draft persistence (sessionStorage)
+- Role-based verification path (call for owners, ID for authorized reps)
 
 ## B1) Suggested 5-step wizard (draft)
 
-This is the high-level flow the UI and backend should support. Each step must be saveable and resumable.
+This is the high-level flow the UI should support. Current MVP uses local drafts and a single submit on Step 5.
 
 1. Establish legal entity (business info + legal address)
 2. Add business context (industry, description, website, etc.)
 3. Add representative / user identity (owner or authorized rep)
 4. Connect payout rails (ACH / wire / SWIFT)
-5. Verification + risk decisioning (email/SMS/call depending on risk)
+5. Review + submit; verification path determined by role (call for owners, ID for reps)
 
 ---
 
@@ -237,7 +238,7 @@ Fields:
 
 ### 3) OnboardingSession
 
-Tracks progress and supports –resume later→.
+Tracks finalized onboarding submissions.
 
 Fields:
 - `org_id`
@@ -276,9 +277,9 @@ Fields:
 
 ---
 
-## C2) State machine (workflow)
+## C2) State machine (workflow) (planned)
 
-Onboarding should behave like a strict workflow with resumable checkpoints.
+Onboarding currently relies on client-side step gating; the state machine below is planned.
 
 Possible states:
 - `NOT_STARTED`
@@ -289,13 +290,13 @@ Possible states:
 - `STEP_5_PENDING_VERIFICATION`
 - `VERIFIED` / `NEEDS_REVIEW` / `REJECTED`
 
-Rules:
-- User can’t jump to step 4 without step 1“3 complete.
-- If a user edits step 1 after completing step 3, the system may require re-verification (risk-based).
+Rules (current):
+- Client enforces step gating locally.
+- Server stores only the final submission and marks the session `VERIFIED` (or `pending_call`).
 
 ---
 
-# D. Step-by-step Implementation Spec
+# D. Step-by-step Implementation Spec (UI guidance; backend is single-submit)
 
 ## Step 1: Establish Legal Entity (Business Info)
 
@@ -305,7 +306,7 @@ Purpose:
 
 ### UI requirements
 - Title: `Stage 1: Establish Legal Entity`
-- Subtitle: –Please provide your business information→
+- Subtitle: "Please provide your business information"
 - Two-column form layout (desktop), one column (mobile)
 
 ### Inputs + validation
@@ -314,7 +315,6 @@ Purpose:
 - string, min length 2
 - max length 120
 - trim whitespace
-- reject emoji characters
 
 2) DBA Name (optional)
 - string
@@ -339,47 +339,25 @@ Purpose:
 - City
 - State (dropdown)
 - ZIP (5 digits; allow ZIP+4 optionally)
-- Optional (later): address autocomplete API
 
 ### Business profile (part of step 1)
 - Industry (dropdown)
-- Industry free-text when –Other→
+- Industry free-text when "Other"
 - Website (validate domain)
 - Business description (optional but useful)
 
-### Backend behavior
-- Save partial progress (autosave or –Save & continue→)
-- Mark step 1 complete only when required fields validate
-- Lock address from edits in later steps (risk/compliance consistency)
+### Formation documents (current)
+- Required for most entity types (not required for Sole Proprietor)
+- Upload via `POST /onboarding/upload-formation` (returns `file_id`)
+- Final submit references the `file_id` in the step 1 payload
 
-### Backend API
+### Backend behavior (current)
+- Local drafts only (sessionStorage); server receives all data on final submit.
+- Address becomes locked after final submission.
 
-`POST /onboarding/step-1`
-
-Payload:
-```json
-{
-  "legal_name": "",
-  "dba": "",
-  "ein": "",
-  "formation_date": "",
-  "formation_state": "",
-  "entity_type": "",
-  "address": {},
-  "industry": "",
-  "website": "",
-  "description": ""
-}
-```
-
-Response:
-```json
-{
-  "org_id": "uuid",
-  "session_id": "uuid",
-  "next_step": 2
-}
-```
+### Backend API (current)
+- `POST /onboarding/upload-formation` for formation documents (returns `file_id`).
+- `POST /onboarding/complete` for the full onboarding payload (all steps).
 
 ---
 
@@ -388,8 +366,8 @@ Response:
 ### UI requirements
 - Title: `Stage 2: Confirm Authorization`
 - Options:
-  - –I am the Business Owner→
-  - –I am an Authorized Representative→
+  - "I am the Business Owner"
+  - "I am an Authorized Representative"
 - If authorized rep: show executive title dropdown
 
 ### Validation
@@ -398,22 +376,11 @@ Response:
   - require executive title
   - examples: CEO, COO, CFO, President, VP, Director
 
-### Backend logic
-- If owner: lower risk flag
-- If authorized rep: increase risk score slightly
-- Save role and title
-- Mark step 2 complete
+### Backend logic (current)
+- Role and title are submitted as part of the final payload.
 
-### API
-`POST /onboarding/step-2`
-
-Payload:
-```json
-{
-  "role": "owner | authorized_rep",
-  "title": "COO"
-}
-```
+### Backend API (current)
+- Role fields are included in `POST /onboarding/complete`.
 
 ---
 
@@ -429,39 +396,20 @@ Payload:
 
 ### File upload requirements
 - Accept: `jpg`, `png`, `pdf`
-- Max size: e.g. 10MB
-- Show uploaded filename + –replace→
-- Store securely (S3-like bucket)
-- Generate signed URL for private access
+- Max size: 10MB
+- Show uploaded filename + replace
+- Store securely (S3-like bucket or local in MVP)
 
 ### Attestation
-- Checkbox required: –I confirm I have legal authority and the information is accurate.→
+- Checkbox required: "I confirm I have legal authority and the information is accurate."
 
-### Backend workflow
-When submitted:
-1. Save identity fields
-2. Store ID file (private)
-3. Provide signed URLs for access when needed
-4. Send to ID verification provider (or store for manual review in MVP)
-4. Mark step 3 as pending verification or complete (depending on MVP mode)
+### Backend workflow (current)
+- Upload the ID file via `POST /onboarding/upload-id` to get a `file_id`.
+- Include `file_id` in the final `POST /onboarding/complete` payload.
 
-### API
-`POST /onboarding/step-3`
-
-Payload:
-```json
-{
-  "full_name": "",
-  "title": "",
-  "id_document_id": "file_id",
-  "attestation": true
-}
-```
-
-Backend processing:
-- Store identity info
-- Run ID verification (or flag for review)
-- Advance state accordingly
+### Backend API (current)
+- `POST /onboarding/upload-id`
+- `POST /onboarding/complete`
 
 ---
 
@@ -469,7 +417,7 @@ Backend processing:
 
 ### UI requirements
 - Title: `Stage 4: Payment Rail Resolution Data`
-- Banner: –All data is encrypted and securely stored→
+- Banner: "All data is encrypted and securely stored"
 - Inputs:
   - Bank name
   - Account number (masked)
@@ -483,7 +431,6 @@ Backend processing:
 - Account number:
   - required
   - numeric only
-  - UI should only display last4 after save
 - Routing numbers:
   - numeric only
   - length checks (ACH usually 9 digits)
@@ -491,51 +438,32 @@ Backend processing:
   - optional
   - pattern checks (basic BIC format)
 
-### Backend security rules
+### Backend security rules (current)
 - Encrypt account number before storing
-- Only store last 4 digits in plaintext
 - Never return full account number after save
-- Only return `last4` + `bank_name` (and non-sensitive routing metadata as needed)
 
-### API
-`POST /onboarding/step-4`
-
-Payload:
-```json
-{
-  "bank_name": "",
-  "account_number": "",
-  "ach_routing": "",
-  "wire_routing": "",
-  "swift": ""
-}
-```
+### Backend API (current)
+- Bank fields are included in `POST /onboarding/complete`.
 
 ---
 
-## Step 5: Final Verification + Issuance
+## Step 5: Review + Submit
 
-### UI requirements
-- Thank-you state
-- Message: –Before issuance, verification required→
-- Risk-based CTA(s):
-  - Verify via Email
-  - Verify via SMS
-  - Schedule a Verification Call (high risk)
+### UI requirements (current)
+- Review the full onboarding payload
+- Submit and receive confirmation
+- No OTP UI or call scheduling yet
 
-### Risk-based method selection
-Step 5 should choose a verification method based on risk (email/SMS vs call).
-
-Risk level â†’ method:
-- Low â†’ Email OTP
-- Medium â†’ SMS OTP
-- High â†’ Call
+### Verification method selection (current)
+- Owners: call verification (status `pending_call`).
+- Authorized reps: ID document required.
 
 ---
 
-# E. Verification Channel System (Email / Text / Call)
+# E. Verification Channel System (Email / Text / Call) (future)
 
-## E1) When to use each method (MVP logic)
+
+## E1) When to use each method (planned)
 
 - If user is owner + US-based + identity matches cleanly: Email OTP or SMS OTP
 - If authorized rep or missing/mismatched details: schedule call
@@ -550,7 +478,7 @@ Risk level â†’ method:
 
 ---
 
-## E2) OTP verification spec (Email/SMS)
+## E2) OTP verification spec (Email/SMS) (planned)
 
 ### User flow
 1. User chooses method OR system chooses automatically
@@ -563,7 +491,7 @@ Risk level â†’ method:
 - Attempt limit: 5 max
 - Resend limit: 3 max
 
-### API endpoints
+### API endpoints (planned)
 
 `POST /verify/send-otp`
 
@@ -585,7 +513,7 @@ Payload:
 
 ---
 
-## E3) Call verification spec
+## E3) Call verification spec (planned)
 
 ### User flow
 1. Schedule call
@@ -601,7 +529,7 @@ Payload:
   - admin marks verified manually
   - or user picks a time and you confirm with a code later
 
-### API
+### API (planned)
 - `GET /verify/available-slots`
 - `POST /verify/schedule-call`
 - `POST /verify/complete-call` (admin/internal)
@@ -617,13 +545,13 @@ Payload:
 - Cannot skip ahead
 - Back is always available unless verification started
 
-## F2) Autosave
-- Every step saves as a draft
-- Show a –Saved→ indicator
-- On refresh, user resumes from the last saved step
+## F2) Autosave (current)
+- Drafts are stored in sessionStorage on every step
+- Show a "Saved" indicator
+- Drafts are cleared on logout
 
-## F3) Resume onboarding
-- If user logs out mid-way, on next login show –Continue onboarding (Step X of 5)→
+## F3) Resume onboarding (current)
+- Drafts can be resumed in the same browser session only
 
 ## F4) Error messages
 - Always show:
@@ -631,7 +559,7 @@ Payload:
   - how to fix it
 - Avoid generic –invalid input→ without guidance.
 
-# G. MVP Build Order (Recommended)
+# G. MVP Build Order (Current)
 ---
 
 # J. Completion
@@ -657,16 +585,13 @@ It intentionally slows the user slightly to build confidence.
 
 ---
 
-# G. MVP Build Order (Recommended)
+# G. MVP Build Order (Current)
 
-1. Build onboarding session state machine
-2. Step 1 form + save
-3. Step 2 role selection
-4. Step 3 upload + attestation (store file)
-5. Step 4 bank rails storage (encrypt)
-6. Step 5 verification method selection
-7. OTP email + OTP SMS (one at a time)
-8. Call scheduling (can be fake slots first)
+1. Single-submit onboarding payload (`/onboarding/complete`)
+2. Formation + ID uploads (`/onboarding/upload-formation`, `/onboarding/upload-id`)
+3. Issue org UPI after submit
+4. Add child UPIs using existing or new payment accounts
+5. (Future) OTP + call scheduling flows
 
 ---
 
@@ -681,11 +606,10 @@ It intentionally slows the user slightly to build confidence.
 2. Confirm user authority (owner vs authorized rep; exec title required if rep)
 3. Identity verification (full name + title + upload government ID + attestation)
 4. Bank rails mapping (bank name, acct number encrypted, ACH/wire routing, SWIFT optional; address read-only)
-5. Verification before issuance (OTP via email/SMS for low risk; call scheduling for higher risk)
+5. Review + submit (call for owners, ID for authorized reps)
 
 **Requirements:**
-- Autosave drafts, resume later, strict step gating
-- OTP expiration + attempt limits
+- Autosave drafts in sessionStorage, strict step gating
 - Encrypted storage for bank account details
 
 

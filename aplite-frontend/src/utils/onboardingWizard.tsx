@@ -33,7 +33,7 @@ export type OnboardingStep1Draft = {
 
 export type OnboardingStep2Draft = { role: "owner" | "authorized_rep" | ""; title: string };
 
-export type OnboardingStep3Draft = { full_name: string; title: string; file?: File; file_id?: string; attestation: boolean };
+export type OnboardingStep3Draft = { full_name: string; title: string; phone: string; file?: File; file_id?: string; attestation: boolean };
 
 export type OnboardingStep4Draft = { bank_name: string; account_number: string; ach_routing: string; wire_routing: string; swift: string };
 
@@ -91,7 +91,7 @@ const INITIAL_STEP1: OnboardingStep1Draft = {
   description: "",
 };
 const INITIAL_STEP2: OnboardingStep2Draft = { role: "", title: "" };
-const INITIAL_STEP3: OnboardingStep3Draft = { full_name: "", title: "", file: undefined, file_id: undefined, attestation: false };
+const INITIAL_STEP3: OnboardingStep3Draft = { full_name: "", title: "", phone: "", file: undefined, file_id: undefined, attestation: false };
 const INITIAL_STEP4: OnboardingStep4Draft = { bank_name: "", account_number: "", ach_routing: "", wire_routing: "", swift: "" };
 
 export function OnboardingProvider({ children }: { children: React.ReactNode }) {

@@ -102,7 +102,7 @@ export type ProfileDetailsResponse = {
 };
 
 export type OnboardingStep2Payload = { role: "owner" | "authorized_rep"; title?: string };
-export type OnboardingStep3Payload = { full_name: string; title?: string; id_document_id?: string; attestation: boolean };
+export type OnboardingStep3Payload = { full_name: string; title?: string; id_document_id?: string; phone?: string; attestation: boolean };
 export type OnboardingStep4Payload = {
   bank_name: string;
   account_number: string;
@@ -190,6 +190,34 @@ export type ResolveResult = {
     country?: string | null;
   };
   coordinates: Record<string, string>;
+};
+
+export type UpiLookupResult = {
+  upi: string;
+  org: {
+    id: string;
+    legal_name: string;
+    dba?: string | null;
+    ein?: string;
+    formation_date?: string | null;
+    formation_state?: string | null;
+    entity_type?: string | null;
+    address?: any;
+    industry?: string | null;
+    website?: string | null;
+    description?: string | null;
+    verification_status?: string | null;
+    status?: string | null;
+    created_at?: string | null;
+    updated_at?: string | null;
+  };
+  profile: {
+    company_name?: string;
+    summary?: string;
+    established_year?: number;
+    state?: string | null;
+    country?: string | null;
+  };
 };
 
 // All requests prefer cookie-based auth but also attach Bearer when available.
@@ -370,6 +398,26 @@ export async function resolveUPI(data: ResolvePayload) {
   }
 
   return res.json();
+}
+
+export async function lookupUpiProfile(data: { upi: string }) {
+  /** Lookup a verified UPI and return the org profile (exact match). */
+  const res = await authedFetch(`${API_BASE_URL}/api/upi/lookup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    let detail = "Unable to lookup UPI";
+    try {
+      const error = await res.json();
+      detail = error?.detail || detail;
+    } catch {
+      // ignore parse errors
+    }
+    throw new Error(detail);
+  }
+  return res.json() as Promise<UpiLookupResult>;
 }
 
 export async function fetchBusinesses(limit?: number): Promise<BusinessSummary[]> {

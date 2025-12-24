@@ -8,17 +8,25 @@ import { onboardingComplete } from "../../utils/api";
 
 export default function OnboardVerify() {
   const router = useRouter();
-  const { token, loading, refreshProfile } = useAuth();
+  const { token, loading, refreshProfile, profile } = useAuth();
   const { step1, step2, step3, step4, completedThrough, clearDraft, touchStep, markStepComplete } = useOnboardingWizard();
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [pendingCall, setPendingCall] = useState(false);
 
   React.useEffect(() => {
     setMounted(true);
   }, []);
+
+  React.useEffect(() => {
+    const status = String(profile?.onboarding_status || "");
+    if (status === "PENDING_CALL") {
+      setPendingCall(true);
+    }
+  }, [profile]);
 
   React.useEffect(() => {
     touchStep(5);
@@ -91,6 +99,7 @@ export default function OnboardVerify() {
           full_name: step3.full_name,
           title: step3.title || undefined,
           id_document_id: step3.file_id || undefined,
+          phone: step3.phone || undefined,
           attestation: step3.attestation,
         },
         bank: {
@@ -109,6 +118,11 @@ export default function OnboardVerify() {
       // Refresh server profile so routing uses the latest onboarding_status.
       await refreshProfile();
       markStepComplete(5);
+      if (res.status === "PENDING_CALL") {
+        setPendingCall(true);
+        setSaved("Submitted. Verification call pending. We will reach out shortly.");
+        return;
+      }
       clearDraft();
       setSaved(`Verified. Issued UPI: ${res.upi}`);
       router.push("/dashboard");
@@ -278,9 +292,9 @@ export default function OnboardVerify() {
           <button type="button" className="button button-secondary" onClick={() => router.push("/onboard/step-4")}>
             Back
           </button>
-          <button type="button" className="button" onClick={handleSubmit} disabled={saving}>
+          <button type="button" className="button" onClick={handleSubmit} disabled={saving || pendingCall}>
             {saving && <span className="spinner" aria-hidden="true" />}
-            Submit & Finish
+            {pendingCall ? "Pending verification" : "Submit & Finish"}
           </button>
         </div>
       </div>

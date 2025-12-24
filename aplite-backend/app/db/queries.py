@@ -1071,6 +1071,13 @@ def get_organization(org_id: str, user_id: int) -> Optional[OrganizationRecord]:
             return cur.fetchone()
 
 
+def get_organization_by_id(org_id: str) -> Optional[OrganizationRecord]:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("select * from organizations where id = %s", (str(org_id),))
+            return cur.fetchone()
+
+
 def list_organizations_for_user(user_id: int) -> List[OrganizationRecord]:
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -1093,6 +1100,19 @@ def set_organization_upi(org_id: str, upi: str, payment_account_id: int, *, veri
                 (upi, verification_status, status, str(org_id)),
             )
             cur.execute("update payment_accounts set status='active' where id=%s", (payment_account_id,))
+            conn.commit()
+
+
+def set_organization_verification_status(org_id: str, *, verification_status: str, status: str | None = None) -> None:
+    assignments = ["verification_status=%s", "updated_at=now()"]
+    params: list = [verification_status]
+    if status is not None:
+        assignments.insert(1, "status=%s")
+        params.append(status)
+    params.append(str(org_id))
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"update organizations set {', '.join(assignments)} where id=%s", tuple(params))
             conn.commit()
 
 
@@ -1308,6 +1328,7 @@ def create_identity_verification(
     full_name: str,
     title: Optional[str],
     id_document_id: str,
+    phone: Optional[str],
     attestation: bool,
     status: str,
 ) -> None:
@@ -1316,10 +1337,10 @@ def create_identity_verification(
             cur.execute(
                 """
                 insert into identity_verifications
-                (id, session_id, org_id, user_id, full_name, title, id_document_id, attestation, status, created_at)
-                values (%s,%s,%s,%s,%s,%s,%s,%s,%s, now())
+                (id, session_id, org_id, user_id, full_name, title, id_document_id, phone, attestation, status, created_at)
+                values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, now())
                 """,
-                (str(verification_id), str(session_id), str(org_id), user_id, full_name, title, id_document_id, attestation, status),
+                (str(verification_id), str(session_id), str(org_id), user_id, full_name, title, id_document_id, phone, attestation, status),
             )
             conn.commit()
 
