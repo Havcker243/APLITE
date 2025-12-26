@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import date
+import hashlib
+import hmac
 import os
 import logging
 import re
@@ -10,13 +12,14 @@ from typing import Optional
 import psycopg2
 from psycopg2.errors import UniqueViolation
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status, Form
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status, Form, Header, Request
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field, field_validator
 
 from app.db import queries
 from app.routes.auth import get_current_user
 from app.utils.upi import generate_core_entity_id, generate_upi
+from app.utils.email import send_email
 import boto3
 from botocore.client import Config as BotoConfig
 
@@ -27,6 +30,15 @@ EIN_RE = re.compile(r"^\d{2}-\d{7}$")
 DOMAIN_RE = re.compile(
     r"^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))+$"
 )
+
+CAL_WEBHOOK_SECRET = os.getenv("CAL_WEBHOOK_SECRET", "")
+WEBHOOK_ALERT_EMAIL = os.getenv("WEBHOOK_ALERT_EMAIL", "")
+CAL_VERIFY_EVENTS = {
+    "booking.completed",
+    "booking.ended",
+    "call.completed",
+    "meeting.completed",
+}
 
 class Address(BaseModel):
     street1: str = Field(min_length=1, max_length=120)
@@ -275,6 +287,7 @@ def _store_uploaded_file(
     doc_category: str | None = None,
     doc_type: str | None = None,
 ) -> tuple[str, str]:
+    # Accept uploads into S3 when configured; otherwise persist locally for MVP.
     if not file.filename:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing file.")
     content_type = (file.content_type or "").lower()
@@ -342,6 +355,7 @@ def _entity_type_key(value: str) -> str:
 
 
 def _allowed_formation_docs(entity_type: str) -> set[str]:
+    # Normalize entity type names to a small set of required formation docs.
     key = _entity_type_key(entity_type)
     if key == "llc":
         return {"articles_of_organization", "certificate_of_formation"}
@@ -358,6 +372,60 @@ def _formation_docs_required(entity_type: str) -> bool:
     return _entity_type_key(entity_type) != "soleproprietor"
 
 
+def _cal_signature_ok(secret: str, body: bytes, signature: str | None) -> bool:
+    if not secret:
+        return True
+    if not signature:
+        return False
+    signature = signature.strip()
+    if signature.startswith("sha256="):
+        signature = signature.split("=", 1)[1]
+    digest = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(digest, signature)
+
+
+def _extract_cal_email(payload: dict) -> str | None:
+    # Best-effort extraction across Cal.com webhook variants.
+    candidates: list[str] = []
+    for key in ("email", "user", "organizer"):
+        value = payload.get(key)
+        if isinstance(value, dict):
+            email = value.get("email")
+            if isinstance(email, str):
+                candidates.append(email)
+        elif isinstance(value, str) and "@" in value:
+            candidates.append(value)
+
+    booking = payload.get("booking") if isinstance(payload.get("booking"), dict) else payload.get("data")
+    if isinstance(booking, dict):
+        for key in ("attendees", "participants"):
+            attendees = booking.get(key)
+            if isinstance(attendees, list):
+                for attendee in attendees:
+                    if isinstance(attendee, dict) and isinstance(attendee.get("email"), str):
+                        candidates.append(attendee["email"])
+        organizer = booking.get("organizer")
+        if isinstance(organizer, dict) and isinstance(organizer.get("email"), str):
+            candidates.append(organizer["email"])
+        if isinstance(booking.get("email"), str):
+            candidates.append(booking["email"])
+
+    for email in candidates:
+        cleaned = email.strip().lower()
+        if cleaned and "@" in cleaned:
+            return cleaned
+    return None
+
+
+def _send_webhook_alert(subject: str, body: str) -> None:
+    if not WEBHOOK_ALERT_EMAIL:
+        return
+    try:
+        send_email(to_address=WEBHOOK_ALERT_EMAIL, subject=subject, body=body)
+    except Exception:
+        logger.exception("Failed to send webhook alert")
+
+
 @router.post("/onboarding/complete")
 def onboarding_complete(
     data: str = Form(..., description="JSON string for CompletePayload"),
@@ -371,6 +439,7 @@ def onboarding_complete(
       - data: JSON string matching CompletePayload
       - file: optional UploadFile for ID document
     """
+    # Parse + validate the full payload in one request (MVP single-submit flow).
     try:
         payload_raw = json.loads(data)
         payload = CompletePayload(**payload_raw)
@@ -382,7 +451,7 @@ def onboarding_complete(
             detail=str(exc) or "Invalid onboarding payload",
         ) from exc
 
-    # Handle ID document (uploaded file takes precedence).
+    # Handle ID document (multipart file takes precedence over existing file_id).
     file_id = payload.identity.id_document_id or payload.id_document_id
     if file is not None:
         file_id, _ = _store_uploaded_file(file, user_id=user["id"], doc_category="id_document")
@@ -402,115 +471,64 @@ def onboarding_complete(
         if not queries.onboarding_file_exists(file_id=doc.file_id, user_id=user["id"], allowed_prefixes=("form",)):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid formation document reference.")
 
-    # Basic role/risk determination and verification method
+    # Basic role/risk determination and verification method.
     risk_level = "low" if payload.role.role == "owner" else "high"
     # Default verification path: owners go through a call; reps provide ID.
     verification_method = payload.verification_method or ("call" if payload.role.role == "owner" else "id")
 
-    org_id = uuid.uuid4()
-    session_id = uuid.uuid4()
-    pending_call = verification_method == "call"
-    verification_status = "pending_call" if pending_call else "verified"
-
     try:
-        # Step 1: organization
-        queries.create_organization_step1(
-            org_id=org_id,
-            user_id=user["id"],
-            legal_name=payload.org.legal_name.strip(),
-            dba=(payload.org.dba or "").strip() or None,
-            ein=payload.org.ein,
-            formation_date=payload.org.formation_date,
-            formation_state=payload.org.formation_state.strip(),
-            entity_type=payload.org.entity_type.strip(),
-            address=payload.org.address.model_dump(),
-            industry=payload.org.industry.strip(),
-            website=payload.org.website,
-            description=(payload.org.description or "").strip() or None,
-        )
-
-        # Step 2: role
-        queries.create_onboarding_session(
-            session_id=session_id,
-            org_id=org_id,
-            user_id=user["id"],
-            state="STEP_2_COMPLETE",
-            current_step=3,
-            address_locked=True,
-        )
-        if formation_docs:
-            queries.set_onboarding_formation_documents(
-                session_id=session_id,
-                documents=[doc.model_dump() for doc in formation_docs],
-            )
-        queries.update_onboarding_role(
-            session_id=session_id,
-            user_id=user["id"],
-            role=payload.role.role,
-            title=payload.role.title,
-            risk_level=risk_level,
-        )
-
-        # Step 3: identity
+        # Step 3: identity validation
         require_document = verification_method != "call"
         if require_document and not file_id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Upload a government ID document.")
         if file_id:
             if not queries.onboarding_file_exists(file_id=file_id, user_id=user["id"]):
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid document reference. Please re-upload.")
-        verification_id = uuid.uuid4()
-        queries.create_identity_verification(
-            verification_id=verification_id,
-            session_id=session_id,
-            org_id=org_id,
-            user_id=user["id"],
-            full_name=payload.identity.full_name.strip(),
-            title=(payload.identity.title or "").strip() or None,
-            id_document_id=file_id or "call_verification",
-            phone=(payload.identity.phone or "").strip() or None,
-            attestation=payload.identity.attestation,
-            status="pending",
-        )
 
-        # Step 4: bank account
         if not (payload.bank.ach_routing or payload.bank.wire_routing or payload.bank.swift):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Provide at least one rail (ACH routing, wire routing, or SWIFT).",
             )
-        rail = "ACH" if payload.bank.ach_routing else ("WIRE_DOM" if payload.bank.wire_routing else "SWIFT")
-        payment_account_id = queries.create_payment_account(
-            user_id=user["id"],
-            org_id=str(org_id),
-            rail=rail,
-            bank_name=payload.bank.bank_name.strip(),
-            account_name=payload.org.legal_name.strip(),
-            ach_routing=payload.bank.ach_routing if rail == "ACH" else None,
-            ach_account=payload.bank.account_number if rail == "ACH" else None,
-            wire_routing=payload.bank.wire_routing if rail == "WIRE_DOM" else None,
-            wire_account=payload.bank.account_number if rail == "WIRE_DOM" else None,
-            bank_address=None,
-            swift_bic=payload.bank.swift if rail == "SWIFT" else None,
-            iban=payload.bank.account_number if rail == "SWIFT" else None,
-            bank_country=None,
-            bank_city=None,
-            status="active",
-        )
 
-        upi = None
-        if pending_call:
-            queries.set_organization_verification_status(str(org_id), verification_status="pending_call", status="pending_call")
-            queries.advance_onboarding_session(session_id=session_id, state="PENDING_CALL", next_step=5)
-        else:
-            # Issue UPI immediately for verified submissions.
-            core_id = generate_core_entity_id()
-            parent_upi = user.get("master_upi") or ""
-            if not parent_upi:
-                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Missing master UPI for user.")
-            upi = generate_upi(core_id, payment_index=1, user_id=user["id"])
-            queries.set_organization_upi(str(org_id), upi, payment_account_id, verification_status="verified", status="active")
-            queries.advance_onboarding_session(session_id=session_id, state="VERIFIED", next_step=5)
-        queries.set_onboarding_payment_account(session_id=session_id, payment_account_id=payment_account_id)
+        # Commit all onboarding data atomically (org + session + identity + bank + UPI issuance).
+        result = queries.complete_onboarding_tx(
+            user_id=user["id"],
+            org_data={
+                "legal_name": payload.org.legal_name.strip(),
+                "dba": (payload.org.dba or "").strip() or None,
+                "ein": payload.org.ein,
+                "formation_date": payload.org.formation_date,
+                "formation_state": payload.org.formation_state.strip(),
+                "entity_type": payload.org.entity_type.strip(),
+                "address": payload.org.address.model_dump(),
+                "industry": payload.org.industry.strip(),
+                "website": payload.org.website,
+                "description": (payload.org.description or "").strip() or None,
+            },
+            role_data={
+                "role": payload.role.role,
+                "title": payload.role.title,
+            },
+            identity_data={
+                "full_name": payload.identity.full_name.strip(),
+                "title": (payload.identity.title or "").strip() or None,
+                "id_document_id": file_id or "call_verification",
+                "phone": (payload.identity.phone or "").strip() or None,
+                "attestation": payload.identity.attestation,
+            },
+            bank_data={
+                "bank_name": payload.bank.bank_name.strip(),
+                "account_number": payload.bank.account_number,
+                "ach_routing": payload.bank.ach_routing,
+                "wire_routing": payload.bank.wire_routing,
+                "swift": payload.bank.swift,
+            },
+            formation_docs=[doc.model_dump() for doc in formation_docs],
+            verification_method=verification_method,
+            risk_level=risk_level,
+            master_upi=user.get("master_upi") or "",
+        )
 
     except HTTPException:
         raise
@@ -532,9 +550,125 @@ def onboarding_complete(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to complete onboarding") from exc
 
     return {
-        "status": "PENDING_CALL" if verification_method == "call" else "VERIFIED",
-        "org_id": str(org_id),
-        "session_id": str(session_id),
-        "upi": upi,
-        "payment_account_id": payment_account_id,
+        "status": result["status"],
+        "org_id": result["org_id"],
+        "session_id": result["session_id"],
+        "upi": result["upi"],
+        "payment_account_id": result["payment_account_id"],
     }
+
+
+@router.post("/api/admin/orgs/{org_id}/verify")
+def admin_verify_org(
+    org_id: str,
+    x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
+):
+    """
+    Manual verification endpoint (MVP).
+
+    Protect with ADMIN_API_KEY to avoid unauthenticated use.
+    """
+    expected_key = os.getenv("ADMIN_API_KEY") or ""
+    if not expected_key:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Admin verification is not configured.")
+    if x_admin_key != expected_key:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid admin key.")
+
+    org = queries.get_organization_by_id(org_id)
+    if not org:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found.")
+
+    session = queries.get_latest_onboarding_session_by_org(org_id)
+    if not session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Onboarding session not found.")
+
+    payment_account_id = queries.get_onboarding_payment_account(uuid.UUID(str(session["id"])))
+    if not payment_account_id:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Payment account missing for onboarding session.")
+    account = queries.get_payment_account_by_id(payment_account_id)
+    if not account:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment account not found.")
+
+    user = queries.get_user_by_id(int(org.get("user_id") or 0)) or {}
+    master_upi = user.get("master_upi") or ""
+    if not master_upi:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Missing master UPI for user.")
+
+    upi = org.get("upi") or None
+    if not upi:
+        payment_index = int(account.get("payment_index", 1) or 1)
+        core_id = generate_core_entity_id()
+        upi = generate_upi(core_id, payment_index=payment_index, user_id=int(user.get("id") or 0))
+        queries.set_organization_upi(org_id, upi, payment_account_id, verification_status="verified", status="active")
+    else:
+        queries.set_organization_verification_status(org_id, verification_status="verified", status="active")
+
+    queries.complete_onboarding_session(uuid.UUID(str(session["id"])), state="VERIFIED")
+    return {"status": "VERIFIED", "org_id": str(org_id), "upi": upi}
+
+
+@router.post("/webhooks/cal")
+async def cal_webhook(request: Request, x_cal_signature: str | None = Header(default=None, alias="X-Cal-Signature")):
+    """
+    Cal.com webhook handler.
+
+    Expected behavior:
+    - If event indicates a completed call, mark onboarding VERIFIED and issue UPI.
+    - Otherwise acknowledge the event.
+    """
+    body = await request.body()
+    if not _cal_signature_ok(CAL_WEBHOOK_SECRET, body, x_cal_signature):
+        _send_webhook_alert(
+            subject="Aplite: Cal webhook signature failed",
+            body="Received Cal webhook with invalid signature.",
+        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid webhook signature.")
+
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except Exception as exc:
+        _send_webhook_alert(
+            subject="Aplite: Cal webhook invalid JSON",
+            body=f"Failed to parse webhook JSON: {exc}",
+        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON payload.") from exc
+
+    event = str(payload.get("type") or payload.get("event") or payload.get("trigger") or "").lower()
+    email = _extract_cal_email(payload)
+    logger.info("cal webhook received", extra={"event": event, "email": email})
+    if not email:
+        _send_webhook_alert(
+            subject="Aplite: Cal webhook missing email",
+            body=f"Event {event or 'unknown'} did not include an attendee email.",
+        )
+        return {"status": "ignored", "detail": "Missing attendee email"}
+
+    user = queries.get_user_by_email(email)
+    if not user:
+        _send_webhook_alert(
+            subject="Aplite: Cal webhook user not found",
+            body=f"Event {event or 'unknown'} for email {email} had no matching user.",
+        )
+        return {"status": "ignored", "detail": "User not found"}
+
+    latest_session = queries.get_latest_onboarding_session(user["id"])
+    if not latest_session:
+        _send_webhook_alert(
+            subject="Aplite: Cal webhook session missing",
+            body=f"User {email} has no onboarding session for event {event or 'unknown'}.",
+        )
+        return {"status": "ignored", "detail": "No onboarding session"}
+
+    if event in CAL_VERIFY_EVENTS:
+        try:
+            upi = queries.complete_onboarding_and_issue_identifier(uuid.UUID(str(latest_session["id"])))
+            return {"status": "VERIFIED", "upi": upi}
+        except Exception as exc:
+            logger.exception("Cal webhook verification failed")
+            _send_webhook_alert(
+                subject="Aplite: Cal webhook verification failed",
+                body=f"Failed to verify user {email} for event {event or 'unknown'}: {exc}",
+            )
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to complete verification") from exc
+
+    return {"status": "acknowledged", "event": event or "unknown"}

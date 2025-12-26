@@ -11,6 +11,8 @@ import {
   fetchProfileDetails,
   createChildUpi,
   listChildUpis,
+  disableChildUpi,
+  reactivateChildUpi,
 } from "../utils/api";
 import { useAuth } from "../utils/auth";
 import { requireVerifiedOrRedirect } from "../utils/requireVerified";
@@ -96,9 +98,13 @@ export default function DashboardPage() {
   const [accounts, setAccounts] = useState<any[]>([]);
   const [accountsError, setAccountsError] = useState<string | null>(null);
   const [childUpis, setChildUpis] = useState<
-    Array<{ upi: string; payment_account_id: number; rail: string; bank_name?: string; created_at?: string }>
+    Array<{ child_upi_id?: string; upi: string; payment_account_id: number; rail: string; bank_name?: string; created_at?: string; status?: string }>
   >([]);
   const [childUpisError, setChildUpisError] = useState<string | null>(null);
+  const [childUpiBusy, setChildUpiBusy] = useState<Record<string, boolean>>({});
+  const [childUpisHasMore, setChildUpisHasMore] = useState(true);
+  const [childUpisLoadingMore, setChildUpisLoadingMore] = useState(false);
+  const [childUpisCursor, setChildUpisCursor] = useState<string | null>(null);
 
   const [resolveUpi, setResolveUpi] = useState("");
   const [resolveRail, setResolveRail] = useState<"ACH" | "WIRE_DOM" | "SWIFT">(
@@ -108,6 +114,7 @@ export default function DashboardPage() {
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [resolving, setResolving] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const CHILD_UPI_PAGE_SIZE = 6;
 
   useEffect(() => {
     if (!mounted || loading) return;
@@ -155,11 +162,22 @@ export default function DashboardPage() {
     }
   }
 
-  async function loadChildUpis() {
+  async function loadChildUpis(options?: { append?: boolean }) {
     try {
-      const res = await listChildUpis();
-      setChildUpis(res);
+      const append = options?.append ?? false;
+      const res = await listChildUpis({
+        limit: CHILD_UPI_PAGE_SIZE,
+        before: append ? childUpisCursor || undefined : undefined,
+      });
+      setChildUpis((prev) => (append ? [...prev, ...res] : res));
       setChildUpisError(null);
+      setChildUpisHasMore(res.length === CHILD_UPI_PAGE_SIZE);
+      const last = res[res.length - 1];
+      if (last?.created_at) {
+        setChildUpisCursor(last.created_at);
+      } else if (!append) {
+        setChildUpisCursor(null);
+      }
     } catch (err) {
       setChildUpisError(err instanceof Error ? err.message : "Unable to load child UPIs");
     }
@@ -253,6 +271,23 @@ export default function DashboardPage() {
 
   if (loading || !token || !mounted) {
     return <LoadingScreen />;
+  }
+
+  async function handleToggleChildUpi(childUpiId: string, nextStatus: "active" | "disabled") {
+    // Toggle child UPI status; resolves will block disabled UPIs.
+    setChildUpiBusy((prev) => ({ ...prev, [childUpiId]: true }));
+    try {
+      if (nextStatus === "disabled") {
+        await disableChildUpi(childUpiId);
+      } else {
+        await reactivateChildUpi(childUpiId);
+      }
+      await loadChildUpis();
+    } catch (err) {
+      setChildUpisError(err instanceof Error ? err.message : "Unable to update UPI status");
+    } finally {
+      setChildUpiBusy((prev) => ({ ...prev, [childUpiId]: false }));
+    }
   }
 
   return (
@@ -439,48 +474,82 @@ export default function DashboardPage() {
           ) : (
             <div className="list" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {childUpis.map((c) => (
-                <div key={`${c.payment_account_id}-${c.upi}`} className="card" style={{ padding: 12 }}>
+                <div key={c.child_upi_id || `${c.payment_account_id}-${c.upi}`} className="card" style={{ padding: 12 }}>
                     <p className="section-title" style={{ marginBottom: 4 }}>
-                      {c.bank_name || "Account"} · {c.rail}
+                      {c.bank_name || "Account"} - {c.rail}
                     </p>
                     <div className="hero-subtitle" style={{ wordBreak: "break-all" }}>
                       {c.upi || "(pending)"}
+                    </div>
+                    <div className="hero-subtitle" style={{ marginTop: 4 }}>
+                      Status: {c.status || "active"}
                     </div>
                     {c.created_at && (
                       <p className="hero-subtitle" style={{ marginTop: 4 }}>
                         Created: {new Date(c.created_at).toLocaleString()}
                       </p>
                     )}
-                    <button
-                      type="button"
-                      className="button button-secondary"
-                      onClick={() => {
-                        if (!c.upi) return;
-                        navigator.clipboard?.writeText(c.upi).catch(() => undefined);
-                        const toast = document.createElement("div");
-                        toast.textContent = "Copied";
-                        toast.style.position = "fixed";
-                        toast.style.bottom = "32px";
-                        toast.style.left = "50%";
-                        toast.style.transform = "translateX(-50%)";
-                        toast.style.padding = "12px 16px";
-                        toast.style.background = "#1e88e5";
-                        toast.style.color = "#fff";
-                        toast.style.borderRadius = "10px";
-                        toast.style.boxShadow = "0 6px 20px rgba(0,0,0,0.25)";
-                        toast.style.fontWeight = "600";
-                        toast.style.zIndex = "9999";
-                        document.body.appendChild(toast);
-                        setTimeout(() => toast.remove(), 1500);
-                      }}
-                      disabled={!c.upi}
-                    >
-                      Copy UPI
-                    </button>
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
+                      <button
+                        type="button"
+                        className="button button-secondary"
+                        onClick={() => {
+                          if (!c.upi) return;
+                          navigator.clipboard?.writeText(c.upi).catch(() => undefined);
+                          const toast = document.createElement("div");
+                          toast.textContent = "Copied";
+                          toast.style.position = "fixed";
+                          toast.style.bottom = "32px";
+                          toast.style.left = "50%";
+                          toast.style.transform = "translateX(-50%)";
+                          toast.style.padding = "12px 16px";
+                          toast.style.background = "#1e88e5";
+                          toast.style.color = "#fff";
+                          toast.style.borderRadius = "10px";
+                          toast.style.boxShadow = "0 6px 20px rgba(0,0,0,0.25)";
+                          toast.style.fontWeight = "600";
+                          toast.style.zIndex = "9999";
+                          document.body.appendChild(toast);
+                          setTimeout(() => toast.remove(), 1500);
+                        }}
+                        disabled={!c.upi}
+                      >
+                        Copy UPI
+                      </button>
+                      {c.child_upi_id && (
+                        <button
+                          type="button"
+                          className="button"
+                          disabled={childUpiBusy[c.child_upi_id]}
+                          onClick={() =>
+                            handleToggleChildUpi(
+                              c.child_upi_id as string,
+                              (c.status || "active") === "active" ? "disabled" : "active"
+                            )
+                          }
+                        >
+                          {(c.status || "active") === "active" ? "Disable" : "Reactivate"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
-              </div>
-            )}
+              {childUpisHasMore && (
+                <button
+                  type="button"
+                  className="button button-secondary"
+                  disabled={childUpisLoadingMore}
+                  onClick={async () => {
+                    setChildUpisLoadingMore(true);
+                    await loadChildUpis({ append: true });
+                    setChildUpisLoadingMore(false);
+                  }}
+                >
+                  {childUpisLoadingMore ? "Loading..." : "Load more"}
+                </button>
+              )}
+            </div>
+          )}
           </div>
 
           {orgName && upi && (

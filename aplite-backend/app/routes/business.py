@@ -50,6 +50,7 @@ class BusinessSummary(BaseModel):
 
 @router.post("/api/businesses")
 def create_business(payload: BusinessCreateRequest, user=Depends(get_current_user)):
+    # Legacy org-issuance endpoint kept for MVP parity with early flows.
     # Org-centric: one UPI per org; treat this endpoint as "issue org UPI".
     if not queries.is_user_verified(user["id"]):
         raise HTTPException(
@@ -138,6 +139,7 @@ def create_business(payload: BusinessCreateRequest, user=Depends(get_current_use
 
 @router.post("/api/businesses/{business_id}/deactivate")
 def deactivate_business(business_id: int, user=Depends(get_current_user)):
+    # Deactivation prevents future resolves without deleting history.
     business = queries.get_business_by_id(business_id)
     if not business or business.get("user_id") != user["id"]:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Business not found")
@@ -156,6 +158,7 @@ def list_businesses(
     before_id: int | None = Query(default=None, ge=1),
     user=Depends(get_current_user),
 ) -> list[BusinessSummary]:
+    # Simple paginated history of issued UPIs for the current user.
     rows = queries.list_businesses_for_user(user["id"], limit=limit, before_id=before_id)
     return [
         BusinessSummary(

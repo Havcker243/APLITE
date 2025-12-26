@@ -22,6 +22,7 @@ class LookupUPIRequest(BaseModel):
 @router.post("/api/upi/lookup")
 def lookup_upi(payload: LookupUPIRequest, user=Depends(get_current_user)):
     """Return the org + public profile for a verified UPI (exact match only)."""
+    # Lookup is read-only and returns public profile + org metadata.
     upi_value = payload.upi.upper()
 
     if not validate_upi_format(upi_value):
@@ -77,6 +78,7 @@ def lookup_upi(payload: LookupUPIRequest, user=Depends(get_current_user)):
 @router.post("/api/resolve")
 def resolve_upi(payload: ResolveUPIRequest, user=Depends(get_current_user)):
     """Resolve a UPI (owned by the caller) into payout coordinates for the requested rail."""
+    # Resolve returns payout coordinates only for verified, active UPIs.
     upi_value = payload.upi.upper()
 
     if not validate_upi_format(upi_value):

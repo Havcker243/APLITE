@@ -224,6 +224,7 @@ export type UpiLookupResult = {
 const defaultInit: RequestInit = { credentials: "include" };
 
 function withAuth(init?: RequestInit): RequestInit {
+  // Attach Authorization when available; cookies remain the primary auth mechanism.
   const headers: Record<string, string> = {};
   if (init?.headers) {
     if (init.headers instanceof Headers) {
@@ -497,9 +498,13 @@ export async function createChildUpi(data: {
   return res.json() as Promise<{ child_upi_id: string; upi: string; payment_account_id: number }>;
 }
 
-export async function listChildUpis() {
+export async function listChildUpis(options?: { limit?: number; before?: string }) {
   /** List payment accounts/child UPIs for the current org. */
-  const res = await authedFetch(`${API_BASE_URL}/api/orgs/child-upis`);
+  const params = new URLSearchParams();
+  if (options?.limit) params.set("limit", String(options.limit));
+  if (options?.before) params.set("before", options.before);
+  const url = `${API_BASE_URL}/api/orgs/child-upis${params.toString() ? `?${params.toString()}` : ""}`;
+  const res = await authedFetch(url);
   if (!res.ok) {
     throw new Error(await parseError(res, "Unable to load child UPIs"));
   }
@@ -515,6 +520,24 @@ export async function listChildUpis() {
       disabled_at?: string;
     }>
   >;
+}
+
+export async function disableChildUpi(childUpiId: string) {
+  /** Disable a child UPI so it can no longer be resolved. */
+  const res = await authedFetch(`${API_BASE_URL}/api/orgs/child-upis/${childUpiId}/disable`, { method: "POST" });
+  if (!res.ok) {
+    throw new Error(await parseError(res, "Unable to disable UPI"));
+  }
+  return res.json() as Promise<{ child_upi_id: string; status: string; disabled_at?: string }>;
+}
+
+export async function reactivateChildUpi(childUpiId: string) {
+  /** Reactivate a disabled child UPI. */
+  const res = await authedFetch(`${API_BASE_URL}/api/orgs/child-upis/${childUpiId}/reactivate`, { method: "POST" });
+  if (!res.ok) {
+    throw new Error(await parseError(res, "Unable to reactivate UPI"));
+  }
+  return res.json() as Promise<{ child_upi_id: string; status: string; disabled_at?: string }>;
 }
 
 export async function updateOnboardingProfile(data: {
@@ -585,6 +608,19 @@ export async function createAccount(data: AccountPayload) {
   if (!res.ok) {
     const message = await res.text();
     throw new Error(message || "Failed to create account");
+  }
+  return res.json();
+}
+
+export async function updateAccount(id: number, data: Partial<AccountPayload>) {
+  /** Update an existing payout rail/account for the authenticated user. */
+  const res = await authedFetch(`${API_BASE_URL}/api/accounts/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    throw new Error(await parseError(res, "Failed to update account"));
   }
   return res.json();
 }

@@ -55,6 +55,7 @@ def hash_session_token(token: str) -> str:
     """
     Return a deterministic, non-reversible representation of a session token for DB storage.
     """
+    # Stored tokens are HMACed so the DB never sees raw session secrets.
     key = _load_session_hmac_key()
     digest = hmac.new(key, token.encode("utf-8"), hashlib.sha256).hexdigest()
     return digest

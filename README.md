@@ -41,6 +41,8 @@ Frontend runs on `http://localhost:3000`.
 - `ENCRYPTION_KEY` (16/24/32 bytes; used for encrypting payment coordinates at rest)
 - `UPI_SECRET_KEY` (HMAC secret for UPI namespace/signature)
 - `SESSION_TTL_HOURS` (optional; default `168` = 7 days)
+- `CAL_WEBHOOK_SECRET` (optional; verify Cal.com webhook signatures for call completion)
+- `WEBHOOK_ALERT_EMAIL` (optional; send webhook failures to this email via SendGrid)
 - Optional email: `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`
 
 ### Frontend (`aplite-frontend/.env.local`)

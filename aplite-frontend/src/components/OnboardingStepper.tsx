@@ -5,7 +5,8 @@ const STEPS = [
   { id: 2, label: "Authority" },
   { id: 3, label: "Identity" },
   { id: 4, label: "Bank" },
-  { id: 5, label: "Verify" },
+  { id: 5, label: "Review" },
+  { id: 6, label: "Verify" },
 ];
 
 export function OnboardingStepper({

@@ -6,7 +6,7 @@ import { useOnboardingWizard } from "../../utils/onboardingWizard";
 import { LoadingScreen } from "../../components/LoadingScreen";
 import { onboardingComplete } from "../../utils/api";
 
-export default function OnboardVerify() {
+export default function OnboardStep5() {
   const router = useRouter();
   const { token, loading, refreshProfile, profile } = useAuth();
   const { step1, step2, step3, step4, completedThrough, clearDraft, touchStep, markStepComplete } = useOnboardingWizard();
@@ -30,7 +30,6 @@ export default function OnboardVerify() {
 
   React.useEffect(() => {
     touchStep(5);
-    // Guard: require local completion through Step 4.
     if (completedThrough < 4) {
       router.replace(
         completedThrough < 1
@@ -42,12 +41,12 @@ export default function OnboardVerify() {
           : "/onboard/step-4"
       );
     }
-  }, [touchStep]);
+  }, [touchStep, completedThrough, router]);
 
   const maskedAccount = useMemo(() => {
     if (!step4.account_number) return "";
     const last4 = step4.account_number.slice(-4);
-    return `•••• ${last4}`;
+    return `**** ${last4}`;
   }, [step4.account_number]);
 
   const verificationMethod = step2.role === "owner" ? "call" : "id";
@@ -110,17 +109,17 @@ export default function OnboardVerify() {
           swift: step4.swift || undefined,
         },
         verification_method: verificationMethod,
-        verification_code: undefined, // TODO: once real verification is wired, send OTP/call metadata here.
+        verification_code: undefined,
         file,
       };
 
       const res = await onboardingComplete(payload);
-      // Refresh server profile so routing uses the latest onboarding_status.
       await refreshProfile();
       markStepComplete(5);
       if (res.status === "PENDING_CALL") {
         setPendingCall(true);
-        setSaved("Submitted. Verification call pending. We will reach out shortly.");
+        setSaved("Submitted. Please schedule your verification call.");
+        router.push("/onboard/step-6");
         return;
       }
       clearDraft();
@@ -143,6 +142,11 @@ export default function OnboardVerify() {
       {error && (
         <div className="error-box" role="alert" aria-live="assertive">
           {error}
+        </div>
+      )}
+      {pendingCall && (
+        <div className="status-pill" role="status" aria-live="polite">
+          Verification pending. Schedule your call on the next step.
         </div>
       )}
 
@@ -170,7 +174,7 @@ export default function OnboardVerify() {
             <div className="input-group">
               <label className="input-label">Entity</label>
               <div className="hero-subtitle">
-                {step1.entity_type || "-"} · {step1.formation_state || "-"} · {step1.formation_date || "-"}
+                {step1.entity_type || "-"} - {step1.formation_state || "-"} - {step1.formation_date || "-"}
               </div>
             </div>
             <div className="input-group">
@@ -217,7 +221,7 @@ export default function OnboardVerify() {
             <div className="input-group">
               <label className="input-label">Role</label>
               <div className="hero-subtitle">
-                {step2.role || "-"} {step2.title ? `· ${step2.title}` : ""}
+                {step2.role || "-"} {step2.title ? `- ${step2.title}` : ""}
               </div>
             </div>
             <div className="input-group">
@@ -250,14 +254,9 @@ export default function OnboardVerify() {
               <label className="input-label">Method</label>
               <div className="hero-subtitle">
                 {verificationMethod === "call"
-                  ? "Owner call verification (scheduling to be added)."
+                  ? "Owner call verification (schedule next)."
                   : "Document verification (ID uploaded)."}
               </div>
-              {verificationMethod === "call" && (
-                <p className="hero-subtitle" style={{ marginTop: 6 }}>
-                  TODO: Integrate Zoom/Calendly scheduling and gate final verification on call completion.
-                </p>
-              )}
             </div>
           </div>
         </div>
@@ -294,7 +293,7 @@ export default function OnboardVerify() {
           </button>
           <button type="button" className="button" onClick={handleSubmit} disabled={saving || pendingCall}>
             {saving && <span className="spinner" aria-hidden="true" />}
-            {pendingCall ? "Pending verification" : "Submit & Finish"}
+            {pendingCall ? "Pending verification" : "Submit & Continue"}
           </button>
         </div>
       </div>

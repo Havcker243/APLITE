@@ -56,7 +56,7 @@ export function ResolutionResult({ result }: ResolutionResultProps) {
             </div>
             <div>
               <div className="input-label">Established</div>
-              <div>{profile.established_year || "—"}</div>
+              <div>{profile.established_year || "-"}</div>
             </div>
             <div>
               <div className="input-label">Location</div>

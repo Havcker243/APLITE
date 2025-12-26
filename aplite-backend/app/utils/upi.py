@@ -78,6 +78,7 @@ def generate_upi(core_entity_id: str, payment_index: int, user_id: int) -> str:
     """
     Generate a UPI string with HMAC protection and user namespace.
     """
+    # Namespace ties UPIs to a user without revealing user_id in the identifier.
     secret = _load_secret()
     namespace = _namespace_for_user(user_id, secret)
     core_segment = _extract_core_segment(core_entity_id)

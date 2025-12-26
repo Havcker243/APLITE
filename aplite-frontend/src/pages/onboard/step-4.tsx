@@ -51,7 +51,7 @@ export default function OnboardStep4() {
     try {
       setSaved("Saved locally");
       markStepComplete(4);
-      router.push("/onboard/verify");
+      router.push("/onboard/step-5");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save step");
     } finally {

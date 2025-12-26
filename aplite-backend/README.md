@@ -7,6 +7,8 @@ FastAPI service for onboarding businesses, managing payment accounts, issuing UP
 - Postgres: set `DATABASE_URL` (Supabase URL works)
 - Secrets: `ENCRYPTION_KEY`, `UPI_SECRET_KEY` (already in your `.env`; not modified here)
 - Sessions: `SESSION_TTL_HOURS` (optional; default `168` = 7 days)
+- Cal.com webhook (optional): `CAL_WEBHOOK_SECRET` for verifying webhook signatures
+- Webhook alerts (optional): `WEBHOOK_ALERT_EMAIL` (send failures to this email via SendGrid)
 - Email (optional): `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL` to send OTP emails via SendGrid; otherwise emails log to stdout.
 
 ## Install (backend-only)
@@ -37,3 +39,4 @@ Run from the repo root so `app` is on the import path. If needed, set `PYTHONPAT
 - Businesses: `/api/businesses` (create/list), `/api/businesses/{id}/deactivate`
 - Resolve UPI: `/api/resolve`
 - Public clients: `/api/public/clients`
+- Webhooks: `POST /webhooks/cal` (Cal.com booking events; completes verification on call completion)

@@ -1,9 +1,9 @@
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@500;600&display=swap");
 
 :root {
   color-scheme: dark;
-  --bg: #05060a;
-  --bg-secondary: #0b0d12;
+  --bg: #0a0d14;
+  --bg-secondary: #11141c;
   --divider: rgba(255, 255, 255, 0.08);
 
   --text: #f5f7fa;
@@ -11,21 +11,21 @@
   --text-muted: #8a8f9c;
   --text-disabled: #5e636e;
 
-  --accent: #6c7cff;
-  --accent-hover: #5a69e8;
-  --accent-soft: rgba(108, 124, 255, 0.16);
+  --accent: #7aa6ff;
+  --accent-hover: #6a98f5;
+  --accent-soft: rgba(122, 166, 255, 0.18);
 
   --success: #3ed598;
   --warning: #f4b740;
   --danger: #ff6b6b;
 
-  --input-bg: #10131c;
+  --input-bg: rgba(17, 20, 28, 0.8);
   --input-border: rgba(255, 255, 255, 0.12);
   --placeholder: #6e7381;
 
   --card: var(--bg-secondary);
   --card-border: var(--divider);
-  --shadow-soft: 0 18px 50px rgba(0, 0, 0, 0.35);
+  --shadow-soft: 0 26px 70px rgba(4, 8, 20, 0.5);
   --form-max: 680px;
 }
 
@@ -40,21 +40,21 @@
   --text-muted: rgba(15, 23, 42, 0.62);
   --text-disabled: rgba(15, 23, 42, 0.45);
 
-  --accent: #3657ff;
-  --accent-hover: #2d49d8;
-  --accent-soft: rgba(54, 87, 255, 0.12);
+  --accent: #2f6df6;
+  --accent-hover: #285fde;
+  --accent-soft: rgba(47, 109, 246, 0.14);
 
   --success: #179c6a;
   --warning: #b47800;
   --danger: #d63636;
 
-  --input-bg: rgba(15, 23, 42, 0.04);
+  --input-bg: rgba(15, 23, 42, 0.05);
   --input-border: rgba(15, 23, 42, 0.14);
   --placeholder: rgba(15, 23, 42, 0.45);
 
   --card: var(--bg-secondary);
   --card-border: var(--divider);
-  --shadow-soft: 0 18px 50px rgba(2, 6, 23, 0.08);
+  --shadow-soft: 0 26px 70px rgba(2, 6, 23, 0.12);
 }
 
 * {
@@ -69,18 +69,20 @@ body {
 
 body {
   margin: 0;
-  font-family: "Space Grotesk", "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  background: radial-gradient(circle at 10% -10%, rgba(54, 87, 255, 0.14), transparent 55%),
-    radial-gradient(circle at 90% 0%, rgba(54, 87, 255, 0.08), transparent 50%),
+  font-family: "Manrope", "Space Grotesk", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  background: radial-gradient(circle at 8% -12%, rgba(122, 166, 255, 0.22), transparent 52%),
+    radial-gradient(circle at 82% -6%, rgba(98, 221, 200, 0.16), transparent 46%),
+    radial-gradient(circle at 12% 80%, rgba(244, 183, 64, 0.12), transparent 52%),
     linear-gradient(180deg, var(--bg) 0%, rgba(248, 250, 252, 1) 100%);
   color: var(--text);
   min-height: 100vh;
 }
 
 :root[data-theme="dark"] body {
-  background: radial-gradient(circle at 20% -10%, rgba(108, 124, 255, 0.1), transparent 52%),
-    radial-gradient(circle at 95% 10%, rgba(108, 124, 255, 0.05), transparent 48%),
-    linear-gradient(180deg, var(--bg) 0%, #070912 100%);
+  background: radial-gradient(circle at 18% -12%, rgba(122, 166, 255, 0.18), transparent 52%),
+    radial-gradient(circle at 90% 8%, rgba(98, 221, 200, 0.12), transparent 48%),
+    radial-gradient(circle at 12% 85%, rgba(244, 183, 64, 0.1), transparent 55%),
+    linear-gradient(180deg, var(--bg) 0%, #0b0f18 100%);
 }
 
 a {
@@ -119,6 +121,7 @@ a {
   position: sticky;
   top: 0;
   z-index: 10;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
 }
 
 :root[data-theme="dark"] .site-header {
@@ -139,8 +142,8 @@ a {
 .logo-img {
   width: 26px;
   height: 26px;
-  border-radius: 8px;
-  box-shadow: 0 0 18px rgba(108, 124, 255, 0.25);
+  border-radius: 10px;
+  box-shadow: 0 0 22px rgba(122, 166, 255, 0.28);
 }
 
 .site-nav {
@@ -152,10 +155,10 @@ a {
 .nav-link {
   text-decoration: none;
   padding: 8px 14px;
-  border-radius: 8px;
+  border-radius: 12px;
   color: var(--text-muted);
   border: 1px solid transparent;
-  transition: background 0.2s ease, color 0.2s ease, border 0.2s ease;
+  transition: background 0.25s ease, color 0.25s ease, border 0.25s ease, transform 0.2s ease;
   touch-action: manipulation;
 }
 
@@ -163,6 +166,7 @@ a {
   background: rgba(15, 23, 42, 0.04);
   color: var(--text);
   border-color: var(--card-border);
+  transform: translateY(-1px);
 }
 
 :root[data-theme="dark"] .nav-link:hover {
@@ -246,17 +250,18 @@ a {
   align-items: center;
   gap: 10px;
   padding: 8px 14px;
-  border-radius: 10px;
+  border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.02);
   color: var(--text);
   cursor: pointer;
-  transition: background 0.2s ease, border 0.2s ease;
+  transition: background 0.2s ease, border 0.2s ease, transform 0.2s ease;
 }
 
 .account-trigger:hover {
   background: rgba(255, 255, 255, 0.04);
   border-color: rgba(255, 255, 255, 0.18);
+  transform: translateY(-1px);
 }
 
 .account-name {
@@ -330,6 +335,7 @@ a {
 
 .page-container {
   width: min(1200px, 100%);
+  animation: float-in 420ms ease-out both;
 }
 
 .onboarding-container {
@@ -339,7 +345,7 @@ a {
 
 .onboarding-stepper {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 10px;
   margin: 12px 0 22px;
   position: relative;
@@ -508,12 +514,13 @@ a {
 }
 
 .card {
-  background: var(--card);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0)) , var(--card);
   border: 1px solid var(--card-border);
-  border-radius: 18px;
+  border-radius: 22px;
   padding: 28px;
   box-shadow: var(--shadow-soft);
   backdrop-filter: blur(12px);
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border 0.25s ease;
 }
 
 .form-card {
@@ -556,11 +563,11 @@ a {
 select,
 textarea {
   padding: 11px 12px;
-  border-radius: 10px;
+  border-radius: 14px;
   border: 1px solid var(--input-border);
   background: var(--input-bg);
   color: var(--text);
-  transition: border 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  transition: border 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
   font-size: 16px;
 }
 
@@ -623,15 +630,15 @@ textarea:focus-within {
   justify-content: center;
   gap: 8px;
   border: 1px solid transparent;
-  border-radius: 12px;
-  padding: 12px 22px;
+  border-radius: 16px;
+  padding: 12px 24px;
   font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   margin-top: 10px;
-  background: var(--accent);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0)) , var(--accent);
   color: #ffffff;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border 0.15s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border 0.2s ease, filter 0.2s ease;
   box-shadow: 0 10px 30px rgba(108, 124, 255, 0.18);
   touch-action: manipulation;
   -webkit-tap-highlight-color: rgba(108, 124, 255, 0.25);
@@ -652,7 +659,7 @@ textarea:focus-within {
 .button-secondary {
   background: transparent;
   color: var(--text);
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.18);
   box-shadow: none;
   text-decoration: none;
 }
@@ -704,6 +711,7 @@ textarea:focus-within {
   border-radius: 999px;
   font-size: 0.85rem;
   margin-bottom: 10px;
+  box-shadow: 0 8px 24px rgba(122, 166, 255, 0.12);
 }
 
 .status-pill--success {
@@ -714,7 +722,7 @@ textarea:focus-within {
 .error-box {
   background: rgba(255, 107, 107, 0.12);
   border: 1px solid rgba(255, 107, 107, 0.35);
-  border-radius: 12px;
+  border-radius: 16px;
   padding: 14px;
   color: var(--text);
   margin-bottom: 20px;
@@ -883,6 +891,59 @@ textarea:focus-within {
 
 .card--compact {
   padding: 18px;
+}
+
+.soft-panel {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0)), var(--card);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 48px rgba(6, 12, 28, 0.35);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 12, 20, 0.35);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  z-index: 40;
+}
+
+.modal-card {
+  width: min(920px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+  border-radius: 22px;
+  padding: 24px;
+}
+
+.cal-embed-inline {
+  width: 100%;
+}
+
+.cal-embed-shell {
+  border-radius: 18px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.cal-embed-frame {
+  width: 100%;
+  height: 620px;
+  border: 0;
+  display: block;
+  background: transparent;
+}
+
+@keyframes float-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .meta-row {

@@ -84,6 +84,7 @@ def request_connection() -> Iterator[psycopg2.extensions.connection]:
 
     This reduces pool churn when a request calls multiple query helpers.
     """
+    # Keeps a per-request connection in a ContextVar to avoid nested pool checkouts.
     pool = _get_pool()
     conn = pool.getconn()
     token = _request_conn.set(conn)

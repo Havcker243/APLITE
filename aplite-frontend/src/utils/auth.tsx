@@ -48,7 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    // Try to hydrate session from stored token first; fall back to cookie.
+  // Try to hydrate session from stored token first; fall back to cookie-based auth.
     const stored = typeof window !== "undefined" ? window.localStorage.getItem("aplite_token") : null;
     if (stored) {
       setToken(stored);

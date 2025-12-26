@@ -15,8 +15,7 @@ const FORMATION_DOCS: Record<
   LLC: {
     required: true,
     options: [
-      { type: "articles_of_organization", label: "Articles of Organization" },
-      { type: "certificate_of_formation", label: "Certificate of Formation" },
+      { type: "articles_of_organization", label: "Articles of Organization / Certificate of Formation" },
     ],
   },
   "C-Corp": {

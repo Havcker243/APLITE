@@ -320,6 +320,68 @@ def create_payment_account(*, conn: psycopg2.extensions.connection | None = None
     return account_id
 
 
+def update_payment_account_details(
+    *,
+    account_id: int,
+    user_id: int,
+    bank_name: str | None = None,
+    account_name: str | None = None,
+    ach_routing: str | None = None,
+    ach_account: str | None = None,
+    wire_routing: str | None = None,
+    wire_account: str | None = None,
+    bank_address: str | None = None,
+    swift_bic: str | None = None,
+    iban: str | None = None,
+    bank_country: str | None = None,
+    bank_city: str | None = None,
+) -> Optional[PaymentAccountRecord]:
+    # Only updates provided fields; sensitive values are re-encrypted into `enc`.
+    updates: list[str] = []
+    params: list[Any] = []
+
+    if bank_name is not None:
+        updates.append("bank_name = %s")
+        params.append(bank_name)
+    if account_name is not None:
+        updates.append("account_name = %s")
+        params.append(account_name)
+
+    sensitive = {
+        "ach_routing": ach_routing,
+        "ach_account": ach_account,
+        "wire_routing": wire_routing,
+        "wire_account": wire_account,
+        "bank_address": bank_address,
+        "swift_bic": swift_bic,
+        "iban": iban,
+        "bank_country": bank_country,
+        "bank_city": bank_city,
+    }
+    enc_updates: Dict[str, Dict[str, str]] = {}
+    for field, value in sensitive.items():
+        if value is None:
+            continue
+        nonce, ciphertext = crypto.encrypt_value(str(value))
+        enc_updates[field] = {"n": nonce, "c": ciphertext}
+
+    if enc_updates:
+        updates.append("enc = enc || %s::jsonb")
+        params.append(json.dumps(enc_updates))
+
+    if not updates:
+        return get_payment_account_by_id(account_id)
+
+    params.extend([int(account_id), int(user_id)])
+    sql = f"update payment_accounts set {', '.join(updates)} where id = %s and user_id = %s returning *"
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, tuple(params))
+            row = cur.fetchone()
+            conn.commit()
+            return _decrypt_payment_account(row) if row else None
+
+
 def list_businesses() -> List[BusinessRecord]:
     """Return all businesses (newest first)."""
     with get_connection() as conn:
@@ -536,6 +598,35 @@ def list_payment_accounts_for_org(org_id: str) -> List[PaymentAccountRecord]:
             return [_decrypt_payment_account(row) for row in rows]
 
 
+def payment_account_has_child_upis(account_id: int) -> bool:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "select 1 from child_upis where payment_account_id = %s limit 1",
+                (int(account_id),),
+            )
+            return cur.fetchone() is not None
+
+
+def payment_account_used_for_org_upi(account: dict) -> bool:
+    """
+    Determine if the payment account was used for the org's primary UPI.
+
+    Uses the onboarding session's stored payment_account_id instead of
+    inferring from payment_index, avoiding false positives.
+    """
+    org_id = account.get("org_id")
+    if not org_id:
+        return False
+    session = get_latest_onboarding_session_by_org(str(org_id))
+    if not session:
+        return False
+    account_id = get_onboarding_payment_account(uuid.UUID(str(session.get("id"))))
+    if not account_id:
+        return False
+    return int(account_id) == int(account.get("id", 0) or 0)
+
+
 def get_payment_account_by_id(account_id: int) -> Optional[PaymentAccountRecord]:
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -597,11 +688,22 @@ def get_child_upi_by_id(child_upi_id: str) -> Optional[ChildUpiRecord]:
             return cur.fetchone()
 
 
-def list_child_upis_for_org(org_id: str) -> List[Dict[str, Any]]:
+def list_child_upis_for_org(
+    org_id: str,
+    *,
+    limit: int | None = None,
+    before: datetime | None = None,
+) -> List[Dict[str, Any]]:
+    # Cursor-based pagination using created_at; caller controls `limit` + `before`.
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
+            params: list[Any] = [str(org_id)]
+            where = "where cu.org_id = %s"
+            if before is not None:
+                where += " and cu.created_at < %s"
+                params.append(before)
+
+            sql = f"""
                 select
                   cu.id as child_upi_id,
                   cu.upi,
@@ -613,11 +715,14 @@ def list_child_upis_for_org(org_id: str) -> List[Dict[str, Any]]:
                   pa.bank_name
                 from child_upis cu
                 join payment_accounts pa on pa.id = cu.payment_account_id
-                where cu.org_id = %s
+                {where}
                 order by cu.created_at desc
-                """,
-                (str(org_id),),
-            )
+            """
+            if limit is not None:
+                sql += " limit %s"
+                params.append(int(limit))
+
+            cur.execute(sql, tuple(params))
             return cur.fetchall()
 
 
@@ -906,6 +1011,24 @@ def get_latest_onboarding_session(user_id: int) -> Optional[OnboardingSessionRec
             return cur.fetchone()
 
 
+def get_latest_onboarding_session_by_org(org_id: str) -> Optional[OnboardingSessionRecord]:
+    """Return the most recently saved onboarding session for an org."""
+    if not _table_exists("onboarding_sessions"):
+        return None
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select *
+                from onboarding_sessions
+                where org_id = %s
+                order by last_saved_at desc
+                limit 1
+                """,
+                (str(org_id),),
+            )
+            return cur.fetchone()
+
 def get_user_stats(user_id: int) -> Dict[str, int]:
     """Return a few small counts used by the UI (accounts, issued UPIs)."""
     with get_connection() as conn:
@@ -995,9 +1118,11 @@ def create_organization_step1(
     industry: str,
     website: Optional[str],
     description: Optional[str],
+    conn: psycopg2.extensions.connection | None = None,
+    commit: bool = True,
 ) -> None:
-    with get_connection() as conn:
-        with conn.cursor() as cur:
+    def _insert(target_conn: psycopg2.extensions.connection) -> None:
+        with target_conn.cursor() as cur:
             cur.execute(
                 """
                 insert into organizations
@@ -1019,7 +1144,16 @@ def create_organization_step1(
                     description,
                 ),
             )
-            conn.commit()
+
+    if conn is None:
+        with get_connection() as conn_local:
+            _insert(conn_local)
+            conn_local.commit()
+        return
+
+    _insert(conn)
+    if commit:
+        conn.commit()
 
 
 def update_organization_step1(
@@ -1092,38 +1226,88 @@ def get_organization_by_upi(upi: str) -> Optional[OrganizationRecord]:
             return cur.fetchone()
 
 
-def set_organization_upi(org_id: str, upi: str, payment_account_id: int, *, verification_status: str = "verified", status: str = "active") -> None:
-    with get_connection() as conn:
-        with conn.cursor() as cur:
+def set_organization_upi(
+    org_id: str,
+    upi: str,
+    payment_account_id: int,
+    *,
+    verification_status: str = "verified",
+    status: str = "active",
+    conn: psycopg2.extensions.connection | None = None,
+    commit: bool = True,
+) -> None:
+    def _update(target_conn: psycopg2.extensions.connection) -> None:
+        with target_conn.cursor() as cur:
             cur.execute(
                 "update organizations set upi=%s, verification_status=%s, status=%s, updated_at=now() where id=%s",
                 (upi, verification_status, status, str(org_id)),
             )
             cur.execute("update payment_accounts set status='active' where id=%s", (payment_account_id,))
-            conn.commit()
+
+    if conn is None:
+        with get_connection() as conn_local:
+            _update(conn_local)
+            conn_local.commit()
+        return
+
+    _update(conn)
+    if commit:
+        conn.commit()
 
 
-def set_organization_verification_status(org_id: str, *, verification_status: str, status: str | None = None) -> None:
+def set_organization_verification_status(
+    org_id: str,
+    *,
+    verification_status: str,
+    status: str | None = None,
+    conn: psycopg2.extensions.connection | None = None,
+    commit: bool = True,
+) -> None:
     assignments = ["verification_status=%s", "updated_at=now()"]
     params: list = [verification_status]
     if status is not None:
         assignments.insert(1, "status=%s")
         params.append(status)
     params.append(str(org_id))
-    with get_connection() as conn:
-        with conn.cursor() as cur:
+
+    def _update(target_conn: psycopg2.extensions.connection) -> None:
+        with target_conn.cursor() as cur:
             cur.execute(f"update organizations set {', '.join(assignments)} where id=%s", tuple(params))
-            conn.commit()
+
+    if conn is None:
+        with get_connection() as conn_local:
+            _update(conn_local)
+            conn_local.commit()
+        return
+
+    _update(conn)
+    if commit:
+        conn.commit()
 
 
-def set_onboarding_payment_account(session_id: uuid.UUID, payment_account_id: int) -> None:
-    with get_connection() as conn:
-        with conn.cursor() as cur:
+def set_onboarding_payment_account(
+    session_id: uuid.UUID,
+    payment_account_id: int,
+    *,
+    conn: psycopg2.extensions.connection | None = None,
+    commit: bool = True,
+) -> None:
+    def _update(target_conn: psycopg2.extensions.connection) -> None:
+        with target_conn.cursor() as cur:
             cur.execute(
                 "update onboarding_sessions set step_statuses = jsonb_set(coalesce(step_statuses,'{}'::jsonb), '{payment_account_id}', %s::jsonb, true), last_saved_at=now() where id=%s",
                 (json.dumps(payment_account_id), str(session_id)),
             )
-            conn.commit()
+
+    if conn is None:
+        with get_connection() as conn_local:
+            _update(conn_local)
+            conn_local.commit()
+        return
+
+    _update(conn)
+    if commit:
+        conn.commit()
 
 
 def get_onboarding_payment_account(session_id: uuid.UUID) -> Optional[int]:
@@ -1144,9 +1328,11 @@ def create_onboarding_session(
     state: str,
     current_step: int,
     address_locked: bool,
+    conn: psycopg2.extensions.connection | None = None,
+    commit: bool = True,
 ) -> None:
-    with get_connection() as conn:
-        with conn.cursor() as cur:
+    def _insert(target_conn: psycopg2.extensions.connection) -> None:
+        with target_conn.cursor() as cur:
             cur.execute(
                 """
                 insert into onboarding_sessions
@@ -1155,18 +1341,67 @@ def create_onboarding_session(
                 """,
                 (str(session_id), str(org_id), user_id, state, current_step, address_locked),
             )
-            conn.commit()
+
+    if conn is None:
+        with get_connection() as conn_local:
+            _insert(conn_local)
+            conn_local.commit()
+        return
+
+    _insert(conn)
+    if commit:
+        conn.commit()
 
 
-def advance_onboarding_session(session_id: uuid.UUID, *, state: str, next_step: int) -> None:
-    with get_connection() as conn:
-        with conn.cursor() as cur:
+def advance_onboarding_session(
+    session_id: uuid.UUID,
+    *,
+    state: str,
+    next_step: int,
+    conn: psycopg2.extensions.connection | None = None,
+    commit: bool = True,
+) -> None:
+    def _update(target_conn: psycopg2.extensions.connection) -> None:
+        with target_conn.cursor() as cur:
             cur.execute(
                 "update onboarding_sessions set state=%s, current_step=%s, last_saved_at=now() where id=%s",
                 (state, next_step, str(session_id)),
             )
-            conn.commit()
 
+    if conn is None:
+        with get_connection() as conn_local:
+            _update(conn_local)
+            conn_local.commit()
+        return
+
+    _update(conn)
+    if commit:
+        conn.commit()
+
+
+def complete_onboarding_session(
+    session_id: uuid.UUID,
+    *,
+    state: str = "VERIFIED",
+    conn: psycopg2.extensions.connection | None = None,
+    commit: bool = True,
+) -> None:
+    def _update(target_conn: psycopg2.extensions.connection) -> None:
+        with target_conn.cursor() as cur:
+            cur.execute(
+                "update onboarding_sessions set state=%s, current_step=5, completed_at=now(), last_saved_at=now() where id=%s",
+                (state, str(session_id)),
+            )
+
+    if conn is None:
+        with get_connection() as conn_local:
+            _update(conn_local)
+            conn_local.commit()
+        return
+
+    _update(conn)
+    if commit:
+        conn.commit()
 
 def update_onboarding_role(
     *,
@@ -1175,14 +1410,25 @@ def update_onboarding_role(
     role: str,
     title: Optional[str],
     risk_level: str,
+    conn: psycopg2.extensions.connection | None = None,
+    commit: bool = True,
 ) -> None:
-    with get_connection() as conn:
-        with conn.cursor() as cur:
+    def _update(target_conn: psycopg2.extensions.connection) -> None:
+        with target_conn.cursor() as cur:
             cur.execute(
                 "update onboarding_sessions set step_statuses = jsonb_set(coalesce(step_statuses,'{}'::jsonb), '{role}', %s::jsonb, true), risk_level=%s, last_saved_at=now() where id=%s and user_id=%s",
                 (json.dumps({"role": role, "title": title}), risk_level, str(session_id), user_id),
             )
-            conn.commit()
+
+    if conn is None:
+        with get_connection() as conn_local:
+            _update(conn_local)
+            conn_local.commit()
+        return
+
+    _update(conn)
+    if commit:
+        conn.commit()
 
 
 def store_onboarding_file(*, file_id: str, filename: str, content_type: str, data: bytes, user_id: int) -> None:
@@ -1308,15 +1554,30 @@ def onboarding_file_exists(*, file_id: str, user_id: int, allowed_prefixes: tupl
     return bin_path.startswith(base + os.sep) and os.path.exists(bin_path)
 
 
-def set_onboarding_formation_documents(session_id: uuid.UUID, documents: list[dict]) -> None:
+def set_onboarding_formation_documents(
+    session_id: uuid.UUID,
+    documents: list[dict],
+    *,
+    conn: psycopg2.extensions.connection | None = None,
+    commit: bool = True,
+) -> None:
     """Persist formation document references for audit and verification."""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
+    def _update(target_conn: psycopg2.extensions.connection) -> None:
+        with target_conn.cursor() as cur:
             cur.execute(
                 "update onboarding_sessions set step_statuses = jsonb_set(coalesce(step_statuses,'{}'::jsonb), '{formation_documents}', %s::jsonb, true), last_saved_at=now() where id=%s",
                 (json.dumps(documents), str(session_id)),
             )
-            conn.commit()
+
+    if conn is None:
+        with get_connection() as conn_local:
+            _update(conn_local)
+            conn_local.commit()
+        return
+
+    _update(conn)
+    if commit:
+        conn.commit()
 
 
 def create_identity_verification(
@@ -1331,9 +1592,11 @@ def create_identity_verification(
     phone: Optional[str],
     attestation: bool,
     status: str,
+    conn: psycopg2.extensions.connection | None = None,
+    commit: bool = True,
 ) -> None:
-    with get_connection() as conn:
-        with conn.cursor() as cur:
+    def _insert(target_conn: psycopg2.extensions.connection) -> None:
+        with target_conn.cursor() as cur:
             cur.execute(
                 """
                 insert into identity_verifications
@@ -1342,7 +1605,16 @@ def create_identity_verification(
                 """,
                 (str(verification_id), str(session_id), str(org_id), user_id, full_name, title, id_document_id, phone, attestation, status),
             )
-            conn.commit()
+
+    if conn is None:
+        with get_connection() as conn_local:
+            _insert(conn_local)
+            conn_local.commit()
+        return
+
+    _insert(conn)
+    if commit:
+        conn.commit()
 
 
 def create_bank_rail_mapping(
@@ -1530,6 +1802,165 @@ def create_verification_call(
                 (str(call_id), str(session_id), str(org_id), user_id, scheduled_at),
             )
             conn.commit()
+
+
+def complete_onboarding_tx(
+    *,
+    user_id: int,
+    org_data: Dict[str, Any],
+    role_data: Dict[str, Any],
+    identity_data: Dict[str, Any],
+    bank_data: Dict[str, Any],
+    formation_docs: list[dict],
+    verification_method: str,
+    risk_level: str,
+    master_upi: str,
+) -> Dict[str, Any]:
+    """
+    Atomically complete onboarding in a single transaction.
+
+    All database operations succeed or fail together, preventing orphaned records.
+    """
+    org_id = uuid.uuid4()
+    session_id = uuid.uuid4()
+    pending_call = verification_method == "call"
+
+    with transaction() as conn:
+        create_organization_step1(
+            org_id=org_id,
+            user_id=user_id,
+            legal_name=org_data["legal_name"],
+            dba=org_data.get("dba"),
+            ein=org_data["ein"],
+            formation_date=org_data["formation_date"],
+            formation_state=org_data["formation_state"],
+            entity_type=org_data["entity_type"],
+            address=org_data["address"],
+            industry=org_data["industry"],
+            website=org_data.get("website"),
+            description=org_data.get("description"),
+            conn=conn,
+            commit=False,
+        )
+
+        create_onboarding_session(
+            session_id=session_id,
+            org_id=org_id,
+            user_id=user_id,
+            state="STEP_2_COMPLETE",
+            current_step=3,
+            address_locked=True,
+            conn=conn,
+            commit=False,
+        )
+
+        if formation_docs:
+            set_onboarding_formation_documents(session_id=session_id, documents=formation_docs, conn=conn, commit=False)
+
+        update_onboarding_role(
+            session_id=session_id,
+            user_id=user_id,
+            role=role_data["role"],
+            title=role_data.get("title"),
+            risk_level=risk_level,
+            conn=conn,
+            commit=False,
+        )
+
+        verification_id = uuid.uuid4()
+        create_identity_verification(
+            verification_id=verification_id,
+            session_id=session_id,
+            org_id=org_id,
+            user_id=user_id,
+            full_name=identity_data["full_name"],
+            title=identity_data.get("title"),
+            id_document_id=identity_data["id_document_id"],
+            phone=identity_data.get("phone"),
+            attestation=identity_data["attestation"],
+            status="pending",
+            conn=conn,
+            commit=False,
+        )
+
+        rail = "ACH" if bank_data.get("ach_routing") else ("WIRE_DOM" if bank_data.get("wire_routing") else "SWIFT")
+        if not (bank_data.get("ach_routing") or bank_data.get("wire_routing") or bank_data.get("swift")):
+            raise ValueError("Provide at least one rail (ACH routing, wire routing, or SWIFT).")
+
+        payment_index = _next_payment_index_for_org(str(org_id), conn=conn)
+        payment_account_id = create_payment_account(
+            user_id=user_id,
+            org_id=str(org_id),
+            payment_index=payment_index,
+            rail=rail,
+            bank_name=bank_data["bank_name"],
+            account_name=org_data["legal_name"],
+            ach_routing=bank_data.get("ach_routing") if rail == "ACH" else None,
+            ach_account=bank_data.get("account_number") if rail == "ACH" else None,
+            wire_routing=bank_data.get("wire_routing") if rail == "WIRE_DOM" else None,
+            wire_account=bank_data.get("account_number") if rail == "WIRE_DOM" else None,
+            bank_address=None,
+            swift_bic=bank_data.get("swift") if rail == "SWIFT" else None,
+            iban=bank_data.get("account_number") if rail == "SWIFT" else None,
+            bank_country=None,
+            bank_city=None,
+            status="active",
+            conn=conn,
+            commit=False,
+        )
+
+        set_onboarding_payment_account(
+            session_id=session_id,
+            payment_account_id=payment_account_id,
+            conn=conn,
+            commit=False,
+        )
+
+        upi = None
+        if pending_call:
+            set_organization_verification_status(
+                str(org_id),
+                verification_status="pending_call",
+                status="pending_call",
+                conn=conn,
+                commit=False,
+            )
+            advance_onboarding_session(
+                session_id=session_id,
+                state="PENDING_CALL",
+                next_step=5,
+                conn=conn,
+                commit=False,
+            )
+        else:
+            if not master_upi:
+                raise RuntimeError("Missing master UPI for user.")
+            core_id = generate_core_entity_id()
+            upi = generate_upi(core_id, payment_index=payment_index, user_id=user_id)
+            set_organization_upi(
+                str(org_id),
+                upi,
+                payment_account_id,
+                verification_status="verified",
+                status="active",
+                conn=conn,
+                commit=False,
+            )
+            advance_onboarding_session(
+                session_id=session_id,
+                state="VERIFIED",
+                next_step=5,
+                conn=conn,
+                commit=False,
+            )
+
+    return {
+        "org_id": str(org_id),
+        "session_id": str(session_id),
+        "upi": upi,
+        "payment_account_id": payment_account_id,
+        "status": "PENDING_CALL" if pending_call else "VERIFIED",
+    }
 
 
 def complete_onboarding_and_issue_identifier(session_id: uuid.UUID) -> str:

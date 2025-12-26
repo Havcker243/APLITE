@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from "
 import { onboardingCurrent } from "./api";
 import { useAuth } from "./auth";
 
-export type OnboardingStep = 1 | 2 | 3 | 4 | 5;
+export type OnboardingStep = 1 | 2 | 3 | 4 | 5 | 6;
 
 export type FormationDocType =
   | "articles_of_organization"

@@ -25,6 +25,8 @@ export default function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const calLink = process.env.NEXT_PUBLIC_CAL_LINK || "";
+
   const isUS = isUnitedStates(form.country);
   const isCA = isCanada(form.country);
 
@@ -108,9 +110,9 @@ export default function ProfilePage() {
   if (!token) return null;
 
   const createdAt = account?.created_at ? new Date(account.created_at) : null;
-  const createdAtLabel = createdAt && !Number.isNaN(createdAt.getTime()) ? createdAt.toLocaleString() : account?.created_at || "—";
+  const createdAtLabel = createdAt && !Number.isNaN(createdAt.getTime()) ? createdAt.toLocaleString() : account?.created_at || "-";
   const fullName = account ? `${account.first_name || ""} ${account.last_name || ""}`.trim() : "";
-  const displayName = fullName || account?.company_name || account?.company || account?.email || "—";
+  const displayName = fullName || account?.company_name || account?.company || account?.email || "-";
   const onboardingState = String(onboarding?.state || "NOT_STARTED");
   const isVerified = onboardingState === "VERIFIED";
 
@@ -140,6 +142,18 @@ export default function ProfilePage() {
           {success}
         </div>
       )}
+      {onboardingState === "PENDING_CALL" && (
+        <div className="status-pill" role="status" aria-live="polite">
+          Verification pending.{" "}
+          {calLink ? (
+            <a href={calLink} target="_blank" rel="noreferrer" style={{ color: "inherit", textDecoration: "underline" }}>
+              Reschedule call
+            </a>
+          ) : (
+            "Contact support to reschedule."
+          )}
+        </div>
+      )}
 
       <form className="card form-card" onSubmit={handleSubmit}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "baseline" }}>
@@ -147,7 +161,7 @@ export default function ProfilePage() {
             <p className="section-title">Your Profile</p>
             <h2 style={{ marginTop: 0, marginBottom: 6 }}>{displayName}</h2>
             <p className="hero-subtitle">
-              Signed in as <span style={{ color: "var(--text)" }}>{account?.email || "—"}</span> • Created {createdAtLabel}
+              Signed in as <span style={{ color: "var(--text)" }}>{account?.email || "-"}</span> - Created {createdAtLabel}
             </p>
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
@@ -163,15 +177,15 @@ export default function ProfilePage() {
             <div className="form-grid" style={{ gap: 12 }}>
               <div className="input-group">
                 <span className="input-label">First Name</span>
-                <div className="input-control">{account?.first_name || "—"}</div>
+                <div className="input-control">{account?.first_name || "-"}</div>
               </div>
               <div className="input-group">
                 <span className="input-label">Last Name</span>
-                <div className="input-control">{account?.last_name || "—"}</div>
+                <div className="input-control">{account?.last_name || "-"}</div>
               </div>
               <div className="input-group">
                 <span className="input-label">User ID</span>
-                <div className="input-control">{account?.id ?? "—"}</div>
+                <div className="input-control">{account?.id ?? "-"}</div>
               </div>
               <div className="input-group">
                 <span className="input-label">Payout Accounts</span>
@@ -189,11 +203,11 @@ export default function ProfilePage() {
             <div className="form-grid" style={{ gap: 12 }}>
               <div className="input-group">
                 <span className="input-label">Legal Name</span>
-                <div className="input-control">{organization?.legal_name || "—"}</div>
+                <div className="input-control">{organization?.legal_name || "-"}</div>
               </div>
               <div className="input-group">
                 <span className="input-label">Entity Type</span>
-                <div className="input-control">{organization?.entity_type || "—"}</div>
+                <div className="input-control">{organization?.entity_type || "-"}</div>
               </div>
               <div className="input-group">
                 <label className="input-label" htmlFor="dba">
@@ -250,7 +264,7 @@ export default function ProfilePage() {
               </div>
               <div className="input-group">
                 <span className="input-label">Business Address</span>
-                <div className="input-control">{addressLine || "—"}</div>
+                <div className="input-control">{addressLine || "-"}</div>
                 <p className="hero-subtitle" style={{ marginTop: 8 }}>
                   {addressLocked ? "Address is locked from onboarding Step 1." : "Address can be updated before it becomes locked."}
                 </p>

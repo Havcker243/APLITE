@@ -74,6 +74,9 @@ create index if not exists idx_organizations_user
 create unique index if not exists idx_organizations_user_ein
     on organizations(user_id, ein);
 
+create index if not exists idx_organizations_verification_status
+    on organizations(verification_status, status);
+
 -- =========================
 -- PAYMENT ACCOUNTS (RAILS)
 -- =========================
@@ -139,6 +142,12 @@ create index if not exists idx_onboarding_sessions_user
 
 create index if not exists idx_onboarding_sessions_org
     on onboarding_sessions(org_id);
+
+create index if not exists idx_onboarding_sessions_user_active
+    on onboarding_sessions(user_id, completed_at, last_saved_at desc);
+
+create index if not exists idx_onboarding_sessions_org_recent
+    on onboarding_sessions(org_id, last_saved_at desc);
 
 -- =========================
 -- IDENTITY VERIFICATIONS (Future KYB/KYC)

@@ -6,7 +6,7 @@ import secrets
 import logging
 
 from psycopg2.errors import UniqueViolation
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Header, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Header, Request, Response, status, Query
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, EmailStr, Field
 
@@ -130,7 +130,12 @@ def _sanitize_user(user: dict) -> dict:
 
 
 def get_current_user(request: Request, authorization: str | None = Header(default=None)):
-    """FastAPI dependency: authenticate the request and return the current user row."""
+    """FastAPI dependency: authenticate the request and return the current user row.
+
+    MVP notes:
+    - Session expiry is enforced at request time, not via a background cleanup.
+    - Expired sessions are deleted lazily when encountered.
+    """
     token = _bearer_token_from_header(authorization) or request.cookies.get("aplite_session")
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing or invalid token")
@@ -156,6 +161,8 @@ def get_current_user(request: Request, authorization: str | None = Header(defaul
 @router.post("/api/auth/signup", response_model=AuthResponse)
 def signup(payload: SignupRequest, response: Response):
     """Create a new user and return a session token + sanitized user profile."""
+    # MVP: signup immediately creates an active session. If email verification is added,
+    # enforce it here or in `login_start`.
     if not payload.accept_terms:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Please accept the terms to continue")
 
@@ -482,7 +489,11 @@ def create_child_upi(payload: ChildUpiRequest, user=Depends(get_current_user)):
 
 
 @router.get("/api/orgs/child-upis")
-def list_child_upis(user=Depends(get_current_user)):
+def list_child_upis(
+    limit: int | None = Query(default=10, ge=1, le=200),
+    before: str | None = Query(default=None),
+    user=Depends(get_current_user),
+):
     """
     List payment accounts/UPIs for the current user's verified org.
     """
@@ -490,7 +501,13 @@ def list_child_upis(user=Depends(get_current_user)):
     if not latest_session or str(latest_session.get("state")).upper() != "VERIFIED":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Complete onboarding first.")
     org_id = latest_session["org_id"]
-    rows = queries.list_child_upis_for_org(org_id)
+    before_dt = None
+    if before:
+        try:
+            before_dt = datetime.fromisoformat(before)
+        except Exception:
+            before_dt = None
+    rows = queries.list_child_upis_for_org(org_id, limit=limit, before=before_dt)
     results: list[dict] = []
     for row in rows:
         results.append(

@@ -71,10 +71,12 @@ export function Layout({ children }: PropsWithChildren) {
   }, [menuOpen, upiMenuOpen]);
 
   const onboardingStatus = String(profile?.onboarding_status || "NOT_STARTED");
+  // Gate navigation options based on onboarding status (verified vs in-progress).
   const links = user
     ? onboardingStatus !== "VERIFIED"
       ? [
           { href: "/onboard", label: "Onboarding" },
+          { href: "/onboard/pending", label: "Pending" },
           { href: "/profile", label: "Profile" },
           { href: "/clients", label: "Directory" },
         ]
@@ -160,7 +162,7 @@ export function Layout({ children }: PropsWithChildren) {
               >
                 <span className="account-name">{accountLabel}</span>
                 <span className="account-caret" aria-hidden="true">
-                  ▾
+                  v
                 </span>
               </button>
               {menuOpen && (

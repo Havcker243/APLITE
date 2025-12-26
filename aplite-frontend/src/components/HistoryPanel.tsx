@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import { BusinessSummary } from "../utils/api";
 
 type HistoryPanelProps = {
@@ -41,7 +41,7 @@ export function HistoryPanel({ entries, onCopy, onDeactivate, deactivatingId }: 
             <div key={entry.id} className="table-row">
               <span className="history-upi">{maskUpi(entry.upi)}</span>
               <span>{entry.legal_name}</span>
-              <span>{entry.rails?.join(", ") || "—"}</span>
+              <span>{entry.rails?.join(", ") || "-"}</span>
               <span className="history-meta">{dateLabel}</span>
               <span className="status-pill">{isDeactivated ? "deactivated" : entry.verification_status}</span>
               <div style={{ display: "flex", gap: 8 }}>
@@ -55,7 +55,7 @@ export function HistoryPanel({ entries, onCopy, onDeactivate, deactivatingId }: 
                     onClick={() => onDeactivate(entry.id)}
                     disabled={isDeactivated || deactivatingId === entry.id}
                   >
-                    {deactivatingId === entry.id ? "Deactivating…" : "Deactivate"}
+                    {deactivatingId === entry.id ? "Deactivating..." : "Deactivate"}
                   </button>
                 )}
               </div>
