@@ -458,6 +458,13 @@ Purpose:
 - Owners: call verification (status `pending_call`).
 - Authorized reps: ID document required.
 
+## Step 6: Verification pending (Call scheduling)
+
+### UI requirements (current MVP)
+- After a call is booked, show a waiting state until verification completes.
+- Status auto-refreshes from the backend; redirect to dashboard on `VERIFIED`.
+- Provide a reschedule link (Cal.com) when configured.
+
 ---
 
 # E. Verification Channel System (Email / Text / Call) (future)

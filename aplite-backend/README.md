@@ -33,10 +33,11 @@ Run from the repo root so `app` is on the import path. If needed, set `PYTHONPAT
 ## Key routes
 - Auth: `/api/auth/signup`, `/api/auth/login/start`, `/api/auth/login/verify`, `/api/auth/logout`
 - Profile: `GET/PUT /api/profile`
-- Onboarding: `/onboarding/current`, `/onboarding/complete`, `/onboarding/upload-id`, `/onboarding/upload-formation`
-- Payment accounts: `/api/accounts` (list/create)
-- Child UPIs: `/api/orgs/child-upi`, `/api/orgs/child-upis`, `/api/orgs/child-upis/{id}/disable`, `/api/orgs/child-upis/{id}/reactivate`
+- Profile (extended): `GET /api/profile/details`, `PUT /api/profile/onboarding`
+- Onboarding: `/onboarding/current`, `/onboarding/complete`, `/onboarding/upload-id`, `/onboarding/upload-formation`, `/onboarding/reset`
+- Payment accounts: `/api/accounts` (list/create), `PUT /api/accounts/{id}` (rail fields lock once linked to a UPI)
+- Child UPIs: `/api/orgs/child-upi`, `/api/orgs/child-upis` (supports `limit` + `before`), `/api/orgs/child-upis/{id}/disable`, `/api/orgs/child-upis/{id}/reactivate`
 - Businesses: `/api/businesses` (create/list), `/api/businesses/{id}/deactivate`
-- Resolve UPI: `/api/resolve`
+- Resolve UPI: `/api/resolve`, `/api/upi/lookup`
 - Public clients: `/api/public/clients`
 - Webhooks: `POST /webhooks/cal` (Cal.com booking events; completes verification on call completion)
