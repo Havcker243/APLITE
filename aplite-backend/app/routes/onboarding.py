@@ -39,6 +39,15 @@ CAL_VERIFY_EVENTS = {
     "call.completed",
     "meeting.completed",
 }
+CAL_VERIFY_ON_CANCEL = os.getenv("CAL_VERIFY_ON_CANCEL", "0").lower() in ("1", "true", "yes")
+CAL_CANCEL_EVENTS = {
+    "booking.cancelled",
+    "booking.canceled",
+    "call.cancelled",
+    "call.canceled",
+    "meeting.cancelled",
+    "meeting.canceled",
+}
 
 class Address(BaseModel):
     street1: str = Field(min_length=1, max_length=120)
@@ -397,7 +406,14 @@ def _extract_cal_email(payload: dict) -> str | None:
             candidates.append(value)
 
     booking = payload.get("booking") if isinstance(payload.get("booking"), dict) else payload.get("data")
+    if not booking and isinstance(payload.get("payload"), dict):
+        booking = payload.get("payload")
     if isinstance(booking, dict):
+        responses = booking.get("responses")
+        if isinstance(responses, dict):
+            email_obj = responses.get("email")
+            if isinstance(email_obj, dict) and isinstance(email_obj.get("value"), str):
+                candidates.append(email_obj["value"])
         for key in ("attendees", "participants"):
             attendees = booking.get(key)
             if isinstance(attendees, list):
@@ -415,6 +431,21 @@ def _extract_cal_email(payload: dict) -> str | None:
         if cleaned and "@" in cleaned:
             return cleaned
     return None
+
+
+def _normalize_cal_event(payload: dict) -> str:
+    raw = payload.get("type") or payload.get("event") or payload.get("trigger") or payload.get("triggerEvent") or ""
+    value = str(raw).strip()
+    if not value:
+        return ""
+    value = value.replace(" ", "_").replace("-", "_")
+    value = value.lower()
+    # Normalize Cal enum-like values to dot notation (booking_cancelled -> booking.cancelled).
+    if "_" in value and "." not in value:
+        parts = value.split("_", 1)
+        if len(parts) == 2:
+            return f"{parts[0]}.{parts[1]}"
+    return value
 
 
 def _send_webhook_alert(subject: str, body: str) -> None:
@@ -633,7 +664,7 @@ async def cal_webhook(request: Request, x_cal_signature: str | None = Header(def
         )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON payload.") from exc
 
-    event = str(payload.get("type") or payload.get("event") or payload.get("trigger") or "").lower()
+    event = _normalize_cal_event(payload)
     email = _extract_cal_email(payload)
     logger.info("cal webhook received", extra={"event": event, "email": email})
     if not email:
@@ -659,7 +690,7 @@ async def cal_webhook(request: Request, x_cal_signature: str | None = Header(def
         )
         return {"status": "ignored", "detail": "No onboarding session"}
 
-    if event in CAL_VERIFY_EVENTS:
+    if event in CAL_VERIFY_EVENTS or (CAL_VERIFY_ON_CANCEL and event in CAL_CANCEL_EVENTS):
         try:
             upi = queries.complete_onboarding_and_issue_identifier(uuid.UUID(str(latest_session["id"])))
             return {"status": "VERIFIED", "upi": upi}

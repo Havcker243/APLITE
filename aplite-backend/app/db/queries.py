@@ -840,6 +840,13 @@ def get_user_by_id(user_id: int) -> Optional[UserRecord]:
             return cur.fetchone()
 
 
+def get_user_by_master_upi(upi: str) -> Optional[UserRecord]:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("select * from users where master_upi = %s", (upi,))
+            return cur.fetchone()
+
+
 def get_business_by_id(business_id: int) -> Optional[BusinessRecord]:
     with get_connection() as conn:
         with conn.cursor() as cur:

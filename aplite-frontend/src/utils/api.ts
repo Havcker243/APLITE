@@ -111,16 +111,6 @@ export type OnboardingStep4Payload = {
   swift?: string;
 };
 
-export type BusinessPayload = {
-  legal_name: string;
-  ein: string;
-  business_type: string;
-  website?: string;
-  address: string;
-  country: string;
-  payment_account_id?: number;
-  account?: AccountPayload;
-};
 
 export type AccountPayload = {
   rail: "ACH" | "WIRE_DOM" | "SWIFT";
@@ -142,16 +132,6 @@ export type ResolvePayload = {
   rail: "ACH" | "WIRE_DOM" | "SWIFT";
 };
 
-export type BusinessSummary = {
-  id: number;
-  upi: string;
-  legal_name: string;
-  rails: string[];
-  verification_status: string;
-  created_at: string;
-  parent_upi?: string;
-  status?: string;
-};
 
 export type User = {
   id: number;
@@ -220,6 +200,24 @@ export type UpiLookupResult = {
   };
 };
 
+export type MasterUpiLookupResult = {
+  upi: string;
+  owner: {
+    id: number;
+    company_name?: string;
+    summary?: string;
+    established_year?: number;
+    state?: string | null;
+    country?: string | null;
+  };
+  organizations: Array<{
+    id: string;
+    legal_name: string;
+    upi?: string | null;
+    verification_status?: string | null;
+    status?: string | null;
+  }>;
+};
 // All requests prefer cookie-based auth but also attach Bearer when available.
 const defaultInit: RequestInit = { credentials: "include" };
 
@@ -363,21 +361,6 @@ export async function logout(): Promise<void> {
   setAuthToken(null);
 }
 
-export async function onboardBusiness(data: BusinessPayload) {
-  /** Create a business and mint a new UPI under the authenticated user's workspace. */
-  const res = await authedFetch(`${API_BASE_URL}/api/businesses`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-
-  if (!res.ok) {
-    const message = await res.text();
-    throw new Error(message || "Failed to create business");
-  }
-
-  return res.json();
-}
 
 export async function resolveUPI(data: ResolvePayload) {
   /** Resolve an owned UPI to payout coordinates for a specific rail. */
@@ -421,30 +404,16 @@ export async function lookupUpiProfile(data: { upi: string }) {
   return res.json() as Promise<UpiLookupResult>;
 }
 
-export async function fetchBusinesses(limit?: number): Promise<BusinessSummary[]> {
-  /** Load recently created businesses/UPIs for the authenticated user. */
-  const params = limit ? `?limit=${limit}` : "";
-  const res = await authedFetch(`${API_BASE_URL}/api/businesses${params}`);
-
+export async function lookupMasterUpi(upi: string) {
+  /** Lookup a master UPI (verified users only). */
+  const params = new URLSearchParams({ upi });
+  const res = await authedFetch(`${API_BASE_URL}/api/upi/master?${params.toString()}`);
   if (!res.ok) {
-    throw new Error("Failed to load business history");
+    throw new Error(await parseError(res, "Unable to lookup master UPI"));
   }
-
-  return res.json();
+  return res.json() as Promise<MasterUpiLookupResult>;
 }
 
-export async function deactivateBusiness(id: number) {
-  /** Deactivate a business/UPI so it can no longer be resolved. */
-  const res = await authedFetch(`${API_BASE_URL}/api/businesses/${id}/deactivate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-  });
-  if (!res.ok) {
-    const msg = await res.text();
-    throw new Error(msg || "Failed to deactivate");
-  }
-  return res.json();
-}
 
 export async function fetchProfile(): Promise<User> {
   /** Fetch the current user's profile. */

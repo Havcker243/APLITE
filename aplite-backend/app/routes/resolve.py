@@ -19,6 +19,47 @@ class LookupUPIRequest(BaseModel):
     upi: str
 
 
+@router.get("/api/upi/master")
+def lookup_master_upi(upi: str, user=Depends(get_current_user)):
+    """
+    Lookup a master UPI and return the owning profile + org list.
+
+    Restricted to verified users to avoid broad enumeration.
+    """
+    upi_value = (upi or "").strip().upper()
+    if not validate_upi_format(upi_value):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid UPI format")
+    if not queries.is_user_verified(int(user.get("id", 0) or 0)):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Verification required")
+
+    owner = queries.get_user_by_master_upi(upi_value)
+    if not owner or (owner.get("master_upi") or "").upper() != upi_value:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="UPI not found")
+
+    orgs = queries.list_organizations_for_user(int(owner.get("id") or 0))
+    return {
+        "upi": upi_value,
+        "owner": {
+            "id": owner.get("id"),
+            "company_name": owner.get("company_name") or owner.get("company"),
+            "summary": owner.get("summary") or "",
+            "established_year": owner.get("established_year"),
+            "state": owner.get("state"),
+            "country": owner.get("country"),
+        },
+        "organizations": [
+            {
+                "id": str(org.get("id")),
+                "legal_name": org.get("legal_name") or "",
+                "upi": org.get("upi"),
+                "verification_status": org.get("verification_status"),
+                "status": org.get("status"),
+            }
+            for org in orgs
+        ],
+    }
+
+
 @router.post("/api/upi/lookup")
 def lookup_upi(payload: LookupUPIRequest, user=Depends(get_current_user)):
     """Return the org + public profile for a verified UPI (exact match only)."""

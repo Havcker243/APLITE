@@ -52,11 +52,6 @@ This file documents the backend routes used by the frontend.
 - `POST /api/orgs/child-upis/{id}/disable`
 - `POST /api/orgs/child-upis/{id}/reactivate`
 
-## Businesses (legacy)
-- `POST /api/businesses`
-- `GET /api/businesses`
-- `POST /api/businesses/{id}/deactivate`
-
 ## Resolve + lookup
 - `POST /api/resolve`
   - Resolve a UPI to payout coordinates.
@@ -70,4 +65,3 @@ This file documents the backend routes used by the frontend.
 - `POST /webhooks/cal`
   - Accepts Cal.com booking events and completes verification on call completion.
   - Signature header: `X-Cal-Signature`
-

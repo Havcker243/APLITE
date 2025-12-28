@@ -55,7 +55,6 @@ Frontend runs on `http://localhost:3000`.
 - Onboarding (utility): `POST /onboarding/reset`, `GET /api/profile/details`, `PUT /api/profile/onboarding`
 - Payment accounts: `GET /api/accounts`, `POST /api/accounts`, `PUT /api/accounts/{id}` (rail fields lock once linked to a UPI)
 - Child UPIs: `POST /api/orgs/child-upi`, `GET /api/orgs/child-upis` (supports `limit` + `before`), `POST /api/orgs/child-upis/{id}/disable`, `POST /api/orgs/child-upis/{id}/reactivate`
-- Businesses: `GET /api/businesses`, `POST /api/businesses`, `POST /api/businesses/{id}/deactivate`
 - Resolve: `POST /api/resolve`, `POST /api/upi/lookup`
 - Public clients: `GET /api/public/clients`
 - Webhooks: `POST /webhooks/cal` (Cal.com booking events; completes verification on call completion)

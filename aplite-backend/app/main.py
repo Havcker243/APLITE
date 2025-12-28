@@ -11,7 +11,6 @@ from fastapi.responses import JSONResponse
 from app.db.connection import request_connection
 from app.routes.auth import router as auth_router
 from app.routes.accounts import router as accounts_router
-from app.routes.business import router as business_router
 from app.routes.resolve import router as resolve_router
 from app.routes.public import router as public_router
 from app.routes.onboarding import router as onboarding_router
@@ -27,7 +26,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.include_router(business_router)
 app.include_router(resolve_router)
 app.include_router(auth_router)
 app.include_router(accounts_router)
