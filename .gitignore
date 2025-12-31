@@ -43,3 +43,8 @@ build/
 
 # Local uploads / runtime data
 aplite-backend/data/uploads/
+
+# Misc
+*.claude/
+.claude/
+aplite-backend/nul

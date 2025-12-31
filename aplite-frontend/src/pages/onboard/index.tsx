@@ -1,3 +1,8 @@
+/**
+ * Onboarding entry page.
+ * Redirects users to the current onboarding step based on session state.
+ */
+
 import { useEffect } from "react";
 import { useRouter } from "next/router";
 import { useAuth } from "../../utils/auth";
@@ -28,6 +33,10 @@ export default function OnboardIndex() {
     }
     if (status === "PENDING_CALL") {
       router.replace("/onboard/step-6");
+      return;
+    }
+    if (status === "PENDING_REVIEW") {
+      router.replace("/onboard/pending");
       return;
     }
     let cancelled = false;

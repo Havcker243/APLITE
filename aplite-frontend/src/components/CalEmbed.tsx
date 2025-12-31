@@ -1,11 +1,23 @@
-import React, { useState } from "react";
+/**
+ * Cal.com embed wrapper used in onboarding verification flows.
+ * Keeps the scheduling widget isolated behind a simple component API.
+ */
+
+import { useState } from "react";
+import { Calendar } from "lucide-react";
+
+import { Button } from "./ui/button";
+import { Checkbox } from "./ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Label } from "./ui/label";
 
 type CalEmbedProps = {
   calLink?: string;
   username?: string;
   eventSlug?: string;
   onSchedule?: () => void;
-  variant?: "modal" | "inline";
+  scheduled?: boolean;
+  variant?: "modal" | "inline" | "card";
 };
 
 type CalConfig = { username: string; eventSlug: string } | null;
@@ -24,34 +36,71 @@ function parseCalLink(raw: string): CalConfig {
   return { username: parts[0], eventSlug: parts[1] };
 }
 
-export function CalEmbed({ calLink, username, eventSlug, onSchedule, variant = "modal" }: CalEmbedProps) {
+export function CalEmbed({
+  calLink,
+  username,
+  eventSlug,
+  onSchedule,
+  scheduled = false,
+  variant = "modal",
+}: CalEmbedProps) {
   const parsed = calLink ? parseCalLink(calLink) : null;
   const resolved = parsed || (username && eventSlug ? { username, eventSlug } : null);
   const [open, setOpen] = useState(false);
 
   if (!resolved) {
     return (
-      <div className="hero-subtitle">
-        Cal.com booking is not configured. Set NEXT_PUBLIC_CAL_LINK or
-        NEXT_PUBLIC_CAL_USERNAME and NEXT_PUBLIC_CAL_EVENT_SLUG.
+      <div className="text-sm text-muted-foreground">
+        Cal.com booking is not configured. Set NEXT_PUBLIC_CAL_LINK or NEXT_PUBLIC_CAL_USERNAME and NEXT_PUBLIC_CAL_EVENT_SLUG.
       </div>
     );
   }
 
   const src = `https://cal.com/${resolved.username}/${resolved.eventSlug}?embed=true`;
 
-  if (variant === "inline") {
-    // Inline embed is used inside the app modal to avoid nested popups.
+  if (variant === "card") {
+    if (scheduled) {
+      return (
+        <div className="bg-success/5 border border-success/20 rounded-xl p-6 text-center">
+          <Calendar className="h-12 w-12 mx-auto text-success mb-4" />
+          <h3 className="text-lg font-semibold text-foreground mb-2">Call Scheduled</h3>
+          <p className="text-muted-foreground mb-4">We&apos;ll send you a calendar invite with the meeting details.</p>
+          {onSchedule && (
+            <Button variant="outline" onClick={onSchedule}>
+              Reschedule
+            </Button>
+          )}
+        </div>
+      );
+    }
+
     return (
-      <div className="cal-embed-inline">
-        <div className="cal-embed-shell">
-          <iframe title="Schedule verification call" src={src} className="cal-embed-frame" />
+      <div className="bg-card border border-border rounded-xl p-6 text-center">
+        <Calendar className="h-12 w-12 mx-auto text-accent mb-4" />
+        <h3 className="text-lg font-semibold text-foreground mb-2">Schedule Verification Call</h3>
+        <p className="text-muted-foreground mb-6">Complete your verification with a brief call with our team.</p>
+        {onSchedule && (
+          <Button variant="hero" onClick={onSchedule}>
+            <Calendar className="h-4 w-4 mr-2" />
+            Schedule Call
+          </Button>
+        )}
+        <p className="text-xs text-muted-foreground mt-4">Typically takes 5-10 minutes.</p>
+      </div>
+    );
+  }
+
+  if (variant === "inline") {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-lg border border-border overflow-hidden">
+          <iframe title="Schedule verification call" src={src} className="w-full h-[640px]" />
         </div>
         {onSchedule && (
-          <label style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
-            <input type="checkbox" onChange={(e) => e.target.checked && onSchedule()} />
-            <span className="input-label">I scheduled my verification call</span>
-          </label>
+          <div className="flex items-center gap-3">
+            <Checkbox id="scheduled" onCheckedChange={(checked) => checked && onSchedule()} />
+            <Label htmlFor="scheduled">I scheduled my verification call</Label>
+          </div>
         )}
       </div>
     );
@@ -59,40 +108,28 @@ export function CalEmbed({ calLink, username, eventSlug, onSchedule, variant = "
 
   return (
     <div>
-      <button type="button" className="button" onClick={() => setOpen(true)}>
+      <Button type="button" variant="hero" onClick={() => setOpen(true)}>
         Book verification call
-      </button>
-      <p className="hero-subtitle" style={{ marginTop: 10 }}>
+      </Button>
+      <p className="text-muted-foreground mt-3">
         Once you book, we will verify the details on the call and activate your account.
       </p>
-      {open && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Schedule verification call">
-          <div className="modal-card soft-panel">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12 }}>
-              <div>
-                <p className="section-title" style={{ marginBottom: 6 }}>
-                  Schedule call
-                </p>
-                <p className="hero-subtitle" style={{ margin: 0 }}>
-                  Pick a time that works for you.
-                </p>
-              </div>
-              <button type="button" className="button button-secondary" onClick={() => setOpen(false)}>
-                Close
-              </button>
-            </div>
-            <div className="cal-embed-shell">
-              <iframe title="Schedule verification call" src={src} className="cal-embed-frame" />
-            </div>
-            {onSchedule && (
-              <label style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
-                <input type="checkbox" onChange={(e) => e.target.checked && onSchedule()} />
-                <span className="input-label">I scheduled my verification call</span>
-              </label>
-            )}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Book your call</DialogTitle>
+          </DialogHeader>
+          <div className="rounded-lg border border-border overflow-hidden">
+            <iframe title="Schedule verification call" src={src} className="w-full h-[640px]" />
           </div>
-        </div>
-      )}
+          {onSchedule && (
+            <div className="flex items-center gap-3">
+              <Checkbox id="scheduled-modal" onCheckedChange={(checked) => checked && onSchedule()} />
+              <Label htmlFor="scheduled-modal">I scheduled my verification call</Label>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,3 +1,9 @@
+"""Symmetric encryption helpers for sensitive banking fields.
+
+Wraps AES-GCM for encrypting account numbers and routing details before
+they are persisted. Uses a single service key loaded from the environment.
+"""
+
 import os
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from dotenv import load_dotenv

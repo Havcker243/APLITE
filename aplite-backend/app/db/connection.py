@@ -1,7 +1,9 @@
 """
-Postgres connection helper.
+Postgres connection helpers.
 
-Reads DATABASE_URL from the environment (works with Supabase Postgres).
+Centralizes creation of pooled connections from DATABASE_URL and provides
+request-scoped connection handling plus a transaction context manager used
+by the query layer.
 """
 
 import os

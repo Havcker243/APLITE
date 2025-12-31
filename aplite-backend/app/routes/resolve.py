@@ -1,11 +1,20 @@
+"""UPI resolution routes.
+
+Handles lookup of organizations and payment account details by UPI, with
+rate limiting and validation to prevent abuse.
+"""
+
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import os
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 from app.db import queries
 from app.routes.auth import get_current_user
 from app.utils.upi import parse_upi, validate_upi_format, verify_upi
+from app.utils.ratelimit import RateLimit, check_rate_limit
 
 router = APIRouter()
 
@@ -19,13 +28,34 @@ class LookupUPIRequest(BaseModel):
     upi: str
 
 
+def _enforce_rate_limit(request: Request, *, key: str, limit: int, window_seconds: int) -> None:
+    if limit <= 0:
+        return
+    ip = (request.client.host if request.client else "unknown").strip()
+    ok, retry_after = check_rate_limit(f"{key}:ip:{ip}", RateLimit(limit=limit, window_seconds=window_seconds))
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many requests. Try again soon.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
 @router.get("/api/upi/master")
-def lookup_master_upi(upi: str, user=Depends(get_current_user)):
+def lookup_master_upi(upi: str, request: Request, user=Depends(get_current_user)):
     """
     Lookup a master UPI and return the owning profile + org list.
 
     Restricted to verified users to avoid broad enumeration.
     """
+    _enforce_rate_limit(
+        request,
+        key="upi_master_lookup",
+        limit=int(os.getenv("RL_UPI_MASTER_LOOKUP_LIMIT", "60")),
+        window_seconds=int(os.getenv("RL_UPI_MASTER_LOOKUP_WINDOW_SECONDS", "60")),
+    )
+
+    # Normalize input before validation; master UPIs are uppercase.
     upi_value = (upi or "").strip().upper()
     if not validate_upi_format(upi_value):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid UPI format")
@@ -61,15 +91,23 @@ def lookup_master_upi(upi: str, user=Depends(get_current_user)):
 
 
 @router.post("/api/upi/lookup")
-def lookup_upi(payload: LookupUPIRequest, user=Depends(get_current_user)):
+def lookup_upi(payload: LookupUPIRequest, request: Request, user=Depends(get_current_user)):
     """Return the org + public profile for a verified UPI (exact match only)."""
     # Lookup is read-only and returns public profile + org metadata.
+    _enforce_rate_limit(
+        request,
+        key="upi_lookup",
+        limit=int(os.getenv("RL_UPI_LOOKUP_LIMIT", "120")),
+        window_seconds=int(os.getenv("RL_UPI_LOOKUP_WINDOW_SECONDS", "60")),
+    )
+
     upi_value = payload.upi.upper()
 
     if not validate_upi_format(upi_value):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid UPI format")
 
     org = None
+    # Prefer child UPI lookup first; fall back to org UPI.
     child_upi = queries.get_child_upi_by_value(upi_value)
     if child_upi:
         if child_upi.get("status") != "active":
@@ -117,14 +155,25 @@ def lookup_upi(payload: LookupUPIRequest, user=Depends(get_current_user)):
 
 
 @router.post("/api/resolve")
-def resolve_upi(payload: ResolveUPIRequest, user=Depends(get_current_user)):
+def resolve_upi(payload: ResolveUPIRequest, request: Request, user=Depends(get_current_user)):
     """Resolve a UPI (owned by the caller) into payout coordinates for the requested rail."""
     # Resolve returns payout coordinates only for verified, active UPIs.
     upi_value = payload.upi.upper()
 
+    _enforce_rate_limit(
+        request,
+        key="resolve",
+        limit=int(os.getenv("RL_RESOLVE_LIMIT", "60")),
+        window_seconds=int(os.getenv("RL_RESOLVE_WINDOW_SECONDS", "60")),
+    )
+
+    if not queries.is_user_verified(int(user.get("id", 0) or 0)):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Verification required to resolve UPIs.")
+
     if not validate_upi_format(upi_value):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid UPI format")
 
+    # Child UPI resolution uses the exact linked payment account.
     child_upi = queries.get_child_upi_by_value(upi_value)
     if child_upi:
         if child_upi.get("status") != "active":

@@ -1,5 +1,12 @@
-import React from "react";
+/**
+ * Shared shell layout for onboarding steps.
+ * Provides the step header, progress, and consistent page framing.
+ */
+
+import { useEffect } from "react";
 import { useRouter } from "next/router";
+import { Shield } from "lucide-react";
+
 import { OnboardingStepper } from "../OnboardingStepper";
 import { useOnboardingWizard } from "../../utils/onboardingWizard";
 import { useAuth } from "../../utils/auth";
@@ -14,13 +21,9 @@ function stepPath(step: number) {
 }
 
 export function OnboardingShell({
-  title,
-  subtitle,
   activeStep,
   children,
 }: {
-  title: string;
-  subtitle: string;
   activeStep: number;
   children: React.ReactNode;
 }) {
@@ -28,45 +31,46 @@ export function OnboardingShell({
   const { profile } = useAuth();
   const { completedThrough } = useOnboardingWizard();
 
-  React.useEffect(() => {
+  useEffect(() => {
+    // If already verified, do not allow re-entering onboarding flow.
     if (profile?.onboarding_status === "VERIFIED") {
       router.replace("/dashboard");
     }
   }, [profile, router]);
 
   return (
-    <div className="page-container onboarding-container">
-      <section className="hero" style={{ marginBottom: 10 }}>
-        <div>
-          <p className="section-title">Onboarding</p>
-          <h1 className="hero-title">{title}</h1>
-          <p className="hero-subtitle">{subtitle}</p>
+    <div className="min-h-screen bg-background">
+      <header className="bg-card border-b border-border">
+        <div className="container mx-auto px-6 h-16 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => router.push("/dashboard")}
+            className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Shield className="h-6 w-6" />
+            <span className="font-semibold">Aplite</span>
+          </button>
         </div>
-      </section>
+      </header>
 
-      <div
-        style={{
-          marginBottom: 12,
-          padding: 12,
-          border: "1px solid rgba(255,255,255,0.12)",
-          borderRadius: 12,
-          background: "rgba(255,255,255,0.02)",
-          color: "var(--text-secondary, #B8BCC6)",
-          fontSize: "0.95rem",
-        }}
-      >
-        Onboarding must be completed in one session. If you leave or log out before finishing, you will restart from Step 1 next time.
+      <div className="border-b border-border bg-card">
+        <div className="container mx-auto px-6 py-6">
+          <div className="max-w-4xl mx-auto">
+            <OnboardingStepper
+              currentStep={activeStep}
+              completedThrough={completedThrough}
+              onStepClick={(step) => {
+                // Allow backwards navigation only through completed steps.
+                if (step <= activeStep) router.push(stepPath(step));
+              }}
+            />
+          </div>
+        </div>
       </div>
 
-      <OnboardingStepper
-        currentStep={activeStep}
-        completedThrough={completedThrough}
-        onStepClick={(step) => {
-          if (step <= activeStep) router.push(stepPath(step));
-        }}
-      />
-
-      {children}
+      <div className="container mx-auto px-6 py-12">
+        <div className="max-w-xl mx-auto">{children}</div>
+      </div>
     </div>
   );
 }

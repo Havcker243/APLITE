@@ -1,19 +1,25 @@
+/**
+ * Signup page for creating new user accounts.
+ * Collects initial identity fields and starts the auth session.
+ */
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import React, { useEffect, useState } from "react";
+import { ArrowRight, Loader2, Lock, Mail, Shield, User } from "lucide-react";
+
 import { signup } from "../utils/api";
 import { useAuth } from "../utils/auth";
-import { YearInput } from "../components/YearInput";
-import { CA_PROVINCES, COUNTRIES, isCanada, isUnitedStates, US_STATES } from "../utils/geo";
+import { Button } from "../components/ui/button";
+import { Checkbox } from "../components/ui/checkbox";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { toast } from "sonner";
 
 const initialState = {
   first_name: "",
   last_name: "",
   email: "",
-  company_name: "",
-  established_year: "",
-  state: "",
-  country: "",
   password: "",
   confirm_password: "",
   accept_terms: false,
@@ -24,10 +30,6 @@ export default function SignupPage() {
   const { login, token, loading, refreshProfile } = useAuth();
   const [form, setForm] = useState(initialState);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const isUS = isUnitedStates(form.country);
-  const isCA = isCanada(form.country);
 
   useEffect(() => {
     if (loading) return;
@@ -38,188 +40,225 @@ export default function SignupPage() {
 
   if (!loading && token) return null;
 
-  function handleChange(event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
-    const target = event.target as HTMLInputElement;
-    const { name, value, type, checked } = target;
-    setForm((prev) => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
+  function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const target = event.target;
+    const { name, value } = target;
+    setForm((prev) => ({ ...prev, [name]: value }));
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
-    setError(null);
     try {
+      if (form.password !== form.confirm_password) {
+        throw new Error("Passwords do not match.");
+      }
+      if (form.password.length < 8) {
+        throw new Error("Password must be at least 8 characters.");
+      }
+      if (!form.accept_terms) {
+        throw new Error("You must accept the Terms of Service.");
+      }
       const response = await signup({
         ...form,
-        established_year: form.established_year ? Number(form.established_year) : undefined,
       });
       login(response);
       const details = await refreshProfile();
       const status = String(details?.onboarding_status || "NOT_STARTED");
-      const next = typeof router.query.next === "string" ? router.query.next : status !== "VERIFIED" ? "/onboard" : "/dashboard";
+      const next =
+        typeof router.query.next === "string"
+          ? router.query.next
+          : status !== "VERIFIED"
+          ? "/onboard"
+          : "/dashboard";
       router.push(next);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to create account");
+      toast.error(err instanceof Error ? err.message : "Unable to create account");
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <div className="page-container">
-      <section className="hero">
-        <div>
-          <p className="section-title">Create Account</p>
-          <h1 className="hero-title">Mint your master UPI</h1>
-          <p className="hero-subtitle">Securely create your workspace and generate a master UPI before attaching bank accounts.</p>
-        </div>
-      </section>
-
-      {error && (
-        <div className="error-box" role="alert" aria-live="assertive">
-          {error}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="card form-card">
-        <div className="form-grid" style={{ gridTemplateColumns: "1fr" }}>
-          <div className="input-group">
-            <label className="input-label" htmlFor="first_name">
-              First Name
-            </label>
-            <input id="first_name" name="first_name" value={form.first_name} onChange={handleChange} className="input-control" required />
-          </div>
-          <div className="input-group">
-            <label className="input-label" htmlFor="last_name">
-              Last Name
-            </label>
-            <input id="last_name" name="last_name" value={form.last_name} onChange={handleChange} className="input-control" required />
-          </div>
-          <div className="input-group">
-            <label className="input-label" htmlFor="email">
-              Work Email
-            </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              value={form.email}
-              onChange={handleChange}
-              className="input-control"
-              required
-            />
-          </div>
-          <div className="input-group">
-            <label className="input-label" htmlFor="company_name">
-              Company Name
-            </label>
-            <input id="company_name" name="company_name" value={form.company_name} onChange={handleChange} className="input-control" required />
-          </div>
-          <div className="input-group">
-            <label className="input-label" htmlFor="established_year">
-              Year Established
-            </label>
-            <YearInput id="established_year" name="established_year" value={form.established_year} onChange={(value) => setForm((p) => ({ ...p, established_year: value }))} />
-          </div>
-          <div className="input-group">
-            <label className="input-label" htmlFor="state">
-              State/Region
-            </label>
-            <input
-              id="state"
-              name="state"
-              list={isUS ? "us-states" : isCA ? "ca-provinces" : undefined}
-              value={form.state}
-              onChange={handleChange}
-              className="input-control"
-              placeholder={isUS ? "CA" : isCA ? "ON" : "State / Region"}
-            />
-            {isUS && (
-              <datalist id="us-states">
-                {US_STATES.map((s) => (
-                  <option key={s} value={s} />
-                ))}
-              </datalist>
-            )}
-            {isCA && (
-              <datalist id="ca-provinces">
-                {CA_PROVINCES.map((p) => (
-                  <option key={p} value={p} />
-                ))}
-              </datalist>
-            )}
-          </div>
-          <div className="input-group">
-            <label className="input-label" htmlFor="country">
-              Country
-            </label>
-            <input
-              id="country"
-              name="country"
-              list="countries"
-              value={form.country}
-              onChange={(e) => {
-                const value = e.target.value;
-                setForm((prev) => ({ ...prev, country: value, state: "" }));
-              }}
-              className="input-control"
-              required
-            />
-            <datalist id="countries">
-              {COUNTRIES.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
-          </div>
-          <div className="input-group">
-            <label className="input-label" htmlFor="password">
-              Password
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="new-password"
-              value={form.password}
-              onChange={handleChange}
-              className="input-control"
-              minLength={6}
-              required
-            />
-          </div>
-          <div className="input-group">
-            <label className="input-label" htmlFor="confirm_password">
-              Confirm Password
-            </label>
-            <input
-              id="confirm_password"
-              name="confirm_password"
-              type="password"
-              autoComplete="new-password"
-              value={form.confirm_password}
-              onChange={handleChange}
-              className="input-control"
-              minLength={6}
-              required
-            />
+    <div className="min-h-screen bg-background flex">
+      <div className="hidden lg:flex flex-1 items-center justify-center gradient-hero p-12">
+        <div className="max-w-md text-primary-foreground">
+          <h2 className="text-3xl font-semibold mb-4">Start your verification</h2>
+          <p className="text-primary-foreground/80 leading-relaxed mb-6">
+            Join businesses that trust Aplite to protect their banking information. Complete verification to unlock secure UPI creation and resolution.
+          </p>
+          <div className="space-y-3 text-sm text-primary-foreground/70">
+            <div className="flex items-center gap-3">
+              <div className="w-1.5 h-1.5 rounded-full bg-primary-foreground/50" />
+              <span>Manual verification process</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-1.5 h-1.5 rounded-full bg-primary-foreground/50" />
+              <span>Bank-grade encryption</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-1.5 h-1.5 rounded-full bg-primary-foreground/50" />
+              <span>Complete audit logging</span>
+            </div>
           </div>
         </div>
+      </div>
 
-        <label style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
-          <input type="checkbox" name="accept_terms" checked={form.accept_terms} onChange={handleChange} />
-          <span className="input-label">I agree to the Terms of Service</span>
-        </label>
+      <div className="flex-1 flex items-center justify-center p-8">
+        <div className="w-full max-w-md">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 mb-8 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Shield className="h-6 w-6" />
+            <span className="font-semibold">Aplite</span>
+          </Link>
 
-        <button type="submit" className="button" disabled={submitting}>
-          {submitting && <span className="spinner" aria-hidden="true" />}
-          Create Account
-        </button>
+          <h1 className="text-2xl font-semibold text-foreground mb-2">Create your account</h1>
+          <p className="text-muted-foreground mb-8">Start the verification process to access Aplite.</p>
 
-        <p className="hero-subtitle" style={{ marginTop: 10 }}>
-          Already have an account? <Link href="/login">Log in</Link>
-        </p>
-      </form>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-muted-foreground">Account details</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="first_name">First name</Label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input id="first_name" name="first_name" value={form.first_name} onChange={handleChange} className="pl-10" required />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="last_name">Last name</Label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input id="last_name" name="last_name" value={form.last_name} onChange={handleChange} className="pl-10" required />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email">Work email</Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input id="email" name="email" type="email" autoComplete="email" value={form.email} onChange={handleChange} className="pl-10" required />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="password"
+                  name="password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={form.password}
+                  onChange={handleChange}
+                  className="pl-10"
+                  minLength={8}
+                  required
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">Minimum 8 characters.</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="confirm_password">Confirm password</Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="confirm_password"
+                  name="confirm_password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={form.confirm_password}
+                  onChange={handleChange}
+                  className="pl-10"
+                  minLength={8}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id="accept_terms"
+                checked={form.accept_terms}
+                onCheckedChange={(checked) => setForm((prev) => ({ ...prev, accept_terms: Boolean(checked) }))}
+              />
+              <Label htmlFor="accept_terms" className="text-sm text-muted-foreground font-normal leading-relaxed cursor-pointer">
+                I agree to Aplite&apos;s Terms of Service and Privacy Policy, and consent to the verification process.
+              </Label>
+            </div>
+
+            <Button type="submit" variant="hero" size="lg" className="w-full" disabled={submitting}>
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating account...
+                </>
+              ) : (
+                <>
+                  Create account
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              )}
+            </Button>
+          </form>
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">or continue with</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              className="flex items-center justify-center w-full h-11 px-4 bg-background text-foreground border border-border rounded-lg font-medium transition-colors active:opacity-80 active:scale-[0.98]"
+              title="Coming soon"
+              aria-label="Continue with Google"
+              aria-disabled="true"
+              tabIndex={0}
+              onClick={(event) => event.preventDefault()}
+            >
+              <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+              </svg>
+              Google
+            </button>
+            <button
+              type="button"
+              className="flex items-center justify-center w-full h-11 px-4 bg-black text-white border border-black rounded-lg font-medium transition-colors active:opacity-80 active:scale-[0.98]"
+              title="Coming soon"
+              aria-label="Continue with Apple"
+              aria-disabled="true"
+              tabIndex={0}
+              onClick={(event) => event.preventDefault()}
+            >
+              <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="white" aria-hidden="true">
+                <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
+              </svg>
+              Apple
+            </button>
+          </div>
+
+          <p className="mt-8 text-center text-sm text-muted-foreground">
+            Already have an account?{" "}
+            <Link href="/login" className="text-accent hover:underline font-medium">
+              Sign in
+            </Link>
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

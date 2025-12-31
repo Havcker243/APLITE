@@ -1,3 +1,9 @@
+"""FastAPI application setup for the Aplite backend.
+
+Defines middleware, routers, and cross-cutting concerns like timeouts,
+rate limiting, CSRF enforcement, and DB connection handling.
+"""
+
 import asyncio
 import logging
 import os
@@ -14,6 +20,9 @@ from app.routes.accounts import router as accounts_router
 from app.routes.resolve import router as resolve_router
 from app.routes.public import router as public_router
 from app.routes.onboarding import router as onboarding_router
+from app.routes.admin import router as admin_router
+from app.utils.ratelimit import RateLimit, check_rate_limit
+from app.utils.security import verify_csrf_token
 
 app = FastAPI()
 app.add_middleware(
@@ -31,6 +40,7 @@ app.include_router(auth_router)
 app.include_router(accounts_router)
 app.include_router(public_router)
 app.include_router(onboarding_router)
+app.include_router(admin_router)
 
 logger = logging.getLogger("aplite")
 if not logger.handlers:
@@ -43,6 +53,7 @@ async def logging_timeout_middleware(request: Request, call_next):
     start = time.perf_counter()
     timeout = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "30"))
     try:
+        # Hard timeout keeps slow upstream calls from tying up workers.
         response = await asyncio.wait_for(call_next(request), timeout=timeout if timeout > 0 else None)
     except asyncio.TimeoutError:
         logger.warning("request timeout", extra={"path": request.url.path, "method": request.method, "request_id": request_id})
@@ -60,6 +71,38 @@ async def logging_timeout_middleware(request: Request, call_next):
     )
     response.headers["X-Request-ID"] = request_id
     return response
+
+
+@app.middleware("http")
+async def global_rate_limit_middleware(request: Request, call_next):
+    limit = int(os.getenv("RL_GLOBAL_LIMIT", "0"))
+    window_seconds = int(os.getenv("RL_GLOBAL_WINDOW_SECONDS", "60"))
+    if limit > 0:
+        ip = (request.client.host if request.client else "unknown").strip()
+        ok, retry_after = check_rate_limit(f"global:ip:{ip}", RateLimit(limit=limit, window_seconds=window_seconds))
+        if not ok:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many requests. Try again soon."},
+                headers={"Retry-After": str(retry_after)},
+            )
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def csrf_middleware(request: Request, call_next):
+    method = request.method.upper()
+    if method in ("GET", "HEAD", "OPTIONS"):
+        return await call_next(request)
+
+    session_token = request.cookies.get("aplite_session")
+    if session_token:
+        # For cookie-based sessions, require a CSRF token on all state-changing requests.
+        submitted = request.headers.get("X-CSRF-Token")
+        if not verify_csrf_token(session_token, submitted):
+            return JSONResponse(status_code=403, content={"detail": "Invalid CSRF token"})
+
+    return await call_next(request)
 
 
 @app.middleware("http")

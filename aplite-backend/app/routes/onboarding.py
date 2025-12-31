@@ -1,8 +1,13 @@
+"""Onboarding flow routes and payload models.
+
+Exposes endpoints for each onboarding step, file uploads, and the final
+completion step that persists organizations, payment accounts, and
+verification metadata.
+"""
+
 from __future__ import annotations
 
 from datetime import date
-import hashlib
-import hmac
 import os
 import logging
 import re
@@ -14,12 +19,12 @@ from psycopg2.errors import UniqueViolation
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status, Form, Header, Request
 from fastapi.encoders import jsonable_encoder
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.db import queries
 from app.routes.auth import get_current_user
 from app.utils.upi import generate_core_entity_id, generate_upi
-from app.utils.email import send_email
+from app.utils.ratelimit import RateLimit, check_rate_limit
 import boto3
 from botocore.client import Config as BotoConfig
 
@@ -31,23 +36,6 @@ DOMAIN_RE = re.compile(
     r"^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))+$"
 )
 
-CAL_WEBHOOK_SECRET = os.getenv("CAL_WEBHOOK_SECRET", "")
-WEBHOOK_ALERT_EMAIL = os.getenv("WEBHOOK_ALERT_EMAIL", "")
-CAL_VERIFY_EVENTS = {
-    "booking.completed",
-    "booking.ended",
-    "call.completed",
-    "meeting.completed",
-}
-CAL_VERIFY_ON_CANCEL = os.getenv("CAL_VERIFY_ON_CANCEL", "0").lower() in ("1", "true", "yes")
-CAL_CANCEL_EVENTS = {
-    "booking.cancelled",
-    "booking.canceled",
-    "call.cancelled",
-    "call.canceled",
-    "meeting.cancelled",
-    "meeting.canceled",
-}
 
 class Address(BaseModel):
     street1: str = Field(min_length=1, max_length=120)
@@ -151,7 +139,7 @@ class Step3Payload(BaseModel):
 
 class Step4Payload(BaseModel):
     bank_name: str = Field(min_length=2, max_length=120)
-    account_number: str = Field(min_length=4, max_length=32)
+    account_number: str = Field(min_length=4, max_length=34)
     ach_routing: str | None = Field(default=None, max_length=20)
     wire_routing: str | None = Field(default=None, max_length=34)
     swift: str | None = Field(default=None, max_length=20)
@@ -160,8 +148,8 @@ class Step4Payload(BaseModel):
     @classmethod
     def validate_account_number(cls, value: str) -> str:
         value = value.strip().replace(" ", "")
-        if not value.isdigit():
-            raise ValueError("Account number must be numeric.")
+        if not re.match(r"^[A-Z0-9]+$", value.upper()):
+            raise ValueError("Account number must be alphanumeric.")
         return value
 
     @field_validator("ach_routing")
@@ -199,6 +187,14 @@ class Step4Payload(BaseModel):
             raise ValueError("SWIFT/BIC must be 8 or 11 alphanumeric characters.")
         return value
 
+    @model_validator(mode="after")
+    def validate_account_number_for_rail(self) -> "Step4Payload":
+        if self.swift and self.account_number:
+            return self
+        if self.account_number and not self.account_number.isdigit():
+            raise ValueError("Account number must be numeric for ACH or wire rails.")
+        return self
+
 
 class CurrentOnboardingResponse(BaseModel):
     session_id: str
@@ -216,8 +212,7 @@ class CompletePayload(BaseModel):
     role: Step2Payload
     identity: Step3Payload
     bank: Step4Payload
-    verification_method: str | None = Field(default=None, pattern=r"^(call|id|otp|none)?$")
-    verification_code: str | None = Field(default=None, min_length=6, max_length=6)
+    verification_method: str | None = Field(default=None, pattern=r"^(call|id|none)?$")
     id_document_id: str | None = None
 
 
@@ -251,22 +246,37 @@ def onboarding_reset(user=Depends(get_current_user)):
 
 
 @router.post("/onboarding/upload-id")
-async def onboarding_upload_id(file: UploadFile = File(...), user=Depends(get_current_user)):
+async def onboarding_upload_id(request: Request, file: UploadFile = File(...), user=Depends(get_current_user)):
+    _enforce_rate_limit(
+        request,
+        key="onboarding_upload_id",
+        limit=int(os.getenv("RL_ONBOARDING_UPLOAD_ID_LIMIT", "20")),
+        window_seconds=int(os.getenv("RL_ONBOARDING_UPLOAD_ID_WINDOW_SECONDS", "3600")),
+        user_id=int(user.get("id", 0) or 0),
+    )
     if not file.filename:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing file.")
     content_type = (file.content_type or "").lower()
     if content_type not in ("image/jpeg", "image/png", "application/pdf"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported file type. Use jpg, png, or pdf.")
 
-    file_id, storage = _store_uploaded_file(file, user_id=user["id"], doc_category="id_document")
+    file_id, storage = await _store_uploaded_file(file, user_id=user["id"], doc_category="id_document")
     return {"file_id": file_id, "storage": storage}
 
 @router.post("/onboarding/upload-formation")
 async def onboarding_upload_formation(
+    request: Request,
     doc_type: str = Form(...),
     file: UploadFile = File(...),
     user=Depends(get_current_user),
 ):
+    _enforce_rate_limit(
+        request,
+        key="onboarding_upload_formation",
+        limit=int(os.getenv("RL_ONBOARDING_UPLOAD_FORMATION_LIMIT", "20")),
+        window_seconds=int(os.getenv("RL_ONBOARDING_UPLOAD_FORMATION_WINDOW_SECONDS", "3600")),
+        user_id=int(user.get("id", 0) or 0),
+    )
     # Formation docs are keyed separately so we can validate entity-specific requirements.
     if doc_type not in {
         "articles_of_organization",
@@ -276,7 +286,7 @@ async def onboarding_upload_formation(
         "partnership_equivalent",
     }:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported formation document type.")
-    file_id, storage = _store_uploaded_file(
+    file_id, storage = await _store_uploaded_file(
         file,
         user_id=user["id"],
         file_id_prefix="form",
@@ -287,7 +297,7 @@ async def onboarding_upload_formation(
     return {"file_id": file_id, "storage": storage}
 
 
-def _store_uploaded_file(
+async def _store_uploaded_file(
     file: UploadFile,
     user_id: int,
     *,
@@ -297,6 +307,7 @@ def _store_uploaded_file(
     doc_type: str | None = None,
 ) -> tuple[str, str]:
     # Accept uploads into S3 when configured; otherwise persist locally for MVP.
+    # We always store metadata in Postgres to enforce ownership checks later.
     if not file.filename:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing file.")
     content_type = (file.content_type or "").lower()
@@ -307,13 +318,13 @@ def _store_uploaded_file(
 
     # Read file into memory (max 10MB) for upload.
     max_bytes = 10 * 1024 * 1024
-    data = file.file.read(max_bytes + 1)
+    data = await file.read(max_bytes + 1)
     if data is None:
         data = b""
     if len(data) > max_bytes:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File too large (max 10MB).")
 
-    # Attempt to upload to Supabase S3-compatible bucket; fallback to local disk.
+    # Attempt to upload to S3-compatible storage; fallback to local disk.
     bucket = os.getenv("DATABASE_BUCKET_NAME")
     endpoint = os.getenv("DATABASE_BUCKET_S3_ENDPOINT")
     access_key = os.getenv("DATABASE_BUCKET_S3_ACCESS_KEY_ID")
@@ -347,7 +358,7 @@ def _store_uploaded_file(
         with open(bin_path, "wb") as out:
             out.write(data)
 
-    # Always store metadata locally to validate ownership.
+    # Always store metadata locally to validate ownership and audit the upload.
     queries.store_onboarding_file_metadata(
         file_id=file_id,
         filename=file.filename,
@@ -381,84 +392,26 @@ def _formation_docs_required(entity_type: str) -> bool:
     return _entity_type_key(entity_type) != "soleproprietor"
 
 
-def _cal_signature_ok(secret: str, body: bytes, signature: str | None) -> bool:
-    if not secret:
-        return True
-    if not signature:
-        return False
-    signature = signature.strip()
-    if signature.startswith("sha256="):
-        signature = signature.split("=", 1)[1]
-    digest = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(digest, signature)
-
-
-def _extract_cal_email(payload: dict) -> str | None:
-    # Best-effort extraction across Cal.com webhook variants.
-    candidates: list[str] = []
-    for key in ("email", "user", "organizer"):
-        value = payload.get(key)
-        if isinstance(value, dict):
-            email = value.get("email")
-            if isinstance(email, str):
-                candidates.append(email)
-        elif isinstance(value, str) and "@" in value:
-            candidates.append(value)
-
-    booking = payload.get("booking") if isinstance(payload.get("booking"), dict) else payload.get("data")
-    if not booking and isinstance(payload.get("payload"), dict):
-        booking = payload.get("payload")
-    if isinstance(booking, dict):
-        responses = booking.get("responses")
-        if isinstance(responses, dict):
-            email_obj = responses.get("email")
-            if isinstance(email_obj, dict) and isinstance(email_obj.get("value"), str):
-                candidates.append(email_obj["value"])
-        for key in ("attendees", "participants"):
-            attendees = booking.get(key)
-            if isinstance(attendees, list):
-                for attendee in attendees:
-                    if isinstance(attendee, dict) and isinstance(attendee.get("email"), str):
-                        candidates.append(attendee["email"])
-        organizer = booking.get("organizer")
-        if isinstance(organizer, dict) and isinstance(organizer.get("email"), str):
-            candidates.append(organizer["email"])
-        if isinstance(booking.get("email"), str):
-            candidates.append(booking["email"])
-
-    for email in candidates:
-        cleaned = email.strip().lower()
-        if cleaned and "@" in cleaned:
-            return cleaned
-    return None
-
-
-def _normalize_cal_event(payload: dict) -> str:
-    raw = payload.get("type") or payload.get("event") or payload.get("trigger") or payload.get("triggerEvent") or ""
-    value = str(raw).strip()
-    if not value:
-        return ""
-    value = value.replace(" ", "_").replace("-", "_")
-    value = value.lower()
-    # Normalize Cal enum-like values to dot notation (booking_cancelled -> booking.cancelled).
-    if "_" in value and "." not in value:
-        parts = value.split("_", 1)
-        if len(parts) == 2:
-            return f"{parts[0]}.{parts[1]}"
-    return value
-
-
-def _send_webhook_alert(subject: str, body: str) -> None:
-    if not WEBHOOK_ALERT_EMAIL:
+def _enforce_rate_limit(request: Request, *, key: str, limit: int, window_seconds: int, user_id: int | None = None) -> None:
+    if limit <= 0:
         return
-    try:
-        send_email(to_address=WEBHOOK_ALERT_EMAIL, subject=subject, body=body)
-    except Exception:
-        logger.exception("Failed to send webhook alert")
+    ip = (request.client.host if request.client else "unknown").strip()
+    # Rate limit by IP plus user id to avoid shared IPs punishing each other.
+    suffix = f"{ip}:{user_id}" if user_id is not None else ip
+    ok, retry_after = check_rate_limit(f"{key}:{suffix}", RateLimit(limit=limit, window_seconds=window_seconds))
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many requests. Try again soon.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
 
 
 @router.post("/onboarding/complete")
-def onboarding_complete(
+async def onboarding_complete(
+    request: Request,
     data: str = Form(..., description="JSON string for CompletePayload"),
     file: UploadFile | None = File(default=None),
     user=Depends(get_current_user),
@@ -470,6 +423,14 @@ def onboarding_complete(
       - data: JSON string matching CompletePayload
       - file: optional UploadFile for ID document
     """
+    _enforce_rate_limit(
+        request,
+        key="onboarding_complete",
+        limit=int(os.getenv("RL_ONBOARDING_COMPLETE_LIMIT", "5")),
+        window_seconds=int(os.getenv("RL_ONBOARDING_COMPLETE_WINDOW_SECONDS", "3600")),
+        user_id=int(user.get("id", 0) or 0),
+    )
+
     # Parse + validate the full payload in one request (MVP single-submit flow).
     try:
         payload_raw = json.loads(data)
@@ -485,7 +446,7 @@ def onboarding_complete(
     # Handle ID document (multipart file takes precedence over existing file_id).
     file_id = payload.identity.id_document_id or payload.id_document_id
     if file is not None:
-        file_id, _ = _store_uploaded_file(file, user_id=user["id"], doc_category="id_document")
+        file_id, _ = await _store_uploaded_file(file, user_id=user["id"], doc_category="id_document")
 
     # Validate formation documents against the declared entity type.
     allowed_docs = _allowed_formation_docs(payload.org.entity_type)
@@ -509,6 +470,8 @@ def onboarding_complete(
 
     try:
         # Step 3: identity validation
+        if not payload.identity.attestation:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Attestation is required.")
         require_document = verification_method != "call"
         if require_document and not file_id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Upload a government ID document.")
@@ -523,6 +486,7 @@ def onboarding_complete(
             )
 
         # Commit all onboarding data atomically (org + session + identity + bank + UPI issuance).
+        # This keeps partial onboarding data from being written if any step fails.
         result = queries.complete_onboarding_tx(
             user_id=user["id"],
             org_data={
@@ -609,6 +573,64 @@ def admin_verify_org(
     if not org:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found.")
 
+    return _verify_org(org)
+
+
+@router.post("/api/admin/orgs/upi/{org_upi}/verify")
+def admin_verify_org_by_upi(
+    org_upi: str,
+    x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
+):
+    """
+    Manual verification endpoint (MVP) by UPI.
+    """
+    expected_key = os.getenv("ADMIN_API_KEY") or ""
+    if not expected_key:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Admin verification is not configured.")
+    if x_admin_key != expected_key:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid admin key.")
+
+    org = queries.get_organization_by_upi(org_upi)
+    if not org:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found.")
+
+    return _verify_org(org)
+
+
+@router.post("/api/admin/users/master-upi/{master_upi}/verify")
+def admin_verify_by_master_upi(
+    master_upi: str,
+    x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
+):
+    """
+    Manual verification endpoint (MVP) by user master UPI.
+    """
+    expected_key = os.getenv("ADMIN_API_KEY") or ""
+    if not expected_key:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Admin verification is not configured.")
+    if x_admin_key != expected_key:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid admin key.")
+
+    user = queries.get_user_by_master_upi(master_upi)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+    session = queries.get_latest_onboarding_session(user["id"])
+    if not session or not session.get("org_id"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Onboarding session not found.")
+
+    org = queries.get_organization(str(session["org_id"]), user["id"])
+    if not org:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found.")
+
+    return _verify_org(org)
+
+
+def _verify_org(org: dict):
+    org_id = str(org.get("id"))
+    if not org_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found.")
+
     session = queries.get_latest_onboarding_session_by_org(org_id)
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Onboarding session not found.")
@@ -635,71 +657,4 @@ def admin_verify_org(
         queries.set_organization_verification_status(org_id, verification_status="verified", status="active")
 
     queries.complete_onboarding_session(uuid.UUID(str(session["id"])), state="VERIFIED")
-    return {"status": "VERIFIED", "org_id": str(org_id), "upi": upi}
-
-
-@router.post("/webhooks/cal")
-async def cal_webhook(request: Request, x_cal_signature: str | None = Header(default=None, alias="X-Cal-Signature")):
-    """
-    Cal.com webhook handler.
-
-    Expected behavior:
-    - If event indicates a completed call, mark onboarding VERIFIED and issue UPI.
-    - Otherwise acknowledge the event.
-    """
-    body = await request.body()
-    if not _cal_signature_ok(CAL_WEBHOOK_SECRET, body, x_cal_signature):
-        _send_webhook_alert(
-            subject="Aplite: Cal webhook signature failed",
-            body="Received Cal webhook with invalid signature.",
-        )
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid webhook signature.")
-
-    try:
-        payload = json.loads(body.decode("utf-8"))
-    except Exception as exc:
-        _send_webhook_alert(
-            subject="Aplite: Cal webhook invalid JSON",
-            body=f"Failed to parse webhook JSON: {exc}",
-        )
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON payload.") from exc
-
-    event = _normalize_cal_event(payload)
-    email = _extract_cal_email(payload)
-    logger.info("cal webhook received", extra={"event": event, "email": email})
-    if not email:
-        _send_webhook_alert(
-            subject="Aplite: Cal webhook missing email",
-            body=f"Event {event or 'unknown'} did not include an attendee email.",
-        )
-        return {"status": "ignored", "detail": "Missing attendee email"}
-
-    user = queries.get_user_by_email(email)
-    if not user:
-        _send_webhook_alert(
-            subject="Aplite: Cal webhook user not found",
-            body=f"Event {event or 'unknown'} for email {email} had no matching user.",
-        )
-        return {"status": "ignored", "detail": "User not found"}
-
-    latest_session = queries.get_latest_onboarding_session(user["id"])
-    if not latest_session:
-        _send_webhook_alert(
-            subject="Aplite: Cal webhook session missing",
-            body=f"User {email} has no onboarding session for event {event or 'unknown'}.",
-        )
-        return {"status": "ignored", "detail": "No onboarding session"}
-
-    if event in CAL_VERIFY_EVENTS or (CAL_VERIFY_ON_CANCEL and event in CAL_CANCEL_EVENTS):
-        try:
-            upi = queries.complete_onboarding_and_issue_identifier(uuid.UUID(str(latest_session["id"])))
-            return {"status": "VERIFIED", "upi": upi}
-        except Exception as exc:
-            logger.exception("Cal webhook verification failed")
-            _send_webhook_alert(
-                subject="Aplite: Cal webhook verification failed",
-                body=f"Failed to verify user {email} for event {event or 'unknown'}: {exc}",
-            )
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to complete verification") from exc
-
-    return {"status": "acknowledged", "event": event or "unknown"}
+    return {"status": "VERIFIED", "org_id": org_id, "upi": upi}

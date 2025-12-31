@@ -1,13 +1,22 @@
+"""Payment account management routes.
+
+Provides list, create, and update endpoints for payment accounts associated
+with organizations and users. Sensitive rail fields are validated and locked
+once linked to a UPI.
+"""
+
 import logging
+import os
 import re
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from typing import Literal
 
 from app.db import queries
 from app.routes.auth import get_current_user
+from app.utils.ratelimit import RateLimit, check_rate_limit
 
 router = APIRouter()
 logger = logging.getLogger("aplite")
@@ -72,6 +81,21 @@ def _org_upi_uses_account(account: dict) -> bool:
     return queries.payment_account_used_for_org_upi(account)
 
 
+def _enforce_rate_limit(request: Request, *, key: str, limit: int, window_seconds: int, user_id: int | None = None) -> None:
+    if limit <= 0:
+        return
+    ip = (request.client.host if request.client else "unknown").strip()
+    # Rate limit keyed by IP + user to reduce accidental throttling across shared networks.
+    suffix = f"{ip}:{user_id}" if user_id is not None else ip
+    ok, retry_after = check_rate_limit(f"{key}:{suffix}", RateLimit(limit=limit, window_seconds=window_seconds))
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many requests. Try again soon.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
 @router.get("/api/accounts")
 def list_accounts(user=Depends(get_current_user)):
     # Include a derived `rail_locked` flag so the UI can disable immutable fields.
@@ -83,7 +107,14 @@ def list_accounts(user=Depends(get_current_user)):
 
 
 @router.post("/api/accounts", status_code=status.HTTP_201_CREATED)
-def create_account(payload: AccountCreateRequest, user=Depends(get_current_user)):
+def create_account(payload: AccountCreateRequest, request: Request, user=Depends(get_current_user)):
+    _enforce_rate_limit(
+        request,
+        key="accounts_create",
+        limit=int(os.getenv("RL_ACCOUNTS_CREATE_LIMIT", "20")),
+        window_seconds=int(os.getenv("RL_ACCOUNTS_CREATE_WINDOW_SECONDS", "3600")),
+        user_id=int(user.get("id", 0) or 0),
+    )
     # Creating payout rails is restricted until onboarding verifies the user/org.
     if not queries.is_user_verified(user["id"]):
         raise HTTPException(
@@ -91,6 +122,7 @@ def create_account(payload: AccountCreateRequest, user=Depends(get_current_user)
             detail="Your account must be verified before adding payout rails.",
         )
 
+    # MVP: user owns a single org; first record is used as the parent.
     orgs = queries.list_organizations_for_user(user["id"])
     if not orgs:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No organization found for this user.")

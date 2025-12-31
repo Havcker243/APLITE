@@ -4,13 +4,15 @@ This file documents the backend routes used by the frontend.
 
 ## Auth
 - `POST /api/auth/signup`
-  - Create user and issue session token.
+  - Create user and issue session token (password min length: 8).
 - `POST /api/auth/login/start`
   - Password check + send OTP (email).
 - `POST /api/auth/login/verify`
   - Verify OTP and issue session.
 - `POST /api/auth/logout`
   - Invalidate current session.
+- `GET /api/auth/csrf`
+  - Issue CSRF token for cookie-based sessions.
 
 ## Profile
 - `GET /api/profile`
@@ -26,7 +28,7 @@ This file documents the backend routes used by the frontend.
 - `GET /onboarding/current`
   - Active onboarding session (if any).
 - `POST /onboarding/reset`
-  - Reset in-progress onboarding session.
+  - Reset in-progress onboarding session (also removes related org payment accounts and child UPIs).
 - `POST /onboarding/upload-id`
   - Upload identity doc.
 - `POST /onboarding/upload-formation`
@@ -61,7 +63,19 @@ This file documents the backend routes used by the frontend.
 ## Public directory
 - `GET /api/public/clients`
 
-## Webhooks
-- `POST /webhooks/cal`
-  - Accepts Cal.com booking events and completes verification on call completion.
-  - Signature header: `X-Cal-Signature`
+## Admin verification
+- `POST /api/admin/orgs/{org_id}/verify`
+- `POST /api/admin/orgs/upi/{org_upi}/verify`
+- `POST /api/admin/users/master-upi/{master_upi}/verify`
+  - Requires `X-Admin-Key` header (matches `ADMIN_API_KEY`).
+
+## Admin review queue
+- `GET /api/admin/verification/queue`
+  - List pending verification sessions (call + ID).
+- `GET /api/admin/verification/{session_id}`
+  - Full onboarding payload + file metadata for review.
+- `GET /api/admin/verification/file/{file_id}`
+  - Stream uploaded ID/formation docs.
+- `POST /api/admin/verification/{session_id}/approve`
+- `POST /api/admin/verification/{session_id}/reject`
+  - Requires `reason` in JSON body.

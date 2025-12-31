@@ -1,10 +1,24 @@
-import React from "react";
+/**
+ * Full-screen loading state used during auth or data hydration.
+ * Keeps the UI stable while backend state is fetched.
+ */
 
-export function LoadingScreen({ label = "Loading..." }: { label?: string }) {
+import React from "react";
+import { Loader2 } from "lucide-react";
+
+type LoadingScreenProps = {
+  label?: string;
+};
+
+export function LoadingScreen({ label = "Loading..." }: LoadingScreenProps) {
   return (
-    <div className="page-loading" role="status" aria-live="polite">
-      <span className="spinner" aria-hidden="true" />
-      <span>{label}</span>
+    <div className="min-h-screen bg-background flex items-center justify-center" role="status" aria-live="polite">
+      <div className="text-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
+        <p className="text-muted-foreground">{label}</p>
+      </div>
     </div>
   );
 }
+
+export default LoadingScreen;

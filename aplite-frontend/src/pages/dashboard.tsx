@@ -1,176 +1,165 @@
-import { useRouter } from "next/router";
-import React, { useEffect, useMemo, useState } from "react";
-import { ResolveForm } from "../components/ResolveForm";
-import { ResolutionResult } from "../components/ResolutionResult";
-import { ResultCard } from "../components/ResultCard";
-import { LoadingScreen } from "../components/LoadingScreen";
+/**
+ * Main authenticated dashboard page.
+ * Summarizes onboarding status and routes to key actions.
+ */
 
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
+import { 
+  CreditCard, 
+  Key, 
+  ArrowRight, 
+  CheckCircle2,
+  Clock,
+  FileText,
+  Copy,
+  Plus,
+  ToggleLeft,
+  ToggleRight
+} from "lucide-react";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { useAuth } from "../utils/auth";
+import DashboardLayout from "../components/DashboardLayout";
+import { toast } from "sonner";
 import {
-  listAccounts,
-  resolveUPI,
-  fetchProfileDetails,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "../components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
+import {
   createChildUpi,
+  listAccounts,
   listChildUpis,
   disableChildUpi,
   reactivateChildUpi,
+  resolveUPI,
 } from "../utils/api";
-import { useAuth } from "../utils/auth";
-import { requireVerifiedOrRedirect } from "../utils/requireVerified";
-
-// legacy field labels removed
 
 const UPI_PATTERN = /^[A-Z0-9]{14}$/;
-type ChildUpiForm = {
-  account_mode: "existing" | "new";
-  payment_account_id: string;
-  rail: "ACH" | "WIRE_DOM" | "SWIFT";
-  bank_name: string;
-  account_name: string;
-  ach_routing: string;
-  ach_account: string;
-  wire_routing: string;
-  wire_account: string;
-  swift_bic: string;
-  iban: string;
-  bank_country: string;
-  bank_city: string;
-  bank_address: string;
-};
+const CHILD_UPI_PAGE_SIZE = 6;
 
-const ROUTING_PATTERN = /^\d{9}$/;
-
-const defaultForm: ChildUpiForm = {
-  account_mode: "existing",
-  payment_account_id: "",
-  rail: "ACH",
-  bank_name: "",
-  account_name: "",
-  ach_routing: "",
-  ach_account: "",
-  wire_routing: "",
-  wire_account: "",
-  swift_bic: "",
-  iban: "",
-  bank_country: "",
-  bank_city: "",
-  bank_address: "",
-};
-
-function validateChildForm(data: ChildUpiForm): string[] {
-  const errors: string[] = [];
-  if (data.account_mode === "existing") {
-    if (!data.payment_account_id) errors.push("Select an existing payment account");
-  } else {
-    if (!data.bank_name.trim()) errors.push("Bank name is required");
-    if (data.rail === "ACH") {
-      if (!ROUTING_PATTERN.test(data.ach_routing)) errors.push("ACH routing must be 9 digits");
-      if (!data.ach_account.trim()) errors.push("ACH account is required");
-    }
-    if (data.rail === "WIRE_DOM") {
-      if (!data.wire_routing || data.wire_routing.length < 6) errors.push("Wire routing should be at least 6 digits");
-      if (!data.wire_account.trim()) errors.push("Wire account is required");
-    }
-    if (data.rail === "SWIFT") {
-      if (!data.swift_bic.trim()) errors.push("SWIFT/BIC is required");
-      if (!data.iban.trim()) errors.push("IBAN is required");
-      if (!data.bank_country.trim()) errors.push("Bank country is required");
-    }
-  }
-  return errors;
-}
-
-function maskUpi(upi: string) {
-  if (!upi) return "";
-  return `${upi.slice(0, 3)}${"*".repeat(Math.max(upi.length - 3, 0))}`;
-}
+const isBrowser = typeof window !== "undefined";
+let cachedAccounts: any[] | null = null;
+let cachedAccountsPromise: Promise<any[]> | null = null;
+let cachedChildUpis: Array<{
+  child_upi_id?: string;
+  upi: string;
+  payment_account_id: number;
+  rail: string;
+  bank_name?: string;
+  created_at?: string;
+  status?: string;
+  label?: string | null;
+}> | null = null;
+let cachedChildUpisCursor: string | null = null;
+let cachedChildUpisHasMore = true;
+let cachedChildUpisPromise: Promise<any[]> | null = null;
+let cachedToken: string | null = null;
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, token, loading, profile } = useAuth();
-
-  const [form, setForm] = useState<ChildUpiForm>(defaultForm);
-  const [saving, setSaving] = useState(false);
-  const [upi, setUpi] = useState<string | null>(null);
-  const [orgName, setOrgName] = useState<string>("");
-  const [error, setError] = useState<string | null>(null);
-  const [validationErrors, setValidationErrors] = useState<string[]>([]);
-  const [copyNotice, setCopyNotice] = useState<string | null>(null);
+  const { token, loading, profile } = useAuth();
   const [accounts, setAccounts] = useState<any[]>([]);
-  const [accountsError, setAccountsError] = useState<string | null>(null);
   const [childUpis, setChildUpis] = useState<
     Array<{ child_upi_id?: string; upi: string; payment_account_id: number; rail: string; bank_name?: string; created_at?: string; status?: string }>
   >([]);
-  const [childUpisError, setChildUpisError] = useState<string | null>(null);
-  const [childUpiBusy, setChildUpiBusy] = useState<Record<string, boolean>>({});
+  const [childUpisCursor, setChildUpisCursor] = useState<string | null>(null);
   const [childUpisHasMore, setChildUpisHasMore] = useState(true);
   const [childUpisLoadingMore, setChildUpisLoadingMore] = useState(false);
-  const [childUpisCursor, setChildUpisCursor] = useState<string | null>(null);
-
-  const [resolveUpi, setResolveUpi] = useState("");
-  const [resolveRail, setResolveRail] = useState<"ACH" | "WIRE_DOM" | "SWIFT">(
-    "ACH"
-  );
-  const [resolveResult, setResolveResult] = useState<any>(null);
-  const [resolveError, setResolveError] = useState<string | null>(null);
+  const [childUpiBusy, setChildUpiBusy] = useState<Record<string, boolean>>({});
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [upiLabel, setUpiLabel] = useState("");
+  const [resolveInput, setResolveInput] = useState("");
   const [resolving, setResolving] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const CHILD_UPI_PAGE_SIZE = 6;
+
+  const onboardingStatus = String(profile?.onboarding_status || "UNVERIFIED").toUpperCase();
+  const isVerified = onboardingStatus === "VERIFIED";
+  const isPending = onboardingStatus === "PENDING_CALL" || onboardingStatus === "PENDING_REVIEW";
+  const isRejected = onboardingStatus === "REJECTED";
+  const isUnverified = !isVerified && !isPending && !isRejected;
 
   useEffect(() => {
-    if (!mounted || loading) return;
+    if (loading) return;
     if (!token) {
       router.replace("/login");
       return;
     }
-    const status = String(profile?.onboarding_status || "NOT_STARTED");
-    if (status !== "VERIFIED") {
-      router.replace("/onboard");
+    if (isVerified) {
+      void loadAccounts();
+      void loadChildUpis();
+    }
+  }, [loading, token, isVerified, router]);
+
+  async function loadAccounts(force = false) {
+    if (!token) return;
+    if (!force && cachedToken !== token) {
+      cachedToken = token;
+      cachedAccounts = null;
+      cachedAccountsPromise = null;
+      cachedChildUpis = null;
+      cachedChildUpisPromise = null;
+      cachedChildUpisCursor = null;
+      cachedChildUpisHasMore = true;
+    }
+    if (isBrowser && !force && cachedAccounts) {
+      setAccounts(cachedAccounts);
       return;
     }
-    requireVerifiedOrRedirect({ profile, router });
-    loadOrg();
-    loadAccounts();
-    loadChildUpis();
-  }, [mounted, loading, token, profile, router]);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  async function loadOrg() {
-    try {
-      const details = await fetchProfileDetails();
-      const org = details.organization;
-      setOrgName(org?.legal_name || "");
-      const orgUpi = org?.upi || org?.issued_upi || null;
-      setUpi(orgUpi);
-    } catch {
-      setOrgName("");
-      setUpi(null);
-    }
-  }
-
-  async function loadAccounts() {
-    try {
-      const res = await listAccounts();
+    if (isBrowser && !force && cachedAccountsPromise) {
+      const res = await cachedAccountsPromise;
       setAccounts(res);
-      setAccountsError(null);
+      return;
+    }
+    try {
+      const fetchPromise = listAccounts();
+      if (isBrowser) cachedAccountsPromise = fetchPromise;
+      const res = await fetchPromise;
+      setAccounts(res);
+      if (isBrowser) {
+        cachedAccounts = res;
+        cachedAccountsPromise = null;
+      }
     } catch (err) {
-      setAccountsError(
-        err instanceof Error ? err.message : "Unable to load accounts"
-      );
+      if (isBrowser) cachedAccountsPromise = null;
+      toast.error("Accounts unavailable", { description: "Unable to load accounts." });
     }
   }
 
-  async function loadChildUpis(options?: { append?: boolean }) {
+  async function loadChildUpis(options?: { append?: boolean; force?: boolean }) {
     try {
       const append = options?.append ?? false;
-      const res = await listChildUpis({
+      const force = options?.force ?? false;
+      if (isBrowser && !force && !append && cachedChildUpis) {
+        setChildUpis(cachedChildUpis);
+        setChildUpisHasMore(cachedChildUpisHasMore);
+        setChildUpisCursor(cachedChildUpisCursor);
+        return;
+      }
+      if (isBrowser && !force && !append && cachedChildUpisPromise) {
+        const res = await cachedChildUpisPromise;
+        setChildUpis(res as any);
+        return;
+      }
+      const fetchPromise = listChildUpis({
         limit: CHILD_UPI_PAGE_SIZE,
         before: append ? childUpisCursor || undefined : undefined,
       });
+      if (isBrowser && !force && !append) cachedChildUpisPromise = fetchPromise;
+      const res = await fetchPromise;
       setChildUpis((prev) => (append ? [...prev, ...res] : res));
-      setChildUpisError(null);
       setChildUpisHasMore(res.length === CHILD_UPI_PAGE_SIZE);
       const last = res[res.length - 1];
       if (last?.created_at) {
@@ -178,103 +167,104 @@ export default function DashboardPage() {
       } else if (!append) {
         setChildUpisCursor(null);
       }
-    } catch (err) {
-      setChildUpisError(err instanceof Error ? err.message : "Unable to load child UPIs");
-    }
-  }
-
-  function handleChange(event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
-    const { name, value } = event.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-  }
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSaving(true);
-    setError(null);
-    setUpi(null);
-
-    const errors = validateChildForm(form);
-    if (errors.length) {
-      setValidationErrors(errors);
-      setSaving(false);
-      return;
-    }
-    setValidationErrors([]);
-
-    try {
-      const payload: any = {
-        name: orgName || user?.company_name || user?.company || "Business",
-        type: "company",
-      };
-      if (form.account_mode === "existing" && form.payment_account_id) {
-        payload.account_id = Number(form.payment_account_id);
-      } else {
-        payload.rail = form.rail;
-        payload.bank_name = form.bank_name;
-        payload.account_name = form.account_name || payload.name;
-        payload.ach_routing = form.ach_routing || undefined;
-        payload.ach_account = form.ach_account || undefined;
-        payload.wire_routing = form.wire_routing || undefined;
-        payload.wire_account = form.wire_account || undefined;
-        payload.bank_address = form.bank_address || undefined;
-        payload.swift_bic = form.swift_bic || undefined;
-        payload.iban = form.iban || undefined;
-        payload.bank_country = form.bank_country || undefined;
-        payload.bank_city = form.bank_city || undefined;
+      if (isBrowser) {
+        const nextList = append ? [...childUpis, ...res] : res;
+        cachedChildUpis = nextList;
+        cachedChildUpisHasMore = res.length === CHILD_UPI_PAGE_SIZE;
+        cachedChildUpisCursor = last?.created_at || null;
+        cachedChildUpisPromise = null;
       }
-
-      const response = await createChildUpi(payload);
-      setUpi(response.upi);
-      setForm(defaultForm);
-      setValidationErrors([]);
-      await loadOrg();
-      await loadChildUpis();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Unable to create business"
-      );
-      setUpi(null);
-    } finally {
-      setSaving(false);
+      if (isBrowser) cachedChildUpisPromise = null;
+      toast.error("UPIs unavailable", { description: "Unable to load child UPIs." });
     }
   }
 
-  async function handleResolve(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setResolveError(null);
-    setResolveResult(null);
-    setResolving(true);
+  const getNextAction = () => {
+    if (isUnverified) {
+      return {
+        title: "Complete onboarding",
+        description: "Provide business details and add your first payout account to start the verification process.",
+        action: () => router.push("/onboard"),
+        buttonText: "Start onboarding",
+        icon: FileText,
+      };
+    }
+    if (isPending) {
+      return {
+        title: "Awaiting verification",
+        description: "Your onboarding is complete. Our team will review your submission.",
+        action: () => router.push("/onboard/pending"),
+        buttonText: "View status",
+        icon: Clock,
+      };
+    }
+    if (isRejected) {
+      return {
+        title: "Verification rejected",
+        description: "Review the reason and resubmit your onboarding details.",
+        action: () => router.push("/onboard/pending"),
+        buttonText: "View reason",
+        icon: Clock,
+      };
+    }
+    if (isVerified && childUpis.length === 0) {
+      return {
+        title: "Create your first UPI",
+        description: "Generate secure payment identifiers for your payout accounts.",
+        action: () => setIsCreateOpen(true),
+        buttonText: "Create UPI",
+        icon: Key,
+      };
+    }
+    return null;
+  };
 
-    if (!UPI_PATTERN.test(resolveUpi.trim())) {
-      setResolveError("UPI must be exactly 14 alphanumeric characters");
-      setResolving(false);
+  const handleCreateUPI = async () => {
+    if (!selectedAccountId) {
+      toast.error("Please select an account");
       return;
     }
-
     try {
-      const response = await resolveUPI({
-        upi: resolveUpi.trim(),
-        rail: resolveRail,
+      const response = await createChildUpi({
+        account_id: Number(selectedAccountId),
+        name: upiLabel || "Payment",
+        type: "payment",
       });
-      setResolveResult(response);
+      toast.success(`UPI created: ${response.upi}`);
+      setIsCreateOpen(false);
+      setSelectedAccountId("");
+      setUpiLabel("");
+      await loadChildUpis({ force: true });
     } catch (err) {
-      setResolveError(
-        err instanceof Error ? err.message : "Unable to resolve UPI"
-      );
+      toast.error("UPI failed", { description: "Unable to create UPI." });
+    }
+  };
+
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text).catch(() => undefined);
+    toast.success("Copied to clipboard");
+  };
+
+  const handleInlineResolve = async () => {
+    if (!resolveInput.trim()) return;
+    if (!UPI_PATTERN.test(resolveInput.trim())) {
+      toast.warning("Invalid UPI", { description: "UPI must be 14 alphanumeric characters." });
+      return;
+    }
+    setResolving(true);
+    try {
+      const result = await resolveUPI({ upi: resolveInput.trim(), rail: "ACH" });
+      toast.success(`UPI resolved: ${result.coordinates?.bank_name || "Unknown"}`);
+    } catch (err) {
+      toast.error("UPI not found or not permitted");
     } finally {
       setResolving(false);
+      setResolveInput("");
     }
-  }
-
-  const maskedMasterUpi = useMemo(() => maskUpi(user?.master_upi ?? ""), [user]);
-
-  if (loading || !token || !mounted) {
-    return <LoadingScreen />;
-  }
+  };
 
   async function handleToggleChildUpi(childUpiId: string, nextStatus: "active" | "disabled") {
-    // Toggle child UPI status; resolves will block disabled UPIs.
     setChildUpiBusy((prev) => ({ ...prev, [childUpiId]: true }));
     try {
       if (nextStatus === "disabled") {
@@ -282,357 +272,283 @@ export default function DashboardPage() {
       } else {
         await reactivateChildUpi(childUpiId);
       }
-      await loadChildUpis();
+      await loadChildUpis({ force: true });
     } catch (err) {
-      setChildUpisError(err instanceof Error ? err.message : "Unable to update UPI status");
+      toast.error("Update failed", { description: "Unable to update UPI status." });
     } finally {
       setChildUpiBusy((prev) => ({ ...prev, [childUpiId]: false }));
     }
   }
 
+  const nextAction = getNextAction();
+  const orgUpi = profile?.organization?.upi || profile?.organization?.issued_upi;
+  const activeUpiCount = childUpis.filter((u) => (u.status || "active") === "active").length;
+
+  if (loading || !token) return null;
+
   return (
-    <div className="page-container">
-      <section className="hero">
-        <div>
-          <p className="section-title">Your workspace</p>
-          <h1 className="hero-title">UPI management</h1>
-          <p className="hero-subtitle">
-            Create identifiers, attach payout rails, resolve details, and copy
-            coordinates securely.
-          </p>
-        </div>
-      </section>
+    <DashboardLayout>
+      <div className="p-8">
+        <div className="max-w-4xl">
+          {/* Header */}
+          <div className="mb-8">
+            <h1 className="text-2xl font-semibold text-foreground mb-2">
+              Welcome back
+            </h1>
+            <p className="text-muted-foreground">
+              Manage your payment identifiers and payout accounts.
+            </p>
+          </div>
 
-      {/* Master UPI is internal; not shown to avoid sharing the root identifier. */}
-
-      {validationErrors.length > 0 && (
-        <div className="error-box" role="alert" aria-live="assertive">
-          <strong>Please fix the following:</strong>
-          <ul>
-            {validationErrors.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {error && (
-        <div className="error-box" role="alert" aria-live="assertive">
-          {error}
-        </div>
-      )}
-      {accountsError && (
-        <div className="error-box" role="alert" aria-live="assertive">
-          {accountsError}
-        </div>
-      )}
-
-      <div className="card-grid" style={{ alignItems: "flex-start" }}>
-        <form className="card form-card" onSubmit={handleSubmit}>
-          <h3 style={{ marginTop: 0 }}>Issue a child UPI</h3>
-          <p className="hero-subtitle">Create a UPI tied to an existing or new payout account.</p>
-
-          <div className="form-grid" style={{ gridTemplateColumns: "1fr", marginTop: 10 }}>
-            <div className="input-group">
-              <label className="input-label">Payment account</label>
-              <select
-                name="account_mode"
-                className="input-control"
-                value={form.account_mode}
-                onChange={(e) => setForm((p) => ({ ...p, account_mode: e.target.value as any }))}
-              >
-                <option value="existing">Use existing</option>
-                <option value="new">Add new</option>
-              </select>
-            </div>
-
-            {form.account_mode === "existing" ? (
-              <div className="input-group">
-                <label className="input-label" htmlFor="payment_account_id">
-                  Choose account
-                </label>
-                <select
-                  id="payment_account_id"
-                  name="payment_account_id"
-                  className="input-control"
-                  value={form.payment_account_id}
-                  onChange={handleChange}
-                  required
-                >
-                  <option value="">Select...</option>
-                  {accounts.map((acct: any) => (
-                    <option key={acct.id} value={acct.id}>
-                      {acct.bank_name || "Account"} ({acct.rail})
-                    </option>
-                  ))}
-                </select>
+          {/* Next action card */}
+          {nextAction && (
+            <div className="bg-card border border-border rounded-xl p-6 mb-8 shadow-card animate-fade-in">
+              <div className="flex items-start gap-4">
+                <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
+                  <nextAction.icon className="h-5 w-5 text-accent" />
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-lg font-semibold text-foreground mb-1">
+                    {nextAction.title}
+                  </h2>
+                  <p className="text-muted-foreground text-sm mb-4">
+                    {nextAction.description}
+                  </p>
+                  <Button variant="hero" onClick={nextAction.action}>
+                    {nextAction.buttonText}
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
-            ) : (
-              <>
-                <div className="input-group">
-                  <label className="input-label" htmlFor="rail">
-                    Rail
-                  </label>
-                  <select id="rail" name="rail" className="input-control" value={form.rail} onChange={handleChange}>
-                    <option value="ACH">ACH</option>
-                    <option value="WIRE_DOM">Wire</option>
-                    <option value="SWIFT">SWIFT</option>
-                  </select>
-                </div>
-                <div className="input-group">
-                  <label className="input-label" htmlFor="bank_name">
-                    Bank name
-                  </label>
-                  <input id="bank_name" name="bank_name" className="input-control" value={form.bank_name} onChange={handleChange} required />
-                </div>
-                <div className="input-group">
-                  <label className="input-label" htmlFor="account_name">
-                    Account name
-                  </label>
-                  <input id="account_name" name="account_name" className="input-control" value={form.account_name} onChange={handleChange} />
-                </div>
-                {form.rail === "ACH" && (
-                  <>
-                    <div className="input-group">
-                      <label className="input-label" htmlFor="ach_routing">
-                        ACH routing
-                      </label>
-                      <input id="ach_routing" name="ach_routing" className="input-control" value={form.ach_routing} onChange={handleChange} />
-                    </div>
-                    <div className="input-group">
-                      <label className="input-label" htmlFor="ach_account">
-                        ACH account
-                      </label>
-                      <input id="ach_account" name="ach_account" className="input-control" value={form.ach_account} onChange={handleChange} />
-                    </div>
-                  </>
-                )}
-                {form.rail === "WIRE_DOM" && (
-                  <>
-                    <div className="input-group">
-                      <label className="input-label" htmlFor="wire_routing">
-                        Wire routing
-                      </label>
-                      <input id="wire_routing" name="wire_routing" className="input-control" value={form.wire_routing} onChange={handleChange} />
-                    </div>
-                    <div className="input-group">
-                      <label className="input-label" htmlFor="wire_account">
-                        Wire account
-                      </label>
-                      <input id="wire_account" name="wire_account" className="input-control" value={form.wire_account} onChange={handleChange} />
-                    </div>
-                  </>
-                )}
-                {form.rail === "SWIFT" && (
-                  <>
-                    <div className="input-group">
-                      <label className="input-label" htmlFor="swift_bic">
-                        SWIFT/BIC
-                      </label>
-                      <input id="swift_bic" name="swift_bic" className="input-control" value={form.swift_bic} onChange={handleChange} />
-                    </div>
-                    <div className="input-group">
-                      <label className="input-label" htmlFor="iban">
-                        IBAN
-                      </label>
-                      <input id="iban" name="iban" className="input-control" value={form.iban} onChange={handleChange} />
-                    </div>
-                    <div className="input-group">
-                      <label className="input-label" htmlFor="bank_country">
-                        Bank country
-                      </label>
-                      <input id="bank_country" name="bank_country" className="input-control" value={form.bank_country} onChange={handleChange} />
-                    </div>
-                  </>
-                )}
-                <div className="input-group">
-                  <label className="input-label" htmlFor="bank_address">
-                    Bank address (optional)
-                  </label>
-                  <textarea id="bank_address" name="bank_address" className="input-control" value={form.bank_address} onChange={handleChange} />
-                </div>
-              </>
-            )}
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 18 }}>
-            <button className="button" type="submit" disabled={saving}>
-              {saving && <span className="spinner" aria-hidden="true" />}
-              Create child UPI
-            </button>
-          </div>
-          </form>
-
-        <div className="stacked-panels">
-
-          <div className="card">
-            <p className="section-title">Child UPIs</p>
-            <p className="hero-subtitle">Issued identifiers tied to your payment accounts.</p>
-            {childUpisError && <div className="error-box">{childUpisError}</div>}
-          {childUpis.length === 0 ? (
-            <p className="hero-subtitle">No child UPIs yet.</p>
-          ) : (
-            <div className="list" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {childUpis.map((c) => (
-                <div key={c.child_upi_id || `${c.payment_account_id}-${c.upi}`} className="card" style={{ padding: 12 }}>
-                    <p className="section-title" style={{ marginBottom: 4 }}>
-                      {c.bank_name || "Account"} - {c.rail}
-                    </p>
-                    <div className="hero-subtitle" style={{ wordBreak: "break-all" }}>
-                      {c.upi || "(pending)"}
-                    </div>
-                    <div className="hero-subtitle" style={{ marginTop: 4 }}>
-                      Status: {c.status || "active"}
-                    </div>
-                    {c.created_at && (
-                      <p className="hero-subtitle" style={{ marginTop: 4 }}>
-                        Created: {new Date(c.created_at).toLocaleString()}
-                      </p>
-                    )}
-                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
-                      <button
-                        type="button"
-                        className="button button-secondary"
-                        onClick={() => {
-                          if (!c.upi) return;
-                          navigator.clipboard?.writeText(c.upi).catch(() => undefined);
-                          const toast = document.createElement("div");
-                          toast.textContent = "Copied";
-                          toast.style.position = "fixed";
-                          toast.style.bottom = "32px";
-                          toast.style.left = "50%";
-                          toast.style.transform = "translateX(-50%)";
-                          toast.style.padding = "12px 16px";
-                          toast.style.background = "#1e88e5";
-                          toast.style.color = "#fff";
-                          toast.style.borderRadius = "10px";
-                          toast.style.boxShadow = "0 6px 20px rgba(0,0,0,0.25)";
-                          toast.style.fontWeight = "600";
-                          toast.style.zIndex = "9999";
-                          document.body.appendChild(toast);
-                          setTimeout(() => toast.remove(), 1500);
-                        }}
-                        disabled={!c.upi}
-                      >
-                        Copy UPI
-                      </button>
-                      {c.child_upi_id && (
-                        <button
-                          type="button"
-                          className="button"
-                          disabled={childUpiBusy[c.child_upi_id]}
-                          onClick={() =>
-                            handleToggleChildUpi(
-                              c.child_upi_id as string,
-                              (c.status || "active") === "active" ? "disabled" : "active"
-                            )
-                          }
-                        >
-                          {(c.status || "active") === "active" ? "Disable" : "Reactivate"}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              {childUpisHasMore && (
-                <button
-                  type="button"
-                  className="button button-secondary"
-                  disabled={childUpisLoadingMore}
-                  onClick={async () => {
-                    setChildUpisLoadingMore(true);
-                    await loadChildUpis({ append: true });
-                    setChildUpisLoadingMore(false);
-                  }}
-                >
-                  {childUpisLoadingMore ? "Loading..." : "Load more"}
-                </button>
-              )}
             </div>
           )}
+
+          {/* Org UPI (verified only) */}
+          {isVerified && orgUpi && (
+            <div className="bg-card border border-border rounded-xl p-6 mb-8 shadow-card">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Organization UPI</p>
+                  <p className="text-xl font-mono font-semibold text-foreground">{orgUpi}</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => handleCopy(orgUpi)}>
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Stats */}
+          <div className="grid md:grid-cols-3 gap-4 mb-8">
+            <StatCard
+              icon={<CreditCard className="h-5 w-5" />}
+              label="Payout Accounts"
+              value={accounts.length}
+            />
+            <StatCard
+              icon={<Key className="h-5 w-5" />}
+              label="Active UPIs"
+              value={activeUpiCount}
+            />
+            <StatCard
+              icon={<CheckCircle2 className="h-5 w-5" />}
+              label="Status"
+              value={isVerified ? "Verified" : isPending ? "Pending" : isRejected ? "Rejected" : "Unverified"}
+              isStatus
+            />
           </div>
 
-          {orgName && upi && (
-            <div className="card">
-              <p className="section-title">
-                Org UPI{" "}
-                <span
-                  title="Use this org-level UPI with partners/vendors. Master UPI stays private."
-                  aria-label="Org UPI info"
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: 18,
-                    height: 18,
-                    borderRadius: "50%",
-                    border: "1px solid rgba(255,255,255,0.6)",
-                    fontSize: 12,
-                    fontWeight: 700,
-                    marginLeft: 6,
-                    cursor: "help",
-                  }}
-                >
-                  i
-                </span>
-              </p>
-              <h3 style={{ marginTop: 0 }}>{upi}</h3>
-              <p className="hero-subtitle" style={{ marginTop: 4 }}>
-                Issued for {orgName}. Share this instead of your Master UPI.
-              </p>
-              <button
-                type="button"
-                className="button button-secondary"
-                onClick={() => {
-                  navigator.clipboard?.writeText(upi).catch(() => undefined);
-                  const toast = document.createElement("div");
-                  toast.textContent = "Copied";
-                  toast.style.position = "fixed";
-                  toast.style.bottom = "32px";
-                  toast.style.left = "50%";
-                  toast.style.transform = "translateX(-50%)";
-                  toast.style.padding = "12px 16px";
-                  toast.style.background = "#1e88e5";
-                  toast.style.color = "#fff";
-                  toast.style.borderRadius = "10px";
-                  toast.style.boxShadow = "0 6px 20px rgba(0,0,0,0.25)";
-                  toast.style.fontWeight = "600";
-                  toast.style.zIndex = "9999";
-                document.body.appendChild(toast);
-                setTimeout(() => {
-                  toast.remove();
-                }, 1500);
-                }}
-              >
-                Copy Org UPI
-              </button>
+          {/* Verified dashboard content */}
+          {isVerified && (
+            <>
+              {/* Create UPI + Inline resolve */}
+              <div className="flex flex-wrap gap-4 mb-8">
+                <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="hero">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create child UPI
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Create new UPI</DialogTitle>
+                      <DialogDescription>
+                        Generate a secure payment identifier linked to a payout account.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 pt-4">
+                      <div className="space-y-2">
+                        <Label>Payout account</Label>
+                        <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select account" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {accounts.map(acc => (
+                              <SelectItem key={acc.id} value={String(acc.id)}>
+                                {acc.bank_name || "Account"} ({acc.rail})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Label (optional)</Label>
+                        <Input
+                          placeholder="e.g., Q4 payments"
+                          value={upiLabel}
+                          onChange={(e) => setUpiLabel(e.target.value)}
+                        />
+                      </div>
+                      <Button variant="success" className="w-full" onClick={handleCreateUPI}>
+                        Create UPI
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+
+                {/* Inline resolve */}
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="14-character UPI"
+                    value={resolveInput}
+                    onChange={(e) => setResolveInput(e.target.value.toUpperCase())}
+                    className="w-40 font-mono"
+                  />
+                  <Button variant="outline" onClick={handleInlineResolve} disabled={resolving}>
+                    Resolve
+                  </Button>
+                </div>
+              </div>
+
+              {/* UPI list */}
+              {childUpis.length > 0 && (
+                <div className="bg-card border border-border rounded-xl overflow-hidden shadow-card">
+                  <div className="px-6 py-4 border-b border-border bg-muted/30">
+                    <h3 className="font-semibold text-foreground">Your UPIs</h3>
+                  </div>
+                  <div className="divide-y divide-border">
+                    {childUpis.map(upi => (
+                      <div key={upi.child_upi_id || upi.upi} className="px-6 py-4 flex items-center justify-between">
+                        <div>
+                          <p className="font-mono font-medium text-foreground">{upi.upi}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {(() => {
+                              const account = accounts.find((acc) => acc.id === upi.payment_account_id);
+                              const accountName = account?.account_name || account?.bank_name || "Account";
+                              const label = (upi as any).label || (upi as any).name || "No label";
+                              return `${accountName} - ${label}`;
+                            })()}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className={`text-xs font-medium px-2 py-1 rounded ${
+                            (upi.status || "active") === "active"
+                              ? "bg-success/10 text-success"
+                              : "bg-muted text-muted-foreground"
+                          }`}>
+                            {upi.status || "active"}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleCopy(upi.upi)}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          {upi.child_upi_id && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                handleToggleChildUpi(
+                                  upi.child_upi_id as string,
+                                  (upi.status || "active") === "active" ? "disabled" : "active"
+                                )
+                              }
+                              disabled={childUpiBusy[upi.child_upi_id]}
+                            >
+                              {(upi.status || "active") === "active" ? (
+                                <ToggleRight className="h-4 w-4 text-success" />
+                              ) : (
+                                <ToggleLeft className="h-4 w-4" />
+                              )}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Quick links for pending/unverified */}
+          {!isVerified && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium text-muted-foreground mb-3">Quick links</h3>
+              <div className="grid md:grid-cols-2 gap-3">
+                <QuickLink
+                  title="View clients"
+                  description="Browse verified organizations"
+                  onClick={() => router.push("/clients")}
+                />
+                <QuickLink
+                  title="View profile"
+                  description="Check your account details"
+                  onClick={() => router.push("/profile")}
+                />
+              </div>
             </div>
           )}
         </div>
       </div>
-
-      <section className="hero" style={{ marginTop: 30 }}>
-        <div>
-          <p className="section-title">Resolve an identifier</p>
-          <p className="hero-subtitle">
-            Validate a UPI created in this workspace and return its payout
-            coordinates.
-          </p>
-        </div>
-      </section>
-
-      {resolveError && <div className="error-box">{resolveError}</div>}
-
-      <ResolveForm
-        upi={resolveUpi}
-        rail={resolveRail}
-        loading={resolving}
-        onUpiChange={setResolveUpi}
-        onRailChange={setResolveRail}
-        onSubmit={handleResolve}
-      />
-
-      {resolveResult && <ResolutionResult result={resolveResult} />}
-    </div>
+    </DashboardLayout>
   );
 }
+
+const StatCard = ({
+  icon,
+  label,
+  value,
+  isStatus
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string | number;
+  isStatus?: boolean;
+}) => (
+  <div className="bg-card border border-border rounded-xl p-5 shadow-card">
+    <div className="flex items-center gap-3 mb-3">
+      <div className="text-muted-foreground">{icon}</div>
+      <span className="text-sm text-muted-foreground">{label}</span>
+    </div>
+    <p className={`text-2xl font-semibold ${isStatus ? "text-lg" : ""} text-foreground`}>
+      {value}
+    </p>
+  </div>
+);
+
+const QuickLink = ({
+  title,
+  description,
+  onClick
+}: {
+  title: string;
+  description: string;
+  onClick: () => void;
+}) => (
+  <button
+    onClick={onClick}
+    className="flex items-center justify-between p-4 bg-card border border-border rounded-lg hover:bg-secondary/50 transition-colors text-left group"
+  >
+    <div>
+      <p className="font-medium text-foreground">{title}</p>
+      <p className="text-sm text-muted-foreground">{description}</p>
+    </div>
+    <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+  </button>
+);

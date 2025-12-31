@@ -1,5 +1,9 @@
 """
 Password hashing and session token helpers for the auth layer.
+
+Includes password hashing/verification, session token generation, and CSRF
+token derivation. These helpers are used by auth routes and session lookups
+to keep security logic centralized.
 """
 
 from __future__ import annotations
@@ -51,6 +55,16 @@ def _load_session_hmac_key() -> bytes:
         return raw.encode("utf-8")
 
 
+def _load_csrf_key() -> bytes:
+    raw = os.getenv("CSRF_SECRET_KEY") or os.getenv("SESSION_TOKEN_HMAC_KEY") or os.getenv("UPI_SECRET_KEY") or os.getenv("ENCRYPTION_KEY") or ""
+    if not raw:
+        raise RuntimeError("Missing CSRF_SECRET_KEY (or SESSION_TOKEN_HMAC_KEY / UPI_SECRET_KEY / ENCRYPTION_KEY) for CSRF signing.")
+    try:
+        return base64.b64decode(raw)
+    except Exception:
+        return raw.encode("utf-8")
+
+
 def hash_session_token(token: str) -> str:
     """
     Return a deterministic, non-reversible representation of a session token for DB storage.
@@ -59,3 +73,19 @@ def hash_session_token(token: str) -> str:
     key = _load_session_hmac_key()
     digest = hmac.new(key, token.encode("utf-8"), hashlib.sha256).hexdigest()
     return digest
+
+
+def generate_csrf_token(session_token: str) -> str:
+    """
+    Generate a CSRF token tied to a session token (double-submit style).
+    """
+    key = _load_csrf_key()
+    digest = hmac.new(key, session_token.encode("utf-8"), hashlib.sha256).hexdigest()
+    return digest
+
+
+def verify_csrf_token(session_token: str, submitted: str | None) -> bool:
+    if not submitted:
+        return False
+    expected = generate_csrf_token(session_token)
+    return hmac.compare_digest(expected, submitted)

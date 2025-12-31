@@ -1,3 +1,8 @@
+/**
+ * Guard helper for verified-only views.
+ * Redirects users to onboarding when their status is not VERIFIED.
+ */
+
 import { ProfileDetailsResponse } from "./api";
 
 // Single guard: trust backend onboarding_status to gate access.

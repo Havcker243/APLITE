@@ -107,6 +107,7 @@ create table if not exists child_upis (
     org_id uuid not null references organizations(id) on delete cascade,
     payment_account_id bigint not null references payment_accounts(id) on delete cascade,
     upi text not null,
+    label text,
     status text not null default 'active' check (status in ('active','disabled')),
     created_at timestamptz not null default now(),
     disabled_at timestamptz,
@@ -160,6 +161,7 @@ create table if not exists identity_verifications (
     full_name text not null,
     title text,
     id_document_id text not null,
+    phone text,
     attestation boolean not null,
     status text not null default 'pending',
     created_at timestamptz not null default now()
@@ -199,3 +201,24 @@ create table if not exists verification_calls (
     created_at timestamptz not null default now(),
     completed_at timestamptz
 );
+
+-- =========================
+-- VERIFICATION REVIEWS (Admin decisions)
+-- =========================
+create table if not exists verification_reviews (
+    id uuid primary key,
+    session_id uuid not null references onboarding_sessions(id) on delete cascade,
+    org_id uuid not null references organizations(id) on delete cascade,
+    user_id bigint not null references users(id) on delete cascade,
+    method text not null, -- call | id
+    status text not null, -- approved | rejected
+    reason text,
+    reviewed_by text,
+    reviewed_at timestamptz not null default now()
+);
+
+create index if not exists idx_verification_reviews_session
+    on verification_reviews(session_id);
+
+create index if not exists idx_verification_reviews_org
+    on verification_reviews(org_id);

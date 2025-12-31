@@ -1,14 +1,12 @@
 # Aplite Backend (MVP)
 
-FastAPI service for onboarding businesses, managing payment accounts, issuing UPIs, and resolving payment details.
+FastAPI service for onboarding organizations, managing payment accounts, issuing UPIs, and resolving payment details.
 
 ## Environment
 - Python 3.11+ (system or venv)
 - Postgres: set `DATABASE_URL` (Supabase URL works)
 - Secrets: `ENCRYPTION_KEY`, `UPI_SECRET_KEY` (already in your `.env`; not modified here)
 - Sessions: `SESSION_TTL_HOURS` (optional; default `168` = 7 days)
-- Cal.com webhook (optional): `CAL_WEBHOOK_SECRET` for verifying webhook signatures
-- Webhook alerts (optional): `WEBHOOK_ALERT_EMAIL` (send failures to this email via SendGrid)
 - Email (optional): `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL` to send OTP emails via SendGrid; otherwise emails log to stdout.
 
 ## Install (backend-only)
@@ -28,7 +26,7 @@ psql "$DATABASE_URL" -f ../schema-final.sql
 ```bash
 uvicorn app.main:app --reload
 ```
-Run from the repo root so `app` is on the import path. If needed, set `PYTHONPATH=.`.
+Run from `aplite-backend/` so `.env` is loaded correctly (or export env vars yourself).
 
 ## Key routes
 - Auth: `/api/auth/signup`, `/api/auth/login/start`, `/api/auth/login/verify`, `/api/auth/logout`
@@ -37,7 +35,5 @@ Run from the repo root so `app` is on the import path. If needed, set `PYTHONPAT
 - Onboarding: `/onboarding/current`, `/onboarding/complete`, `/onboarding/upload-id`, `/onboarding/upload-formation`, `/onboarding/reset`
 - Payment accounts: `/api/accounts` (list/create), `PUT /api/accounts/{id}` (rail fields lock once linked to a UPI)
 - Child UPIs: `/api/orgs/child-upi`, `/api/orgs/child-upis` (supports `limit` + `before`), `/api/orgs/child-upis/{id}/disable`, `/api/orgs/child-upis/{id}/reactivate`
-- Businesses: `/api/businesses` (create/list), `/api/businesses/{id}/deactivate`
 - Resolve UPI: `/api/resolve`, `/api/upi/lookup`
 - Public clients: `/api/public/clients`
-- Webhooks: `POST /webhooks/cal` (Cal.com booking events; completes verification on call completion)

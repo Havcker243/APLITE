@@ -1,27 +1,36 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-const TOKEN_STORAGE_KEY = "aplite_token";
+/**
+ * Typed API client helpers for backend endpoints.
+ * Manages auth/CSRF tokens and provides shared request/response types.
+ */
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+// In-memory tokens only; cookies remain the primary auth mechanism.
 let authToken: string | null = null;
-try {
-  const stored = typeof window !== "undefined" ? window.localStorage.getItem(TOKEN_STORAGE_KEY) : null;
-  if (stored) authToken = stored;
-} catch {
-  /* ignore storage issues */
-}
+let csrfToken: string | null = null;
 
 export function setAuthToken(token: string | null) {
   authToken = token;
-  try {
-    if (token) {
-      window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
-    } else {
-      window.localStorage.removeItem(TOKEN_STORAGE_KEY);
-    }
-  } catch {
-    /* ignore storage issues */
-  }
 }
 
+export function setCsrfToken(token: string | null) {
+  csrfToken = token;
+}
+
+export async function fetchCsrfToken(): Promise<string | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/auth/csrf`, {
+      credentials: "include",
+      headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
+    });
+    if (!res.ok) return null;
+    const body = await res.json();
+    const token = typeof body?.csrf_token === "string" ? body.csrf_token : null;
+    setCsrfToken(token);
+    return token;
+  } catch {
+    return null;
+  }
+}
 export type OnboardingStep1Payload = {
   legal_name: string;
   dba?: string;
@@ -99,6 +108,11 @@ export type ProfileDetailsResponse = {
     upis: number;
   };
   onboarding_status?: string;
+  verification_review?: {
+    status?: string;
+    reason?: string;
+    reviewed_at?: string;
+  } | null;
 };
 
 export type OnboardingStep2Payload = { role: "owner" | "authorized_rep"; title?: string };
@@ -240,6 +254,10 @@ function withAuth(init?: RequestInit): RequestInit {
   if (authToken) {
     headers["Authorization"] = `Bearer ${authToken}`;
   }
+  const method = (init?.method || "GET").toUpperCase();
+  if (csrfToken && !["GET", "HEAD", "OPTIONS"].includes(method)) {
+    headers["X-CSRF-Token"] = csrfToken;
+  }
   return {
     ...defaultInit,
     ...init,
@@ -247,7 +265,12 @@ function withAuth(init?: RequestInit): RequestInit {
   };
 }
 
-function authedFetch(input: RequestInfo | URL, init?: RequestInit) {
+async function authedFetch(input: RequestInfo | URL, init?: RequestInit) {
+  const method = (init?.method || "GET").toUpperCase();
+  // CSRF token is required for cookie-based writes; fetch on-demand to avoid extra calls for reads.
+  if (!["GET", "HEAD", "OPTIONS"].includes(method) && !csrfToken) {
+    await fetchCsrfToken();
+  }
   return fetch(input, withAuth(init));
 }
 
@@ -269,11 +292,6 @@ export async function signup(data: {
   first_name: string;
   last_name: string;
   email: string;
-  company_name: string;
-  summary?: string;
-  established_year?: number;
-  state?: string;
-  country?: string;
   password: string;
   confirm_password: string;
   accept_terms: boolean;
@@ -638,8 +656,7 @@ export async function onboardingComplete(payload: {
   role: OnboardingStep2Payload;
   identity: OnboardingStep3Payload & { id_document_id?: string };
   bank: OnboardingStep4Payload;
-  verification_method?: "otp" | "call" | "none";
-  verification_code?: string;
+  verification_method?: "call" | "id" | "none";
   file?: File | null;
 }) {
   /**

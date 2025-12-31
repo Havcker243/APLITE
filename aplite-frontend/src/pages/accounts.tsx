@@ -1,520 +1,397 @@
-import React, { useEffect, useState } from "react";
+/**
+ * Payment accounts management page.
+ * Lists existing rails and allows creating new payment accounts.
+ */
+
+﻿import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import { createAccount, listAccounts, updateAccount } from "../utils/api";
+import { 
+  CreditCard, 
+  Plus, 
+  Lock,
+  MoreHorizontal,
+  Pencil
+} from "lucide-react";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "../components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
+import DashboardLayout from "../components/DashboardLayout";
 import { useAuth } from "../utils/auth";
+import { toast } from "sonner";
+import { createAccount, listAccounts, updateAccount } from "../utils/api";
 import { requireVerifiedOrRedirect } from "../utils/requireVerified";
 
-type Rail = "ACH" | "WIRE_DOM" | "SWIFT";
+type RailType = "ach" | "wire" | "swift";
 
-const defaultAccount = {
-  rail: "ACH" as Rail,
-  bank_name: "",
-  account_name: "",
-  ach_routing: "",
-  ach_account: "",
-  wire_routing: "",
-  wire_account: "",
-  bank_address: "",
-  swift_bic: "",
-  iban: "",
-  bank_country: "",
-  bank_city: "",
-};
+const isBrowser = typeof window !== "undefined";
+let cachedAccounts: any[] | null = null;
+let cachedAccountsPromise: Promise<any[]> | null = null;
+let cachedToken: string | null = null;
 
-export default function AccountsPage() {
+export default function Accounts() {
   const router = useRouter();
   const { token, loading, profile } = useAuth();
   const [accounts, setAccounts] = useState<any[]>([]);
-  const [form, setForm] = useState({ ...defaultAccount });
-  const [editId, setEditId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState({ ...defaultAccount });
-  const [editRailLocked, setEditRailLocked] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [editSaving, setEditSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
-
+  const [isAddingAccount, setIsAddingAccount] = useState(false);
+  const [isEditingNickname, setIsEditingNickname] = useState(false);
+  const [editingAccountId, setEditingAccountId] = useState<number | null>(null);
+  const [editingNickname, setEditingNickname] = useState("");
+  const [isSavingNickname, setIsSavingNickname] = useState(false);
+  const [newAccount, setNewAccount] = useState({
+    nickname: "",
+    railType: "ach" as RailType,
+    bankName: "",
+    accountNumber: "",
+    routingNumber: "",
+    swiftCode: "",
+  });
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (!mounted || loading) return;
+    if (loading) return;
     if (!token) {
       router.replace("/login");
       return;
     }
     requireVerifiedOrRedirect({ profile, router });
     void loadAccounts();
-  }, [mounted, loading, token, profile, router]);
+  }, [loading, token, profile, router]);
 
-  async function loadAccounts() {
-    try {
-      const res = await listAccounts();
+  async function loadAccounts(force = false) {
+    if (!token) return;
+    if (!force && cachedToken !== token) {
+      cachedToken = token;
+      cachedAccounts = null;
+      cachedAccountsPromise = null;
+    }
+    if (isBrowser && !force && cachedAccounts) {
+      setAccounts(cachedAccounts);
+      return;
+    }
+    if (isBrowser && !force && cachedAccountsPromise) {
+      const res = await cachedAccountsPromise;
       setAccounts(res);
+      return;
+    }
+
+    try {
+      const fetchPromise = listAccounts();
+      if (isBrowser) cachedAccountsPromise = fetchPromise;
+      const res = await fetchPromise;
+      setAccounts(res);
+      if (isBrowser) {
+        cachedAccounts = res;
+        cachedAccountsPromise = null;
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load accounts");
+      if (isBrowser) cachedAccountsPromise = null;
+      toast.error("Failed to load accounts");
     }
   }
 
-  function handleChange(event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
-    const { name, value } = event.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-  }
+  async function handleAddAccount() {
+    if (!newAccount.nickname || !newAccount.bankName || !newAccount.accountNumber) {
+      toast.error("Please fill in all required fields.");
+      return;
+    }
 
-  function handleEditChange(event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
-    const { name, value } = event.target;
-    setEditForm((prev) => ({ ...prev, [name]: value }));
-  }
+    const rail = newAccount.railType === "ach" ? "ACH" : newAccount.railType === "wire" ? "WIRE_DOM" : "SWIFT";
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSaving(true);
-    setError(null);
-    setSuccess(null);
     try {
       await createAccount({
-        rail: form.rail,
-        bank_name: form.bank_name,
-        account_name: form.account_name,
-        ach_routing: form.rail === "ACH" ? form.ach_routing : undefined,
-        ach_account: form.rail === "ACH" ? form.ach_account : undefined,
-        wire_routing: form.rail === "WIRE_DOM" ? form.wire_routing : undefined,
-        wire_account: form.rail === "WIRE_DOM" ? form.wire_account : undefined,
-        bank_address: form.bank_address,
-        swift_bic: form.rail === "SWIFT" ? form.swift_bic : undefined,
-        iban: form.rail === "SWIFT" ? form.iban : undefined,
-        bank_country: form.rail === "SWIFT" ? form.bank_country : undefined,
-        bank_city: form.rail === "SWIFT" ? form.bank_city : undefined,
+        rail,
+        bank_name: newAccount.bankName,
+        account_name: newAccount.nickname,
+        ach_routing: newAccount.railType === "ach" ? newAccount.routingNumber : undefined,
+        ach_account: newAccount.railType === "ach" ? newAccount.accountNumber : undefined,
+        wire_routing: newAccount.railType === "wire" ? newAccount.routingNumber : undefined,
+        wire_account: newAccount.railType === "wire" ? newAccount.accountNumber : undefined,
+        swift_bic: newAccount.railType === "swift" ? newAccount.swiftCode : undefined,
+        iban: newAccount.railType === "swift" ? newAccount.accountNumber : undefined,
       });
-      setSuccess("Account saved");
-      setForm({ ...defaultAccount });
-      await loadAccounts();
+
+      setNewAccount({
+        nickname: "",
+        railType: "ach",
+        bankName: "",
+        accountNumber: "",
+        routingNumber: "",
+        swiftCode: "",
+      });
+      setIsAddingAccount(false);
+      toast.success("Payout account added successfully.");
+      await loadAccounts(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to save account");
-    } finally {
-      setSaving(false);
+      toast.error("Please try again.");
     }
   }
 
-  async function handleEditSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!editId) return;
-    setEditSaving(true);
-    setError(null);
-    setSuccess(null);
+  async function handleSaveNickname() {
+    if (!editingAccountId) return;
+    if (!editingNickname.trim()) {
+      toast.error("Please enter a nickname.");
+      return;
+    }
+
+    setIsSavingNickname(true);
     try {
-      await updateAccount(editId, {
-        bank_name: editForm.bank_name,
-        account_name: editForm.account_name,
-        ach_routing: editRailLocked ? undefined : editForm.ach_routing,
-        ach_account: editRailLocked ? undefined : editForm.ach_account,
-        wire_routing: editRailLocked ? undefined : editForm.wire_routing,
-        wire_account: editRailLocked ? undefined : editForm.wire_account,
-        bank_address: editRailLocked ? undefined : editForm.bank_address,
-        swift_bic: editRailLocked ? undefined : editForm.swift_bic,
-        iban: editRailLocked ? undefined : editForm.iban,
-        bank_country: editRailLocked ? undefined : editForm.bank_country,
-        bank_city: editRailLocked ? undefined : editForm.bank_city,
-      });
-      setSuccess("Account updated");
-      setEditId(null);
-      await loadAccounts();
+      await updateAccount(editingAccountId, { account_name: editingNickname.trim() });
+      toast.success("Nickname updated");
+      setIsEditingNickname(false);
+      setEditingAccountId(null);
+      setEditingNickname("");
+      await loadAccounts(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to update account");
+      toast.error("Please try again.");
     } finally {
-      setEditSaving(false);
+      setIsSavingNickname(false);
     }
   }
 
-  if (!token) {
-    return null;
-  }
+  if (!token) return null;
 
   return (
-    <div className="page-container">
-      <section className="hero">
-        <div>
-          <p className="section-title">Accounts</p>
-          <h1 className="hero-title">Manage payout rails</h1>
-          <p className="hero-subtitle">Create reusable accounts for ACH, wire, or SWIFT to mint new UPIs faster.</p>
-        </div>
-      </section>
-
-      {error && (
-        <div className="error-box" role="alert" aria-live="assertive">
-          {error}
-        </div>
-      )}
-      {success && (
-        <div className="status-pill" role="status" aria-live="polite">
-          {success}
-        </div>
-      )}
-
-      <form className="card form-card" onSubmit={handleSubmit}>
-        <div className="form-grid" style={{ gridTemplateColumns: "1fr" }}>
-          <div className="input-group">
-            <label className="input-label" htmlFor="rail">
-              Rail
-            </label>
-            <select id="rail" name="rail" value={form.rail} onChange={handleChange} className="input-control">
-              <option value="ACH">ACH</option>
-              <option value="WIRE_DOM">WIRE_DOM</option>
-              <option value="SWIFT">SWIFT</option>
-            </select>
-          </div>
-          <div className="input-group">
-            <label className="input-label" htmlFor="bank_name">
-              Bank Name
-            </label>
-            <input id="bank_name" name="bank_name" value={form.bank_name} onChange={handleChange} className="input-control" required />
-          </div>
-          <div className="input-group">
-            <label className="input-label" htmlFor="account_name">
-              Account Name
-            </label>
-            <input id="account_name" name="account_name" value={form.account_name} onChange={handleChange} className="input-control" />
-          </div>
-        </div>
-
-        {form.rail === "ACH" && (
-          <div className="form-grid">
-            <div className="input-group">
-              <label className="input-label" htmlFor="ach_routing">
-                ACH Routing
-              </label>
-              <input id="ach_routing" name="ach_routing" value={form.ach_routing} onChange={handleChange} className="input-control" required />
-            </div>
-            <div className="input-group">
-              <label className="input-label" htmlFor="ach_account">
-                ACH Account
-              </label>
-              <input id="ach_account" name="ach_account" value={form.ach_account} onChange={handleChange} className="input-control" required />
-            </div>
-          </div>
-        )}
-
-        {form.rail === "WIRE_DOM" && (
-          <div className="form-grid">
-            <div className="input-group">
-              <label className="input-label" htmlFor="wire_routing">
-                Wire Routing
-              </label>
-              <input id="wire_routing" name="wire_routing" value={form.wire_routing} onChange={handleChange} className="input-control" required />
-            </div>
-            <div className="input-group">
-              <label className="input-label" htmlFor="wire_account">
-                Wire Account
-              </label>
-              <input id="wire_account" name="wire_account" value={form.wire_account} onChange={handleChange} className="input-control" required />
-            </div>
-            <div className="input-group">
-              <label className="input-label" htmlFor="bank_address">
-                Bank Address
-              </label>
-              <input id="bank_address" name="bank_address" value={form.bank_address} onChange={handleChange} className="input-control" />
-            </div>
-          </div>
-        )}
-
-        {form.rail === "SWIFT" && (
-          <div className="form-grid">
-            <div className="input-group">
-              <label className="input-label" htmlFor="swift_bic">
-                SWIFT/BIC
-              </label>
-              <input id="swift_bic" name="swift_bic" value={form.swift_bic} onChange={handleChange} className="input-control" required />
-            </div>
-            <div className="input-group">
-              <label className="input-label" htmlFor="iban">
-                IBAN
-              </label>
-              <input id="iban" name="iban" value={form.iban} onChange={handleChange} className="input-control" required />
-            </div>
-            <div className="input-group">
-              <label className="input-label" htmlFor="bank_country">
-                Bank Country
-              </label>
-              <input id="bank_country" name="bank_country" value={form.bank_country} onChange={handleChange} className="input-control" required />
-            </div>
-            <div className="input-group">
-              <label className="input-label" htmlFor="bank_city">
-                Bank City
-              </label>
-              <input id="bank_city" name="bank_city" value={form.bank_city} onChange={handleChange} className="input-control" />
-            </div>
-          </div>
-        )}
-
-        <button className="button" type="submit" disabled={saving}>
-          {saving && <span className="spinner" aria-hidden="true" />}
-          Save Account
-        </button>
-      </form>
-
-      {editId && (
-        <form className="card form-card" onSubmit={handleEditSubmit} style={{ marginTop: 18 }}>
-          <div className="meta-row" style={{ marginBottom: 10 }}>
+    <DashboardLayout>
+      <div className="p-8">
+        <div className="max-w-4xl">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-8">
             <div>
-              <p className="section-title">Edit Account</p>
-              {editRailLocked && (
-                <p className="hero-subtitle" style={{ marginTop: 6 }}>
-                  Rail fields are locked once an account is used by a UPI. Create a new account to change rail details.
-                </p>
-              )}
+              <h1 className="text-2xl font-semibold text-foreground mb-2">
+                Payment Accounts
+              </h1>
+              <p className="text-muted-foreground">
+                Manage your payout destinations.
+              </p>
             </div>
-            <button type="button" className="button button-secondary" onClick={() => setEditId(null)}>
-              Cancel
-            </button>
+
+            <Dialog open={isAddingAccount} onOpenChange={setIsAddingAccount}>
+              <DialogTrigger asChild>
+                <Button variant="hero">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add account
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Add payout account</DialogTitle>
+                  <DialogDescription>
+                    Add a new bank account for receiving payments.
+                  </DialogDescription>
+                </DialogHeader>
+                
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="add-nickname">Account nickname *</Label>
+                    <Input
+                      id="add-nickname"
+                      placeholder="Primary checking"
+                      value={newAccount.nickname}
+                      onChange={(e) => setNewAccount(prev => ({ ...prev, nickname: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Rail type *</Label>
+                    <Select
+                      value={newAccount.railType}
+                      onValueChange={(value) => setNewAccount(prev => ({ ...prev, railType: value as RailType }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ach">ACH</SelectItem>
+                        <SelectItem value="wire">Wire</SelectItem>
+                        <SelectItem value="swift">SWIFT</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="add-bankName">Bank name *</Label>
+                    <Input
+                      id="add-bankName"
+                      placeholder="First National Bank"
+                      value={newAccount.bankName}
+                      onChange={(e) => setNewAccount(prev => ({ ...prev, bankName: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="add-accountNumber">Account number *</Label>
+                    <Input
+                      id="add-accountNumber"
+                      placeholder="123456789012"
+                      value={newAccount.accountNumber}
+                      onChange={(e) => setNewAccount(prev => ({ ...prev, accountNumber: e.target.value }))}
+                    />
+                  </div>
+
+                  {newAccount.railType !== "swift" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="add-routingNumber">Routing number *</Label>
+                      <Input
+                        id="add-routingNumber"
+                        placeholder="123456789"
+                        value={newAccount.routingNumber}
+                        onChange={(e) => setNewAccount(prev => ({ ...prev, routingNumber: e.target.value }))}
+                      />
+                    </div>
+                  )}
+
+                  {newAccount.railType === "swift" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="add-swiftCode">SWIFT code *</Label>
+                      <Input
+                        id="add-swiftCode"
+                        placeholder="ABCDUS33"
+                        value={newAccount.swiftCode}
+                        onChange={(e) => setNewAccount(prev => ({ ...prev, swiftCode: e.target.value }))}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsAddingAccount(false)}>
+                    Cancel
+                  </Button>
+                  <Button variant="hero" onClick={handleAddAccount}>
+                    Add account
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
-          <div className="form-grid" style={{ gridTemplateColumns: "1fr" }}>
-            <div className="input-group">
-              <label className="input-label" htmlFor="edit-rail">
-                Rail
-              </label>
-              <select id="edit-rail" name="rail" value={editForm.rail} onChange={handleEditChange} className="input-control" disabled>
-                <option value="ACH">ACH</option>
-                <option value="WIRE_DOM">WIRE_DOM</option>
-                <option value="SWIFT">SWIFT</option>
-              </select>
-            </div>
-            <div className="input-group">
-              <label className="input-label" htmlFor="edit-bank_name">
-                Bank Name
-              </label>
-              <input id="edit-bank_name" name="bank_name" value={editForm.bank_name} onChange={handleEditChange} className="input-control" required />
-            </div>
-            <div className="input-group">
-              <label className="input-label" htmlFor="edit-account_name">
-                Account Name
-              </label>
-              <input id="edit-account_name" name="account_name" value={editForm.account_name} onChange={handleEditChange} className="input-control" />
-            </div>
-          </div>
 
-          {editForm.rail === "ACH" && (
-            <div className="form-grid">
-              <div className="input-group">
-                <label className="input-label" htmlFor="edit-ach_routing">
-                  ACH Routing
-                </label>
-                <input
-                  id="edit-ach_routing"
-                  name="ach_routing"
-                  value={editForm.ach_routing}
-                  onChange={handleEditChange}
-                  className="input-control"
-                  required={!editRailLocked}
-                  disabled={editRailLocked}
-                  style={editRailLocked ? { opacity: 0.6 } : undefined}
-                />
-              </div>
-              <div className="input-group">
-                <label className="input-label" htmlFor="edit-ach_account">
-                  ACH Account
-                </label>
-                <input
-                  id="edit-ach_account"
-                  name="ach_account"
-                  value={editForm.ach_account}
-                  onChange={handleEditChange}
-                  className="input-control"
-                  required={!editRailLocked}
-                  disabled={editRailLocked}
-                  style={editRailLocked ? { opacity: 0.6 } : undefined}
-                />
-              </div>
+          {/* Accounts list */}
+          {accounts.length === 0 ? (
+            <div className="bg-card border border-border rounded-xl p-12 text-center">
+              <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold text-foreground mb-2">
+                No payout accounts
+              </h3>
+              <p className="text-muted-foreground mb-6">
+                Add your first payout account to start creating UPIs.
+              </p>
+              <Button variant="hero" onClick={() => setIsAddingAccount(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add account
+              </Button>
             </div>
-          )}
-
-          {editForm.rail === "WIRE_DOM" && (
-            <div className="form-grid">
-              <div className="input-group">
-                <label className="input-label" htmlFor="edit-wire_routing">
-                  Wire Routing
-                </label>
-                <input
-                  id="edit-wire_routing"
-                  name="wire_routing"
-                  value={editForm.wire_routing}
-                  onChange={handleEditChange}
-                  className="input-control"
-                  required={!editRailLocked}
-                  disabled={editRailLocked}
-                  style={editRailLocked ? { opacity: 0.6 } : undefined}
-                />
-              </div>
-              <div className="input-group">
-                <label className="input-label" htmlFor="edit-wire_account">
-                  Wire Account
-                </label>
-                <input
-                  id="edit-wire_account"
-                  name="wire_account"
-                  value={editForm.wire_account}
-                  onChange={handleEditChange}
-                  className="input-control"
-                  required={!editRailLocked}
-                  disabled={editRailLocked}
-                  style={editRailLocked ? { opacity: 0.6 } : undefined}
-                />
-              </div>
-              <div className="input-group">
-                <label className="input-label" htmlFor="edit-bank_address">
-                  Bank Address
-                </label>
-                <input
-                  id="edit-bank_address"
-                  name="bank_address"
-                  value={editForm.bank_address}
-                  onChange={handleEditChange}
-                  className="input-control"
-                  disabled={editRailLocked}
-                  style={editRailLocked ? { opacity: 0.6 } : undefined}
-                />
-              </div>
-            </div>
-          )}
-
-          {editForm.rail === "SWIFT" && (
-            <div className="form-grid">
-              <div className="input-group">
-                <label className="input-label" htmlFor="edit-swift_bic">
-                  SWIFT/BIC
-                </label>
-                <input
-                  id="edit-swift_bic"
-                  name="swift_bic"
-                  value={editForm.swift_bic}
-                  onChange={handleEditChange}
-                  className="input-control"
-                  required={!editRailLocked}
-                  disabled={editRailLocked}
-                  style={editRailLocked ? { opacity: 0.6 } : undefined}
-                />
-              </div>
-              <div className="input-group">
-                <label className="input-label" htmlFor="edit-iban">
-                  IBAN
-                </label>
-                <input
-                  id="edit-iban"
-                  name="iban"
-                  value={editForm.iban}
-                  onChange={handleEditChange}
-                  className="input-control"
-                  required={!editRailLocked}
-                  disabled={editRailLocked}
-                  style={editRailLocked ? { opacity: 0.6 } : undefined}
-                />
-              </div>
-              <div className="input-group">
-                <label className="input-label" htmlFor="edit-bank_country">
-                  Bank Country
-                </label>
-                <input
-                  id="edit-bank_country"
-                  name="bank_country"
-                  value={editForm.bank_country}
-                  onChange={handleEditChange}
-                  className="input-control"
-                  required={!editRailLocked}
-                  disabled={editRailLocked}
-                  style={editRailLocked ? { opacity: 0.6 } : undefined}
-                />
-              </div>
-              <div className="input-group">
-                <label className="input-label" htmlFor="edit-bank_city">
-                  Bank City
-                </label>
-                <input
-                  id="edit-bank_city"
-                  name="bank_city"
-                  value={editForm.bank_city}
-                  onChange={handleEditChange}
-                  className="input-control"
-                  disabled={editRailLocked}
-                  style={editRailLocked ? { opacity: 0.6 } : undefined}
-                />
-              </div>
-            </div>
-          )}
-
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 10 }}>
-            <button className="button" type="submit" disabled={editSaving}>
-              {editSaving && <span className="spinner" aria-hidden="true" />}
-              Save Changes
-            </button>
-            {editRailLocked && (
-              <button
-                type="button"
-                className="button button-secondary"
-                onClick={() => {
-                  setEditId(null);
-                  setForm({ ...defaultAccount });
-                  window.scrollTo({ top: 0, behavior: "smooth" });
-                }}
-              >
-                Create new account
-              </button>
-            )}
-          </div>
-        </form>
-      )}
-
-      <div className="card" style={{ marginTop: 20 }}>
-        <p className="section-title">Saved Accounts</p>
-        {accounts.length === 0 ? (
-          <p className="hero-subtitle">No saved accounts yet.</p>
-        ) : (
-          <div className="table">
-            <div className="table-head">
-              <span>#</span>
-              <span>Rail</span>
-              <span>Bank</span>
-              <span>Name</span>
-              <span>Actions</span>
-            </div>
-            {accounts.map((acct, index) => (
-              <div key={acct.id} className="table-row">
-                <span>{index + 1}</span>
-                <span>{acct.rail}</span>
-                <span>{acct.bank_name}</span>
-                <span>{acct.account_name}</span>
-                <span>
-                  <button
-                    type="button"
-                    className="button button-secondary"
-                    onClick={() => {
-                      setEditId(acct.id);
-                      setEditForm({
-                        rail: acct.rail,
-                        bank_name: acct.bank_name || "",
-                        account_name: acct.account_name || "",
-                        ach_routing: acct.ach_routing || "",
-                        ach_account: acct.ach_account || "",
-                        wire_routing: acct.wire_routing || "",
-                        wire_account: acct.wire_account || "",
-                        bank_address: acct.bank_address || "",
-                        swift_bic: acct.swift_bic || "",
-                        iban: acct.iban || "",
-                        bank_country: acct.bank_country || "",
-                        bank_city: acct.bank_city || "",
-                      });
-                      setEditRailLocked(Boolean(acct.rail_locked));
-                    }}
+          ) : (
+            <div className="space-y-3">
+              {accounts.map((account) => {
+                const accountNumber = account.ach_account || account.wire_account || account.iban || "";
+                const nickname = account.account_name || account.bank_name || "Account";
+                const railLabel = (account.rail || "").toUpperCase();
+                return (
+                  <div
+                    key={account.id}
+                    className="bg-card border border-border rounded-xl p-5 shadow-card"
                   >
-                    Edit
-                  </button>
-                </span>
-              </div>
-            ))}
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-4">
+                        <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center">
+                          <CreditCard className="h-5 w-5 text-foreground" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-foreground">{nickname}</h3>
+                            {account.rail_locked && (
+                              <div className="flex items-center gap-1 text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                                <Lock className="h-3 w-3" />
+                                <span>Locked</span>
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-0.5">
+                            {account.bank_name} • {railLabel}
+                          </p>
+                          {accountNumber && (
+                            <p className="text-sm text-muted-foreground">
+                              ••••{accountNumber.slice(-4)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setEditingAccountId(account.id);
+                              setEditingNickname(nickname);
+                              setIsEditingNickname(true);
+                            }}
+                          >
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Edit nickname
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Info box */}
+          <div className="mt-6 p-4 bg-muted/50 rounded-lg border border-border">
+            <p className="text-sm text-muted-foreground">
+              <strong className="text-foreground">Note:</strong> Once an account is linked to a UPI, the rail details become read-only. Only the nickname can be edited.
+            </p>
           </div>
-        )}
+        </div>
       </div>
-    </div>
+
+      <Dialog open={isEditingNickname} onOpenChange={setIsEditingNickname}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit nickname</DialogTitle>
+            <DialogDescription>Update the display name for this payout account.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="edit-nickname">Nickname</Label>
+            <Input
+              id="edit-nickname"
+              value={editingNickname}
+              onChange={(e) => setEditingNickname(e.target.value)}
+              placeholder="Primary checking"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditingNickname(false)}>
+              Cancel
+            </Button>
+            <Button variant="hero" onClick={handleSaveNickname} disabled={isSavingNickname}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </DashboardLayout>
   );
 }

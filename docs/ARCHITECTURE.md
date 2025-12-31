@@ -14,15 +14,15 @@ This document describes the current MVP architecture for Aplite. It is intention
 - Payment accounts: payout rails with encrypted fields
 - UPIs: org-level UPI + child UPIs per account
 - Onboarding sessions: state + audit trail for KYB
-- Verification: call scheduling and completion (webhook driven)
+- Verification: admin review queue (call + ID)
 
 ## Data flow (happy path)
 1) User signs up -> master UPI issued
 2) User completes onboarding Steps 1-5 locally, final submit
 3) Backend stores org, onboarding session, identity, bank rails
-4) Owners schedule verification call (Cal.com)
-5) Webhook marks session VERIFIED, org UPI is issued
-6) User creates child UPIs and resolves payout coordinates
+4) Owners schedule verification call (out of band); reps submit ID
+5) Admin reviews queue, approves or rejects (with reason)
+6) Approved sessions issue org UPI; users create child UPIs and resolve payout coordinates
 
 ## Storage + security
 - Sensitive rail fields are encrypted into `payment_accounts.enc` (AES-GCM).

@@ -1,3 +1,8 @@
+/**
+ * Next.js app entrypoint for global providers and layout.
+ * Wires auth/onboarding context, global styles, and toast UI.
+ */
+
 import type { AppProps } from "next/app";
 import Head from "next/head";
 
@@ -5,6 +10,7 @@ import { Layout } from "../components/Layout";
 import "../styles/globals.css";
 import { AuthProvider } from "../utils/auth";
 import { OnboardingProvider } from "../utils/onboardingWizard";
+import { Toaster } from "../components/ui/sonner";
 
 export default function App({ Component, pageProps }: AppProps) {
   return (
@@ -16,6 +22,7 @@ export default function App({ Component, pageProps }: AppProps) {
         <Layout>
           <Component {...pageProps} />
         </Layout>
+        <Toaster />
       </OnboardingProvider>
     </AuthProvider>
   );

@@ -15,8 +15,15 @@
 - Step 2: role toggle; exec title required for reps.
 - Step 3: owners see call-based copy; reps must upload ID.
 - Step 5: review + submit only (no OTP UI).
+- Step 6: owners schedule/confirm a verification call.
 - Drafts are stored locally (sessionStorage) until final submit.
 - Final submit happens only on Step 5.
+
+## Verification status
+- Owners move to `PENDING_CALL` after submit.
+- Authorized reps move to `PENDING_REVIEW` after submit.
+- Admin review is the source of truth for `VERIFIED` or `REJECTED`.
+- Rejections show a reason and allow resubmission.
 
 ## Schema note
 Use `schema-final.sql`. Older `aplite-backend/data/schema.sql` is missing onboarding columns (`organizations.upi`, `verification_status`, `status`, `sessions.expires_at`, etc.).

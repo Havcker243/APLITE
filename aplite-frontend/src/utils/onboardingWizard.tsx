@@ -1,3 +1,8 @@
+/**
+ * Onboarding wizard context and draft persistence.
+ * Stores per-step form state in sessionStorage and syncs with server status.
+ */
+
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { onboardingCurrent } from "./api";
 import { useAuth } from "./auth";
@@ -37,6 +42,7 @@ export type OnboardingStep3Draft = { full_name: string; title: string; phone: st
 
 export type OnboardingStep4Draft = { bank_name: string; account_number: string; ach_routing: string; wire_routing: string; swift: string };
 
+// Session-only persistence; drafts are not synced to server until final submit.
 const STORAGE_KEY = "aplite_onboarding_session_v2";
 
 type OnboardingContextValue = {
@@ -129,6 +135,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
+      // Avoid storing File objects; only keep file ids for uploaded docs.
       const sanitizedStep1 = {
         ...step1,
         formation_documents: step1.formation_documents.map((doc) => ({
@@ -173,6 +180,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     try {
       const current = await onboardingCurrent();
       setSession(current);
+      // Server only tracks steps 1-5; step 6 is client-only call scheduling.
       const serverStep = Math.min(Math.max(Number(current.current_step || 1), 1), 5) as OnboardingStep;
       // Only override local progress if server is already verified; otherwise stay client-driven.
       if (current.state === "VERIFIED") {

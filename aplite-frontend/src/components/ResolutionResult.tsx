@@ -1,3 +1,8 @@
+/**
+ * Result display for UPI resolution lookups.
+ * Renders account details returned by the resolve endpoint.
+ */
+
 import React from "react";
 
 type ResolutionResultProps = {
@@ -22,107 +27,66 @@ type ResolutionResultProps = {
 export function ResolutionResult({ result }: ResolutionResultProps) {
   const { business, coordinates, profile } = result;
   return (
-    <div className="card result-card">
-      <div className="status-pill">Resolution Complete</div>
-      <h2 style={{ marginTop: 0 }}>Verified Business</h2>
-      <div className="form-grid" style={{ gap: 8 }}>
-        <div>
-          <div className="input-label">Legal Name</div>
-          <div style={{ fontSize: "1.1rem" }}>{business.legal_name}</div>
-        </div>
-        <div>
-          <div className="input-label">Country</div>
-          <div>{business.country}</div>
-        </div>
-        <div>
-          <div className="input-label">UPI</div>
-          <div style={{ letterSpacing: "0.2em" }}>{result.upi}</div>
-        </div>
-        <div>
-          <div className="input-label">Rail</div>
-          <div>{result.rail}</div>
-        </div>
+    <div className="mt-6 rounded-xl border border-border bg-card p-6 shadow-card">
+      <div className="inline-flex items-center rounded-full bg-success/10 px-3 py-1 text-xs font-medium text-success">
+        Resolution Complete
+      </div>
+      <h2 className="mt-4 text-lg font-semibold text-foreground">Verified Business</h2>
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <InfoField label="Legal Name" value={business.legal_name} emphasis />
+        <InfoField label="Country" value={business.country} />
+        <InfoField label="UPI" value={result.upi} mono />
+        <InfoField label="Rail" value={result.rail} />
       </div>
 
       {profile && (
-        <>
-          <div className="section-title" style={{ marginTop: 24 }}>
-            Profile
+        <div className="mt-6">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Profile</h3>
+          <div className="mt-3 grid gap-4 md:grid-cols-2">
+            <InfoField label="Company" value={profile.company_name || business.legal_name} />
+            <InfoField label="Established" value={profile.established_year?.toString() || "-"} />
+            <InfoField label="Location" value={[profile.state, profile.country].filter(Boolean).join(", ") || business.country} />
+            {profile.summary && <InfoField label="Summary" value={profile.summary} spanFull />}
           </div>
-          <div className="form-grid" style={{ gap: 12 }}>
-            <div>
-              <div className="input-label">Company</div>
-              <div>{profile.company_name || business.legal_name}</div>
-            </div>
-            <div>
-              <div className="input-label">Established</div>
-              <div>{profile.established_year || "-"}</div>
-            </div>
-            <div>
-              <div className="input-label">Location</div>
-              <div>
-                {[profile.state, profile.country].filter(Boolean).join(", ") || business.country}
-              </div>
-            </div>
-            {profile.summary && (
-              <div>
-                <div className="input-label">Summary</div>
-                <div>{profile.summary}</div>
-              </div>
-            )}
-          </div>
-        </>
+        </div>
       )}
 
-      <div className="section-title" style={{ marginTop: 24 }}>Coordinates</div>
-      <div className="form-grid" style={{ gap: 12 }}>
-        <div>
-          <div className="input-label">Bank Name</div>
-          <div>{coordinates.bank_name || ""}</div>
+      <div className="mt-6">
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Coordinates</h3>
+        <div className="mt-3 grid gap-4 md:grid-cols-2">
+          <InfoField label="Bank Name" value={coordinates.bank_name || ""} />
+          {"routing_number" in coordinates && <InfoField label="Routing Number" value={coordinates.routing_number} mono />}
+          {"account_number" in coordinates && <InfoField label="Account Number" value={coordinates.account_number} mono />}
+          {"bank_address" in coordinates && <InfoField label="Bank Address" value={coordinates.bank_address} spanFull />}
+          {"swift_bic" in coordinates && <InfoField label="SWIFT/BIC" value={coordinates.swift_bic} mono />}
+          {"iban" in coordinates && <InfoField label="IBAN" value={coordinates.iban} mono />}
+          {"bank_country" in coordinates && <InfoField label="Bank Country" value={coordinates.bank_country} />}
+          {"bank_city" in coordinates && <InfoField label="Bank City" value={coordinates.bank_city} />}
         </div>
-        {"routing_number" in coordinates && (
-          <div>
-            <div className="input-label">Routing Number</div>
-            <div>{coordinates.routing_number}</div>
-          </div>
-        )}
-        {"account_number" in coordinates && (
-          <div>
-            <div className="input-label">Account Number</div>
-            <div>{coordinates.account_number}</div>
-          </div>
-        )}
-        {"bank_address" in coordinates && (
-          <div>
-            <div className="input-label">Bank Address</div>
-            <div>{coordinates.bank_address}</div>
-          </div>
-        )}
-        {"swift_bic" in coordinates && (
-          <div>
-            <div className="input-label">SWIFT/BIC</div>
-            <div>{coordinates.swift_bic}</div>
-          </div>
-        )}
-        {"iban" in coordinates && (
-          <div>
-            <div className="input-label">IBAN</div>
-            <div>{coordinates.iban}</div>
-          </div>
-        )}
-        {"bank_country" in coordinates && (
-          <div>
-            <div className="input-label">Bank Country</div>
-            <div>{coordinates.bank_country}</div>
-          </div>
-        )}
-        {"bank_city" in coordinates && (
-          <div>
-            <div className="input-label">Bank City</div>
-            <div>{coordinates.bank_city}</div>
-          </div>
-        )}
       </div>
+    </div>
+  );
+}
+
+function InfoField({
+  label,
+  value,
+  mono = false,
+  emphasis = false,
+  spanFull = false,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  emphasis?: boolean;
+  spanFull?: boolean;
+}) {
+  return (
+    <div className={spanFull ? "md:col-span-2" : undefined}>
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className={`mt-1 text-sm text-foreground ${mono ? "font-mono" : ""} ${emphasis ? "text-base font-semibold" : ""}`}>
+        {value || "-"}
+      </p>
     </div>
   );
 }

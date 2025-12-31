@@ -41,9 +41,20 @@ Frontend runs on `http://localhost:3000`.
 - `ENCRYPTION_KEY` (16/24/32 bytes; used for encrypting payment coordinates at rest)
 - `UPI_SECRET_KEY` (HMAC secret for UPI namespace/signature)
 - `SESSION_TTL_HOURS` (optional; default `168` = 7 days)
-- `CAL_WEBHOOK_SECRET` (optional; verify Cal.com webhook signatures for call completion)
-- `WEBHOOK_ALERT_EMAIL` (optional; send webhook failures to this email via SendGrid)
+- `ADMIN_API_KEY` (required for admin verification endpoints)
+- `CSRF_SECRET_KEY` (recommended; signs CSRF tokens)
 - Optional email: `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`
+- Optional rate limits:
+  - `RL_GLOBAL_LIMIT`, `RL_GLOBAL_WINDOW_SECONDS`
+  - `RL_RESOLVE_LIMIT`, `RL_RESOLVE_WINDOW_SECONDS`
+  - `RL_UPI_LOOKUP_LIMIT`, `RL_UPI_LOOKUP_WINDOW_SECONDS`
+  - `RL_UPI_MASTER_LOOKUP_LIMIT`, `RL_UPI_MASTER_LOOKUP_WINDOW_SECONDS`
+  - `RL_ONBOARDING_UPLOAD_ID_LIMIT`, `RL_ONBOARDING_UPLOAD_ID_WINDOW_SECONDS`
+  - `RL_ONBOARDING_UPLOAD_FORMATION_LIMIT`, `RL_ONBOARDING_UPLOAD_FORMATION_WINDOW_SECONDS`
+  - `RL_ONBOARDING_COMPLETE_LIMIT`, `RL_ONBOARDING_COMPLETE_WINDOW_SECONDS`
+  - `RL_ACCOUNTS_CREATE_LIMIT`, `RL_ACCOUNTS_CREATE_WINDOW_SECONDS`
+  - `RL_CHILD_UPI_CREATE_LIMIT`, `RL_CHILD_UPI_CREATE_WINDOW_SECONDS`
+  - `RL_PUBLIC_CLIENTS_LIMIT`, `RL_PUBLIC_CLIENTS_WINDOW_SECONDS`
 
 ### Frontend (`aplite-frontend/.env.local`)
 - `NEXT_PUBLIC_API_URL` (defaults to `http://127.0.0.1:8000`)
@@ -57,12 +68,14 @@ Frontend runs on `http://localhost:3000`.
 - Child UPIs: `POST /api/orgs/child-upi`, `GET /api/orgs/child-upis` (supports `limit` + `before`), `POST /api/orgs/child-upis/{id}/disable`, `POST /api/orgs/child-upis/{id}/reactivate`
 - Resolve: `POST /api/resolve`, `POST /api/upi/lookup`
 - Public clients: `GET /api/public/clients`
-- Webhooks: `POST /webhooks/cal` (Cal.com booking events; completes verification on call completion)
+- Admin verification: `POST /api/admin/orgs/{org_id}/verify`, `POST /api/admin/orgs/upi/{org_upi}/verify`, `POST /api/admin/users/master-upi/{master_upi}/verify`
+- Admin review queue: `GET /api/admin/verification/queue`, `GET /api/admin/verification/{session_id}`, `POST /api/admin/verification/{session_id}/approve`, `POST /api/admin/verification/{session_id}/reject`
 
 ## Verification flow (MVP)
-- Owners complete onboarding and schedule a verification call (Cal.com).
-- After booking, the UI shows a pending screen that polls until the backend flips to `VERIFIED`.
-- Cal webhook (`/webhooks/cal`) marks the session `VERIFIED` on call-completed events.
+- Owners complete onboarding and schedule a verification call (out of band).
+- All submissions move to `PENDING_REVIEW` (or `PENDING_CALL`) until admin review.
+- The UI shows a pending screen that polls until the backend flips to `VERIFIED`.
+- An admin uses the verification endpoints to approve/reject and issue the org UPI (rejections require a reason).
 
 ## Account rail lock rules
 - Payment accounts can be edited until they are linked to a UPI.
@@ -75,12 +88,6 @@ Frontend runs on `http://localhost:3000`.
 curl "$API_URL/api/orgs/child-upis?limit=10"
 curl "$API_URL/api/orgs/child-upis?limit=10&before=2025-01-01T00:00:00Z"
 ```
-
-## Webhook notes
-- Cal webhook signature header: `X-Cal-Signature`
-- Secrets/env:
-  - `CAL_WEBHOOK_SECRET` to verify signature
-  - `WEBHOOK_ALERT_EMAIL` to receive webhook failure alerts (SendGrid required)
 
 ## Product docs
 - `docs/PRODUCT_UI_SPEC.md`

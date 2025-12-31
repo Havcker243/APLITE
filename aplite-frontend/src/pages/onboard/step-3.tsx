@@ -1,10 +1,22 @@
-import React, { useMemo, useState, useEffect } from "react";
+/**
+ * Onboarding step 3: identity verification details.
+ * Collects full name, phone, and an ID document upload.
+ */
+
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
+import { ArrowLeft, ArrowRight, Loader2, Upload } from "lucide-react";
+
 import { OnboardingShell } from "../../components/onboarding/OnboardingShell";
 import { onboardingUploadId } from "../../utils/api";
 import { useAuth } from "../../utils/auth";
 import { useOnboardingWizard } from "../../utils/onboardingWizard";
 import { LoadingScreen } from "../../components/LoadingScreen";
+import { Button } from "../../components/ui/button";
+import { Checkbox } from "../../components/ui/checkbox";
+import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
+import { toast } from "sonner";
 
 export default function OnboardStep3() {
   const router = useRouter();
@@ -12,12 +24,9 @@ export default function OnboardStep3() {
   const { step3, setStep3, step2, completedThrough, touchStep, markStepComplete } = useOnboardingWizard();
 
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const role = useMemo(() => (step2.role as "owner" | "authorized_rep" | undefined) || "", [step2.role]);
   const callBased = role === "owner";
-  // Authorized reps must upload ID before moving forward.
   const requiresIdUpload = role === "authorized_rep";
 
   useEffect(() => {
@@ -30,7 +39,6 @@ export default function OnboardStep3() {
 
   useEffect(() => {
     if (!mounted) return;
-    // Guard: require local completion of Step 2 to be on Step 3.
     if (completedThrough < 2) {
       router.replace(completedThrough < 1 ? "/onboard/step-1" : "/onboard/step-2");
     }
@@ -41,11 +49,9 @@ export default function OnboardStep3() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    setSaved(null);
-    setError(null);
     try {
       let fileId = step3.file_id;
-      let storageHint = saved || null;
+      let storageHint: string | null = null;
       if (requiresIdUpload && !fileId) {
         if (!step3.file) throw new Error("Upload a government ID document (jpg, png, or pdf).");
         const res = await onboardingUploadId(step3.file);
@@ -54,80 +60,62 @@ export default function OnboardStep3() {
         setStep3((prev) => ({ ...prev, file_id: fileId }));
       }
 
-      setSaved(storageHint || "Saved locally");
+      toast.success(storageHint || "Saved");
       markStepComplete(3);
       router.push("/onboard/step-4");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to save step");
+      toast.error(err instanceof Error ? err.message : "Unable to save step");
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <OnboardingShell title="Stage 3" subtitle="Verify a real person is associated with this business." activeStep={3}>
-      {saved && (
-        <div className="status-pill" role="status" aria-live="polite">
-          {saved}
+    <OnboardingShell activeStep={3}>
+      <form className="space-y-6 animate-fade-in" onSubmit={handleSubmit}>
+        <div>
+          <h2 className="text-xl font-semibold text-foreground mb-2">Identity</h2>
+          <p className="text-muted-foreground">
+            {callBased
+              ? "Provide your personal information. Owners complete verification via a call."
+              : "Provide your personal information and upload a government ID."}
+          </p>
         </div>
-      )}
-      {error && (
-        <div className="error-box" role="alert" aria-live="assertive">
-          {error}
-        </div>
-      )}
 
-      <form className="card form-card" onSubmit={handleSubmit}>
-        <h2 style={{ marginTop: 0 }}>Identity Verification</h2>
-        <p className="hero-subtitle">
-          {callBased
-            ? "As the business owner, you'll complete a live verification call later. No document upload needed now."
-            : "Authorized representatives must upload ID to verify their authority. Files are stored privately (MVP local storage)."}
-        </p>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="full_name">Full legal name *</Label>
+            <Input id="full_name" value={step3.full_name} onChange={(e) => setStep3((p) => ({ ...p, full_name: e.target.value }))} required />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="person_title">Title *</Label>
+            <Input
+              id="person_title"
+              value={step3.title}
+              onChange={(e) => setStep3((p) => ({ ...p, title: e.target.value }))}
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="phone">Phone *</Label>
+            <Input
+              id="phone"
+              type="tel"
+              value={step3.phone}
+              onChange={(e) => setStep3((p) => ({ ...p, phone: e.target.value }))}
+              required
+            />
+          </div>
 
-        <div className="form-section">
-          <div className="form-grid" style={{ gridTemplateColumns: "1fr", marginTop: 14 }}>
-            <div className="input-group">
-              <label className="input-label" htmlFor="full_name">
-                Full legal name
-              </label>
-              <input id="full_name" className="input-control" value={step3.full_name} onChange={(e) => setStep3((p) => ({ ...p, full_name: e.target.value }))} required />
-            </div>
-            <div className="input-group">
-              <label className="input-label" htmlFor="person_title">
-                Title {callBased ? "(exec role)" : "(optional)"}
-              </label>
-              <input
-                id="person_title"
-                className="input-control"
-                value={step3.title}
-                onChange={(e) => setStep3((p) => ({ ...p, title: e.target.value }))}
-                required={callBased}
-              />
-            </div>
-            <div className="input-group">
-              <label className="input-label" htmlFor="phone">
-                Phone number
-              </label>
-              <input
-                id="phone"
-                className="input-control mono"
-                value={step3.phone}
-                onChange={(e) => setStep3((p) => ({ ...p, phone: e.target.value }))}
-                placeholder="+1 415 555 0123"
-                required
-              />
-            </div>
-            {requiresIdUpload && (
-              <div className="input-group">
-                <label className="input-label" htmlFor="id_file">
-                  Government ID (jpg, png, pdf)
-                </label>
-                <input
+          {requiresIdUpload && (
+            <div className="space-y-2">
+              <Label htmlFor="id_file">Government ID *</Label>
+              <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
+                <Input
                   id="id_file"
                   type="file"
                   accept="image/jpeg,image/png,application/pdf"
-                  className="input-control"
+                  className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
@@ -135,27 +123,36 @@ export default function OnboardStep3() {
                   }}
                   required={!step3.file_id}
                 />
-                {step3.file_id && <p className="hero-subtitle">Uploaded document reference: {step3.file_id}</p>}
+                <label htmlFor="id_file" className="cursor-pointer">
+                  <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-3" />
+                  <p className="text-sm">{step3.file?.name || step3.file_id || "Upload ID document"}</p>
+                </label>
               </div>
-            )}
+            </div>
+          )}
 
-            <label style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-              <input type="checkbox" checked={step3.attestation} onChange={(e) => setStep3((p) => ({ ...p, attestation: e.target.checked }))} />
-              <span className="hero-subtitle" style={{ marginTop: 2 }}>
-                I attest that the information provided is accurate and that I am authorized to submit identity documents for this onboarding.
-              </span>
-            </label>
+          <div className="flex items-start gap-3 p-4 bg-muted/50 rounded-lg">
+            <Checkbox
+              id="attestation"
+              checked={step3.attestation}
+              onCheckedChange={(checked) => setStep3((p) => ({ ...p, attestation: Boolean(checked) }))}
+            />
+            <Label htmlFor="attestation" className="cursor-pointer text-sm">
+              I attest that all information provided is accurate and I am authorized to submit this application.
+            </Label>
           </div>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginTop: 18 }}>
-          <button type="button" className="button button-secondary" onClick={() => router.push("/onboard/step-2")}>
+        <div className="flex items-center justify-between mt-8 pt-6 border-t border-border">
+          <Button type="button" variant="outline" onClick={() => router.push("/onboard/step-2")}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
             Back
-          </button>
-          <button className="button" type="submit" disabled={saving}>
-            {saving && <span className="spinner" aria-hidden="true" />}
-            Save & Continue
-          </button>
+          </Button>
+          <Button type="submit" variant="hero" disabled={saving}>
+            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Continue
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
         </div>
       </form>
     </OnboardingShell>

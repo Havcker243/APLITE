@@ -6,15 +6,16 @@
 - Styling in `aplite-frontend/src/styles/globals.css`
 
 ## Auth/session behavior
-- Tokens are stored in `localStorage` when present.
-- Cookie-based auth is supported as a fallback.
+- Auth uses HttpOnly cookies with in-memory session state.
+- `authedFetch` requests a CSRF token (`/api/auth/csrf`) and sends `X-CSRF-Token` on non-GETs.
 - `AuthProvider` fetches `/api/profile/details` as the source of truth.
 
 ## Onboarding flow
 - Wizard state lives in `sessionStorage` via `onboardingWizard.tsx`.
-- Steps 1–4 are local drafts only.
+- Steps 1-4 are local drafts only.
 - Step 5 submits the full payload to `/onboarding/complete`.
-- Step 6 schedules a call (Cal.com); after booking, user is routed to a pending screen.
+- Step 6 is for owners to schedule/confirm a verification call.
+- After submit (or call confirmation), users are routed to the pending screen.
 
 ## Key pages
 - `index.tsx`: landing

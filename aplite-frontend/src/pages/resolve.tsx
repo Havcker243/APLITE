@@ -1,39 +1,68 @@
-import { useRouter } from "next/router";
-import React, { useEffect, useState } from "react";
-import { ResolveForm } from "../components/ResolveForm";
-import { ResolutionResult } from "../components/ResolutionResult";
-import { lookupMasterUpi, lookupUpiProfile, resolveUPI, MasterUpiLookupResult, UpiLookupResult } from "../utils/api";
-import { useAuth } from "../utils/auth";
-import { requireVerifiedOrRedirect } from "../utils/requireVerified";
+/**
+ * UPI resolution page for looking up payment identifiers.
+ * Provides a form and result display for resolve responses.
+ */
 
-const UPI_PATTERN = /^[A-Z0-9]{14}$/;
+import { useRouter } from "next/router";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  AlertCircle,
+  Building2,
+  CheckCircle2,
+  Key,
+  Loader2,
+  Search,
+  Shield,
+} from "lucide-react";
+
+import DashboardLayout from "../components/DashboardLayout";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
+import {
+  fetchPublicClients,
+  lookupMasterUpi,
+  resolveUPI,
+  MasterUpiLookupResult,
+  ResolveResult,
+} from "../utils/api";
+import { useAuth } from "../utils/auth";
+import { toast } from "sonner";
+
+const UPI_CORE_PATTERN = /^[A-Z0-9]{14}$/;
+
+function normalizeUpi(input: string) {
+  return input.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
 
 export default function ResolvePage() {
   const { token, loading, profile } = useAuth();
   const router = useRouter();
-  const [upi, setUpi] = useState("");
-  const [rail, setRail] = useState<"ACH" | "WIRE_DOM" | "SWIFT">("ACH");
-  const [result, setResult] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [resolving, setResolving] = useState(false);
+
   const [mode, setMode] = useState<"resolve" | "lookup" | "master">("resolve");
-  const [lookupUpi, setLookupUpi] = useState("");
-  const [lookupResult, setLookupResult] = useState<UpiLookupResult | null>(null);
-  const [lookupError, setLookupError] = useState<string | null>(null);
-  const [lookuping, setLookuping] = useState(false);
-  const [masterUpi, setMasterUpi] = useState("");
+
+  const [upiInput, setUpiInput] = useState("");
+  const [isResolving, setIsResolving] = useState(false);
+  const [result, setResult] = useState<ResolveResult | null>(null);
+
+  const [orgInput, setOrgInput] = useState("");
+  const [orgResult, setOrgResult] = useState<any | null>(null);
+  const [orgLoading, setOrgLoading] = useState(false);
+
+  const [masterUpiInput, setMasterUpiInput] = useState("");
   const [masterResult, setMasterResult] = useState<MasterUpiLookupResult | null>(null);
-  const [masterError, setMasterError] = useState<string | null>(null);
   const [masterLoading, setMasterLoading] = useState(false);
+
+  const onboardingStatus = useMemo(() => String(profile?.onboarding_status || "UNVERIFIED").toUpperCase(), [profile]);
+  const isVerified = onboardingStatus === "VERIFIED";
 
   useEffect(() => {
     if (loading) return;
     if (!token) {
       router.replace("/login");
-      return;
     }
-    requireVerifiedOrRedirect({ profile, router });
-  }, [loading, token, profile, router]);
+  }, [loading, token, router]);
 
   useEffect(() => {
     const queryMode = typeof router.query.mode === "string" ? router.query.mode : "resolve";
@@ -41,255 +70,349 @@ export default function ResolvePage() {
     setMode(nextMode);
   }, [router.query.mode]);
 
-  async function handleResolve(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError(null);
+  if (!token) return null;
+
+  function handleModeChange(nextMode: string) {
+    if (nextMode !== "resolve" && nextMode !== "lookup" && nextMode !== "master") return;
+    setMode(nextMode);
+    void router.push(`/resolve?mode=${nextMode}`);
+  }
+
+  async function handleResolveUPI() {
+    if (!upiInput.trim()) return;
     setResult(null);
-    if (!UPI_PATTERN.test(upi.trim())) {
-      setError("UPI must be exactly 14 alphanumeric characters");
+
+    if (!isVerified) {
+      toast.error("Your account must be verified to resolve UPIs.");
       return;
     }
-    setResolving(true);
+    const normalized = normalizeUpi(upiInput.trim());
+    if (!UPI_CORE_PATTERN.test(normalized)) {
+      toast.error("Enter a valid UPI (14 letters/numbers).");
+      return;
+    }
+
+    setIsResolving(true);
     try {
-      const response = await resolveUPI({ upi: upi.trim(), rail });
+      const response = await resolveUPI({ upi: normalized, rail: "ACH" });
       setResult(response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to resolve UPI");
+      toast.error(err instanceof Error ? err.message : "Unable to resolve UPI");
     } finally {
-      setResolving(false);
+      setIsResolving(false);
     }
   }
 
-  async function handleLookup(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setLookupError(null);
-    setLookupResult(null);
-    if (!UPI_PATTERN.test(lookupUpi.trim())) {
-      setLookupError("UPI must be exactly 14 alphanumeric characters");
-      return;
-    }
-    setLookuping(true);
+  async function handleLookupOrg() {
+    if (!orgInput.trim()) return;
+    setOrgResult(null);
+    setOrgLoading(true);
     try {
-      const response = await lookupUpiProfile({ upi: lookupUpi.trim() });
-      setLookupResult(response);
+      const response = await fetchPublicClients(orgInput.trim());
+      const normalized = (response || []).map((client: any) => {
+        const name = client.company_name || client.legal_name || "Unnamed client";
+        const country = client.country || "";
+        const industry = client.industry || "";
+        const website = client.website || "";
+        const description = client.description || client.summary || "";
+        const masterUPI = client.upi || client.master_upi || "";
+        return { ...client, name, country, industry, website, description, masterUPI };
+      });
+      setOrgResult(normalized[0] || null);
+      if (!normalized[0]) {
+        toast.error("No organization found.");
+      }
     } catch (err) {
-      setLookupError(err instanceof Error ? err.message : "Unable to lookup UPI");
+      toast.error(err instanceof Error ? err.message : "Unable to lookup organization.");
     } finally {
-      setLookuping(false);
+      setOrgLoading(false);
     }
   }
 
-  async function handleMasterLookup(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setMasterError(null);
+  async function handleLookupMasterUPI() {
+    if (!masterUpiInput.trim()) return;
     setMasterResult(null);
-    if (!UPI_PATTERN.test(masterUpi.trim())) {
-      setMasterError("UPI must be exactly 14 alphanumeric characters");
+    const normalized = normalizeUpi(masterUpiInput.trim());
+    if (!UPI_CORE_PATTERN.test(normalized)) {
+      toast.error("Enter a valid master UPI (14 letters/numbers).");
       return;
     }
     setMasterLoading(true);
     try {
-      const response = await lookupMasterUpi(masterUpi.trim());
+      const response = await lookupMasterUpi(normalized);
       setMasterResult(response);
     } catch (err) {
-      setMasterError(err instanceof Error ? err.message : "Unable to lookup master UPI");
+      toast.error(err instanceof Error ? err.message : "Unable to lookup master UPI");
     } finally {
       setMasterLoading(false);
     }
   }
 
-  if (!token) {
-    return null;
-  }
-
-  const modeItems = [
-    { key: "resolve", label: "Resolve payout" },
-    { key: "lookup", label: "Lookup org" },
-    { key: "master", label: "Master UPI" },
-  ] as const;
+  const accountNumber =
+    result?.coordinates?.account_number ||
+    result?.coordinates?.ach_account ||
+    result?.coordinates?.wire_account ||
+    result?.coordinates?.iban ||
+    "";
+  const routingNumber =
+    result?.coordinates?.ach_routing ||
+    result?.coordinates?.wire_routing ||
+    result?.coordinates?.routing_number ||
+    "";
+  const swiftCode =
+    result?.coordinates?.swift || result?.coordinates?.swift_bic || "";
 
   return (
-    <div className="page-container">
-      <section className="hero">
-        <div>
-          <p className="section-title">Resolve Identifier</p>
-          <h1 className="hero-title">Verify payout details for a UPI</h1>
-          <p className="hero-subtitle">Enter a UPI from your workspace to fetch payment coordinates and public profile info.</p>
-        </div>
-      </section>
+    <DashboardLayout>
+      <div className="p-8">
+        <div className="max-w-2xl">
+          {/* Header */}
+          <div className="mb-8">
+            <h1 className="text-2xl font-semibold text-foreground mb-2">
+              Resolve / Lookup
+            </h1>
+            <p className="text-muted-foreground">
+              Look up payment details, organizations, or master UPIs.
+            </p>
+          </div>
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
-        {modeItems.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            className={`button${mode === item.key ? "" : " button-secondary"}`}
-            onClick={() => router.push(`/resolve?mode=${item.key}`)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-
-      {mode === "resolve" ? (
-        <>
-          {error && (
-            <div className="error-box" role="alert" aria-live="assertive">
-              {error}
-            </div>
-          )}
-
-          <ResolveForm upi={upi} rail={rail} loading={resolving} onUpiChange={setUpi} onRailChange={setRail} onSubmit={handleResolve} />
-
-          {result && <ResolutionResult result={result} />}
-        </>
-      ) : mode === "lookup" ? (
-        <>
-          {lookupError && (
-            <div className="error-box" role="alert" aria-live="assertive">
-              {lookupError}
-            </div>
-          )}
-
-          <form onSubmit={handleLookup} className="card form-card">
-            <div className="form-grid" style={{ gridTemplateColumns: "1fr" }}>
-              <div className="input-group">
-                <label className="input-label" htmlFor="upi-lookup">
-                  UPI
-                </label>
-                <input
-                  id="upi-lookup"
-                  className="input-control mono"
-                  value={lookupUpi}
-                  onChange={(event) => setLookupUpi(event.target.value.toUpperCase().trim())}
-                  placeholder="14 characters"
-                  required
-                />
-              </div>
-              <button className="button" type="submit" disabled={lookuping}>
-                {lookuping && <span className="spinner" aria-hidden="true" />}
-                Lookup profile
-              </button>
-            </div>
-          </form>
-
-          {lookupResult && (
-            <div className="card" style={{ marginTop: 16 }}>
-              <p className="section-title">Organization profile</p>
-              <div className="form-grid" style={{ gridTemplateColumns: "1fr", marginTop: 10 }}>
-                <div className="input-group">
-                  <span className="input-label">Legal Name</span>
-                  <div className="input-control">{lookupResult.org.legal_name || "-"}</div>
-                </div>
-                {lookupResult.org.dba && (
-                  <div className="input-group">
-                    <span className="input-label">DBA</span>
-                    <div className="input-control">{lookupResult.org.dba}</div>
-                  </div>
-                )}
-                <div className="input-group">
-                  <span className="input-label">Industry</span>
-                  <div className="input-control">{lookupResult.org.industry || "-"}</div>
-                </div>
-                <div className="input-group">
-                  <span className="input-label">Website</span>
-                  <div className="input-control">{lookupResult.org.website || "-"}</div>
-                </div>
-                <div className="input-group">
-                  <span className="input-label">Country</span>
-                  <div className="input-control">{lookupResult.profile.country || "-"}</div>
-                </div>
-                <div className="input-group">
-                  <span className="input-label">Public Summary</span>
-                  <div className="input-control" style={{ minHeight: 64 }}>
-                    {lookupResult.profile.summary || "No summary provided."}
-                  </div>
-                </div>
+          {/* Verification warning */}
+          {!isVerified && (
+            <div className="bg-warning/10 border border-warning/20 rounded-xl p-4 mb-8 flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-foreground">Verification required</p>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  UPI resolution requires verification. Organization lookups are available to all users.
+                </p>
               </div>
             </div>
           )}
-        </>
-      ) : (
-        <>
-          {masterError && (
-            <div className="error-box" role="alert" aria-live="assertive">
-              {masterError}
-            </div>
-          )}
 
-          <form onSubmit={handleMasterLookup} className="card form-card">
-            <div className="form-grid" style={{ gridTemplateColumns: "1fr" }}>
-              <div className="input-group">
-                <label className="input-label" htmlFor="upi-master">
-                  Master UPI
-                </label>
-                <input
-                  id="upi-master"
-                  className="input-control mono"
-                  value={masterUpi}
-                  onChange={(event) => setMasterUpi(event.target.value.toUpperCase().trim())}
-                  placeholder="14 characters"
-                  required
-                />
-              </div>
-              <button className="button" type="submit" disabled={masterLoading}>
-                {masterLoading && <span className="spinner" aria-hidden="true" />}
-                Lookup master
-              </button>
-            </div>
-          </form>
+          <Tabs value={mode} onValueChange={handleModeChange} className="space-y-6">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="resolve">Resolve UPI</TabsTrigger>
+              <TabsTrigger value="lookup">Lookup Org</TabsTrigger>
+              <TabsTrigger value="master">Master UPI</TabsTrigger>
+            </TabsList>
 
-          {masterResult && (
-            <div className="card" style={{ marginTop: 16 }}>
-              <p className="section-title">Owner profile</p>
-              <div className="form-grid" style={{ gridTemplateColumns: "1fr", marginTop: 10 }}>
-                <div className="input-group">
-                  <span className="input-label">Company</span>
-                  <div className="input-control">{masterResult.owner.company_name || "-"}</div>
-                </div>
-                <div className="input-group">
-                  <span className="input-label">Established</span>
-                  <div className="input-control">{masterResult.owner.established_year || "-"}</div>
-                </div>
-                <div className="input-group">
-                  <span className="input-label">Location</span>
-                  <div className="input-control">
-                    {[masterResult.owner.state, masterResult.owner.country].filter(Boolean).join(", ") || "-"}
-                  </div>
-                </div>
-                <div className="input-group">
-                  <span className="input-label">Summary</span>
-                  <div className="input-control" style={{ minHeight: 64 }}>
-                    {masterResult.owner.summary || "No summary provided."}
-                  </div>
-                </div>
-              </div>
-
-              <p className="section-title" style={{ marginTop: 16 }}>
-                Organizations
-              </p>
-              {masterResult.organizations.length === 0 ? (
-                <p className="hero-subtitle">No organizations found for this master UPI.</p>
-              ) : (
-                <div className="table">
-                  <div className="table-head">
-                    <span>Legal Name</span>
-                    <span>UPI</span>
-                    <span>Status</span>
-                  </div>
-                  {masterResult.organizations.map((org) => (
-                    <div key={org.id} className="table-row">
-                      <span>{org.legal_name}</span>
-                      <span>{org.upi || "-"}</span>
-                      <span>{org.verification_status || org.status || "-"}</span>
+            {/* Resolve UPI Tab */}
+            <TabsContent value="resolve">
+              <div className="bg-card border border-border rounded-xl p-6 shadow-card">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="upi-input">Enter UPI</Label>
+                    <div className="flex gap-3">
+                      <Input
+                        id="upi-input"
+                        placeholder="14-character UPI"
+                        value={upiInput}
+                        onChange={(e) => setUpiInput(e.target.value.toUpperCase())}
+                        className="font-mono"
+                        disabled={!isVerified}
+                      />
+                      <Button 
+                        variant="hero" 
+                        onClick={handleResolveUPI}
+                        disabled={!isVerified || isResolving || !upiInput.trim()}
+                      >
+                        {isResolving ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Search className="h-4 w-4 mr-2" />
+                            Resolve
+                          </>
+                        )}
+                      </Button>
                     </div>
-                  ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* UPI Result */}
+              {result && (
+                <div className="mt-6 rounded-xl border p-6 animate-fade-in bg-success/5 border-success/20">
+                  <div>
+                    <div className="flex items-center gap-2 mb-4">
+                      <CheckCircle2 className="h-5 w-5 text-success" />
+                      <span className="font-semibold text-foreground">Resolved successfully</span>
+                    </div>
+
+                    <div className="bg-card border border-border rounded-lg p-5">
+                      <div className="flex items-center gap-2 mb-4">
+                        <Shield className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground uppercase tracking-wide">
+                          Secure payout details
+                        </span>
+                      </div>
+
+                      <div className="space-y-3">
+                        {result.coordinates?.bank_name && (
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">Bank name</span>
+                            <span className="text-sm font-medium text-foreground">{result.coordinates.bank_name}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Rail type</span>
+                          <span className="text-sm font-medium text-foreground">{result.rail}</span>
+                        </div>
+                        {accountNumber && (
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">Account number</span>
+                            <span className="text-sm font-mono font-medium text-foreground">
+                              {accountNumber}
+                            </span>
+                          </div>
+                        )}
+                        {routingNumber && (
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">Routing number</span>
+                            <span className="text-sm font-mono font-medium text-foreground">
+                              {routingNumber}
+                            </span>
+                          </div>
+                        )}
+                        {swiftCode && (
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">SWIFT code</span>
+                            <span className="text-sm font-mono font-medium text-foreground">
+                              {swiftCode}
+                            </span>
+                          </div>
+                        )}
+                        {result.coordinates?.iban && (
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">IBAN</span>
+                            <span className="text-sm font-mono font-medium text-foreground">
+                              {result.coordinates.iban}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground mt-4 flex items-center gap-2">
+                      <Shield className="h-3 w-3" />
+                      This resolution has been logged for audit purposes.
+                    </p>
+                  </div>
                 </div>
               )}
-            </div>
-          )}
-        </>
-      )}
-    </div>
+
+            </TabsContent>
+
+            {/* Lookup Org Tab */}
+            <TabsContent value="lookup">
+              <div className="bg-card border border-border rounded-xl p-6 shadow-card">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Organization name</Label>
+                    <div className="flex gap-3">
+                      <Input
+                        placeholder="Search by name..."
+                        value={orgInput}
+                        onChange={(e) => setOrgInput(e.target.value)}
+                      />
+                      <Button variant="hero" onClick={handleLookupOrg} disabled={orgLoading}>
+                        {orgLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Building2 className="h-4 w-4 mr-2" />}
+                        Lookup
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {orgResult && (
+                <div className="mt-6 bg-card border border-border rounded-xl p-6 animate-fade-in">
+                  <div className="flex items-center gap-2 mb-4">
+                    <CheckCircle2 className="h-5 w-5 text-success" />
+                    <span className="font-semibold text-foreground">{orgResult.name}</span>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <p>
+                      <span className="text-muted-foreground">Industry:</span> {orgResult.industry || "-"}
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">Country:</span> {orgResult.country || "-"}
+                    </p>
+                    {orgResult.website && (
+                      <p>
+                        <span className="text-muted-foreground">Website:</span> {orgResult.website}
+                      </p>
+                    )}
+                    {orgResult.description && (
+                      <p>
+                        <span className="text-muted-foreground">Description:</span> {orgResult.description}
+                      </p>
+                    )}
+                    {orgResult.masterUPI && (
+                      <p>
+                        <span className="text-muted-foreground">Master UPI:</span> <code className="font-mono">{orgResult.masterUPI}</code>
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Master UPI Tab */}
+            <TabsContent value="master">
+              <div className="bg-card border border-border rounded-xl p-6 shadow-card">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Master UPI</Label>
+                    <div className="flex gap-3">
+                      <Input
+                        placeholder="14-character UPI"
+                        value={masterUpiInput}
+                        onChange={(e) => setMasterUpiInput(e.target.value.toUpperCase())}
+                        className="font-mono"
+                      />
+                      <Button variant="hero" onClick={handleLookupMasterUPI} disabled={masterLoading}>
+                        {masterLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Key className="h-4 w-4 mr-2" />}
+                        Lookup
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {masterResult && (
+                <div className="mt-6 bg-card border border-border rounded-xl p-6 animate-fade-in">
+                  <div className="flex items-center gap-2 mb-4">
+                    <CheckCircle2 className="h-5 w-5 text-success" />
+                    <span className="font-semibold text-foreground">
+                      {masterResult.owner.company_name || "Owner profile"}
+                    </span>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <p>
+                      <span className="text-muted-foreground">Industry:</span> -
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">Country:</span> {masterResult.owner.country || "-"}
+                    </p>
+                    {masterResult.owner.summary && (
+                      <p>
+                        <span className="text-muted-foreground">Description:</span> {masterResult.owner.summary}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
+
+          {/* Info */}
+          <div className="mt-8 p-4 bg-muted/50 rounded-lg border border-border">
+            <p className="text-sm text-muted-foreground">
+              <strong className="text-foreground">Security:</strong> All resolutions are logged for audit and compliance. Only verified businesses can resolve UPIs to payout details.
+            </p>
+          </div>
+        </div>
+      </div>
+    </DashboardLayout>
   );
 }

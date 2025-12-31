@@ -1,58 +1,69 @@
-import React from "react";
+/**
+ * UPI resolution form component.
+ * Collects lookup input and triggers resolve requests.
+ */
+
+﻿import React, { useState } from "react";
+import { Loader2, Search } from "lucide-react";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 
 export type ResolveFormProps = {
-  upi: string;
-  rail: "ACH" | "WIRE_DOM" | "SWIFT";
-  loading: boolean;
-  onUpiChange: (value: string) => void;
-  onRailChange: (value: "ACH" | "WIRE_DOM" | "SWIFT") => void;
-  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  onResolve: (input: string) => Promise<void>;
+  placeholder?: string;
+  label?: string;
+  disabled?: boolean;
+  buttonText?: string;
 };
 
-export function ResolveForm({ upi, rail, loading, onUpiChange, onRailChange, onSubmit }: ResolveFormProps) {
-  return (
-    <form onSubmit={onSubmit} className="card form-card" style={{ maxWidth: 520 }}>
-      <div className="form-grid">
-        <div className="input-group">
-          <label className="input-label" htmlFor="upi">
-            UPI Identifier
-          </label>
-          <input
-            id="upi"
-            type="text"
-            name="upi"
-            placeholder="NS01ABCDXXXX"
-            value={upi}
-            onChange={(event) => onUpiChange(event.target.value.toUpperCase())}
-            className="input-control"
-            minLength={14}
-            maxLength={14}
-            required
-          />
-        </div>
+export function ResolveForm({
+  onResolve,
+  placeholder = "14-character UPI",
+  label = "Enter UPI",
+  disabled = false,
+  buttonText = "Resolve",
+}: ResolveFormProps) {
+  const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-        <div className="input-group">
-          <label className="input-label" htmlFor="rail">
-            Rail
-          </label>
-          <select
-            id="rail"
-            name="rail"
-            value={rail}
-            onChange={(event) => onRailChange(event.target.value as "ACH" | "WIRE_DOM" | "SWIFT")}
-            className="input-control"
-          >
-            <option value="ACH">ACH</option>
-            <option value="WIRE_DOM">WIRE_DOM</option>
-            <option value="SWIFT">SWIFT</option>
-          </select>
+  const handleSubmit = async () => {
+    if (!input.trim()) return;
+    setIsLoading(true);
+    try {
+      await onResolve(input.trim());
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-card border border-border rounded-xl p-6 shadow-card">
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Label>{label}</Label>
+          <div className="flex gap-3">
+            <Input
+              placeholder={placeholder}
+              value={input}
+              onChange={(e) => setInput(e.target.value.toUpperCase())}
+              className="font-mono"
+              disabled={disabled}
+              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+            />
+            <Button variant="hero" onClick={handleSubmit} disabled={disabled || isLoading || !input.trim()}>
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  <Search className="h-4 w-4 mr-2" />
+                  {buttonText}
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </div>
-
-      <button type="submit" className="button" disabled={loading}>
-        {loading && <span className="spinner" aria-hidden="true" />}
-        Resolve UPI
-      </button>
-    </form>
+    </div>
   );
 }

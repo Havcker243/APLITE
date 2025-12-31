@@ -1,4 +1,10 @@
-import React, { useMemo } from "react";
+/**
+ * Input helper for four-digit year values.
+ * Normalizes user input and enforces basic validation rules.
+ */
+
+import { useMemo } from "react";
+import { Input } from "./ui/input";
 
 export function YearInput({
   id,
@@ -24,16 +30,15 @@ export function YearInput({
 
   return (
     <>
-      <input
+      <Input
         id={id}
         name={name}
-        className="input-control"
         value={value}
         onChange={(e) => onChange(e.target.value.replace(/\D/g, "").slice(0, 4))}
         inputMode="numeric"
         placeholder={String(maxYear)}
         list={listId}
-        style={{ maxWidth: 220 }}
+        className="max-w-[220px]"
       />
       <datalist id={listId}>
         {years.map((y) => (
@@ -43,4 +48,3 @@ export function YearInput({
     </>
   );
 }
-

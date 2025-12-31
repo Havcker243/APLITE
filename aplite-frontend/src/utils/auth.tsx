@@ -1,6 +1,11 @@
+/**
+ * Auth context and provider for the frontend UI.
+ * Keeps the canonical user/profile snapshot and refreshes from the backend.
+ */
+
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { AuthResponse, logout as apiLogout, User, fetchProfileDetails, ProfileDetailsResponse } from "./api";
-import { setAuthToken } from "./api";
+import { AuthResponse, logout as apiLogout, User, fetchProfileDetails, ProfileDetailsResponse, fetchCsrfToken } from "./api";
+import { setAuthToken, setCsrfToken } from "./api";
 
 type AuthContextType = {
   user: User | null;
@@ -33,14 +38,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       const details = await fetchProfileDetails();
+      // Server snapshot is canonical; update all auth-facing state from it.
       setUser(details.user);
       setProfile(details);
       setToken((prev) => prev || "cookie");
+      // CSRF token is required for cookie-based write requests.
+      const csrf = await fetchCsrfToken();
+      setCsrfToken(csrf);
       return details;
     } catch {
       setUser(null);
       setProfile(null);
       setToken(null);
+      setCsrfToken(null);
       return null;
     } finally {
       setLoading(false);
@@ -48,17 +58,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-  // Try to hydrate session from stored token first; fall back to cookie-based auth.
-    const stored = typeof window !== "undefined" ? window.localStorage.getItem("aplite_token") : null;
-    if (stored) {
-      setToken(stored);
-      setAuthToken(stored);
-    }
+    // Rely on cookie-based auth; refreshProfile will set token to "cookie" when valid.
     void refreshProfile();
   }, []);
 
   const handleLogin = (payload: AuthResponse) => {
     setUser(payload.user);
+    // Token is only used for API clients; UI relies on HttpOnly cookies.
     setToken(payload.token || "cookie");
     if (payload.token) setAuthToken(payload.token);
     void refreshProfile();
@@ -72,12 +78,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAuthToken(null);
       if (typeof window !== "undefined") {
         try {
-          window.localStorage.removeItem("aplite_token");
           window.sessionStorage.removeItem("aplite_onboarding_session_v2"); // clear onboarding draft/progress
         } catch {
           // ignore storage errors on logout
         }
-        window.location.href = "/login";
       }
     });
   };

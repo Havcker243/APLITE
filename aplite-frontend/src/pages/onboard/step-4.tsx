@@ -1,23 +1,31 @@
-import React, { useState, useEffect } from "react";
+/**
+ * Onboarding step 4: bank rail and account details.
+ * Captures routing/account numbers used for payment accounts.
+ */
+
+import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
+import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
+
 import { OnboardingShell } from "../../components/onboarding/OnboardingShell";
 import { useAuth } from "../../utils/auth";
-import {
-  normalizeRouting,
-  useOnboardingWizard,
-} from "../../utils/onboardingWizard";
+import { normalizeRouting, useOnboardingWizard } from "../../utils/onboardingWizard";
 import { LoadingScreen } from "../../components/LoadingScreen";
+import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
+import { toast } from "sonner";
 
 export default function OnboardStep4() {
   const router = useRouter();
   const { token, loading } = useAuth();
   const { step4, setStep4, completedThrough, touchStep, markStepComplete } = useOnboardingWizard();
 
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
+  const [railType, setRailType] = useState<"ACH" | "WIRE_DOM" | "SWIFT">("ACH");
 
+  const [saving, setSaving] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -42,154 +50,120 @@ export default function OnboardStep4() {
 
   if (loading || !token || !mounted) return <LoadingScreen />;
 
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    setSaved(null);
-    setError(null);
     try {
-      setSaved("Saved locally");
+      toast.success("Saved");
       markStepComplete(4);
       router.push("/onboard/step-5");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to save step");
+      toast.error(err instanceof Error ? err.message : "Unable to save step");
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <OnboardingShell
-      title="Stage 4"
-      subtitle="Add at least one payout rail for this business."
-      activeStep={4}
-    >
-      {saved && (
-        <div className="status-pill" role="status" aria-live="polite">
-          {saved}
+    <OnboardingShell activeStep={4}>
+      <form className="space-y-6 animate-fade-in" onSubmit={handleSubmit}>
+        <div>
+          <h2 className="text-xl font-semibold text-foreground mb-2">Bank Rails</h2>
+          <p className="text-muted-foreground">Add your payout account.</p>
         </div>
-      )}
-      {error && (
-        <div className="error-box" role="alert" aria-live="assertive">
-          {error}
-        </div>
-      )}
 
-      <form className="card form-card" onSubmit={handleSubmit}>
-        <h2 style={{ marginTop: 0 }}>Bank Details</h2>
-        <p className="hero-subtitle">
-          Provide an account number and at least one routing identifier (ACH,
-          wire, or SWIFT).
-        </p>
-
-        <div
-          className="form-grid"
-          style={{ gridTemplateColumns: "1fr", marginTop: 14 }}
-        >
-          <div className="input-group">
-            <label className="input-label" htmlFor="bank_name">
-              Bank name
-            </label>
-            <input
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="bank_name">Bank name *</Label>
+            <Input
               id="bank_name"
-              className="input-control"
               value={step4.bank_name}
-              onChange={(e) =>
-                setStep4((p) => ({ ...p, bank_name: e.target.value }))
-              }
+              onChange={(e) => setStep4((p) => ({ ...p, bank_name: e.target.value }))}
               required
             />
           </div>
-          <div className="input-group">
-            <label className="input-label" htmlFor="account_number">
-              Account number
-            </label>
-            <input
+          <div className="space-y-2">
+            <Label htmlFor="account_number">Account number *</Label>
+            <Input
               id="account_number"
-              className="input-control mono"
+              className="font-mono"
               value={step4.account_number}
               onChange={(e) =>
                 setStep4((p) => ({
                   ...p,
-                  account_number: normalizeRouting(e.target.value, 32),
+                  account_number:
+                    railType === "SWIFT"
+                      ? e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 34)
+                      : normalizeRouting(e.target.value, 32),
                 }))
               }
               required
             />
           </div>
-          <div className="input-group">
-            <label className="input-label" htmlFor="ach_routing">
-              ACH routing (optional)
-            </label>
-            <input
-              id="ach_routing"
-              className="input-control mono"
-              value={step4.ach_routing}
-              onChange={(e) =>
-                setStep4((p) => ({
-                  ...p,
-                  ach_routing: normalizeRouting(e.target.value, 9),
-                }))
-              }
-              placeholder="9 digits"
-            />
+          <div className="space-y-2">
+            <Label>Rail type *</Label>
+            <Select value={railType} onValueChange={(value) => setRailType(value as "ACH" | "WIRE_DOM" | "SWIFT")}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ACH">ACH</SelectItem>
+                <SelectItem value="WIRE_DOM">Wire</SelectItem>
+                <SelectItem value="SWIFT">SWIFT</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-          <div className="input-group">
-            <label className="input-label" htmlFor="wire_routing">
-              Wire routing (optional)
-            </label>
-            <input
-              id="wire_routing"
-              className="input-control mono"
-              value={step4.wire_routing}
-              onChange={(e) =>
-                setStep4((p) => ({
-                  ...p,
-                  wire_routing: normalizeRouting(e.target.value, 34),
-                }))
-              }
-              placeholder="Digits only"
-            />
-          </div>
-          <div className="input-group">
-            <label className="input-label" htmlFor="swift">
-              SWIFT/BIC (optional)
-            </label>
-            <input
-              id="swift"
-              className="input-control mono"
-              value={step4.swift}
-              onChange={(e) =>
-                setStep4((p) => ({
-                  ...p,
-                  swift: e.target.value.toUpperCase().replace(/\s/g, ""),
-                }))
-              }
-              placeholder="8 or 11 chars"
-            />
-          </div>
+
+          {railType !== "SWIFT" && (
+            <div className="space-y-2">
+              <Label htmlFor="ach_routing">Routing number *</Label>
+              <Input
+                id="ach_routing"
+                className="font-mono"
+                value={railType === "WIRE_DOM" ? step4.wire_routing : step4.ach_routing}
+                onChange={(e) =>
+                  setStep4((p) => ({
+                    ...p,
+                    ach_routing: railType === "WIRE_DOM" ? p.ach_routing : normalizeRouting(e.target.value, 9),
+                    wire_routing: railType === "WIRE_DOM" ? normalizeRouting(e.target.value, 34) : p.wire_routing,
+                  }))
+                }
+                placeholder={railType === "WIRE_DOM" ? "Wire routing" : "ACH routing"}
+                required
+              />
+            </div>
+          )}
+
+          {railType === "SWIFT" && (
+            <div className="space-y-2">
+              <Label htmlFor="swift">SWIFT code *</Label>
+              <Input
+                id="swift"
+                className="font-mono"
+                value={step4.swift}
+                onChange={(e) =>
+                  setStep4((p) => ({
+                    ...p,
+                    swift: e.target.value.toUpperCase().replace(/\s/g, ""),
+                  }))
+                }
+                placeholder="8 or 11 chars"
+                required
+              />
+            </div>
+          )}
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 12,
-            marginTop: 18,
-          }}
-        >
-          <button
-            type="button"
-            className="button button-secondary"
-            onClick={() => router.push("/onboard/step-3")}
-          >
+        <div className="flex items-center justify-between mt-8 pt-6 border-t border-border">
+          <Button type="button" variant="outline" onClick={() => router.push("/onboard/step-3")}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
             Back
-          </button>
-          <button className="button" type="submit" disabled={saving}>
-            {saving && <span className="spinner" aria-hidden="true" />}
-            Save & Continue
-          </button>
+          </Button>
+          <Button type="submit" variant="hero" disabled={saving}>
+            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Continue
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
         </div>
       </form>
     </OnboardingShell>

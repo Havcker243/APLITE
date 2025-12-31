@@ -1,8 +1,18 @@
-import React, { useEffect, useMemo, useState } from "react";
+/**
+ * Public directory view for verified clients.
+ * Supports search and browsing of public organization profiles.
+ */
+
+import { useEffect, useMemo, useState } from "react";
+import { Building2, CheckCircle2, ChevronDown, ChevronUp, Search } from "lucide-react";
+
 import { fetchPublicClients } from "../utils/api";
+import DashboardLayout from "../components/DashboardLayout";
+import { Input } from "../components/ui/input";
+import { toast } from "sonner";
 
 type Client = {
-  id: number;
+  id: number | string;
   legal_name?: string;
   company_name?: string;
   country?: string;
@@ -13,184 +23,144 @@ type Client = {
   website?: string;
   industry?: string;
   description?: string;
+  upi?: string | null;
+  master_upi?: string | null;
 };
 
-export default function ClientsPage() {
-  const [query, setQuery] = useState("");
-  const [clients, setClients] = useState<Client[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [activeId, setActiveId] = useState<number | null>(null);
+const isBrowser = typeof window !== "undefined";
+let cachedClients: Client[] | null = null;
+let cachedClientsPromise: Promise<Client[]> | null = null;
 
-  async function load(search?: string) {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetchPublicClients(search);
-      setClients(res);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load clients");
-    } finally {
-      setLoading(false);
-    }
-  }
+export default function Clients() {
+  const [search, setSearch] = useState("");
+  const [expandedId, setExpandedId] = useState<string | number | null>(null);
+  const [clients, setClients] = useState<Client[]>([]);
 
   useEffect(() => {
-    void load();
+    if (isBrowser && cachedClients) {
+      setClients(cachedClients);
+      return;
+    }
+    if (isBrowser && cachedClientsPromise) {
+      cachedClientsPromise
+        .then((data) => {
+          setClients(data);
+        })
+        .catch((err) => {
+          toast.error(err instanceof Error ? err.message : "Unable to load clients");
+          setClients([]);
+        });
+      return;
+    }
+    const fetchPromise = fetchPublicClients();
+    if (isBrowser) cachedClientsPromise = fetchPromise;
+    fetchPromise
+      .then((res) => {
+        setClients(res);
+        if (isBrowser) {
+          cachedClients = res;
+          cachedClientsPromise = null;
+        }
+      })
+      .catch(() => {
+        if (isBrowser) cachedClientsPromise = null;
+        toast.error("Unable to load clients");
+        setClients([]);
+      });
   }, []);
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    void load(query.trim());
-  }
+  const normalized = useMemo(() => {
+    return clients.map((client) => {
+      const name = client.company_name || client.legal_name || "Unnamed client";
+      const country = client.country || "";
+      const industry = client.industry || "";
+      const website = client.website || "";
+      const description = client.description || client.summary || "";
+      const masterUPI = client.upi || client.master_upi || "";
+      return { ...client, name, country, industry, website, description, masterUPI };
+    });
+  }, [clients]);
 
-  const normalizedClients = useMemo(
-    () =>
-      clients.map((client) => {
-        const website = client.website
-          ? client.website.startsWith("http")
-            ? client.website
-            : `https://${client.website}`
-          : null;
-        const location = [client.state, client.country].filter(Boolean).join(", ");
-        const displayName = client.company_name || client.legal_name || "Unnamed client";
-        const status = client.status || "active";
-        return { ...client, website, location, displayName, status };
-      }),
-    [clients]
-  );
+  const filtered = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return normalized;
+    return normalized.filter((o) =>
+      o.name.toLowerCase().includes(query) || o.industry.toLowerCase().includes(query)
+    );
+  }, [normalized, search]);
 
   return (
-    <div className="page-container">
-      <section className="hero">
-        <div>
-          <p className="section-title">Directory</p>
-          <h1 className="hero-title">Verified clients</h1>
-          <p className="hero-subtitle">Browse public profiles for companies that completed onboarding.</p>
-        </div>
-      </section>
+    <DashboardLayout>
+      <div className="p-8">
+        <div className="max-w-3xl">
+          <div className="mb-8">
+            <h1 className="text-2xl font-semibold text-foreground mb-2">Clients Directory</h1>
+            <p className="text-muted-foreground">Browse verified organizations on Aplite.</p>
+          </div>
 
-      {error && (
-        <div className="error-box" role="alert" aria-live="assertive">
-          {error}
-        </div>
-      )}
+          <div className="relative mb-6">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by name or industry..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10"
+            />
+          </div>
 
-      <form onSubmit={handleSubmit} className="card form-card" style={{ maxWidth: 720 }}>
-        <div className="form-grid" style={{ gridTemplateColumns: "1fr" }}>
-          <input
-            className="input-control"
-            placeholder="Search by company name"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            aria-label="Search clients"
-          />
-          <button type="submit" className="button" disabled={loading}>
-            {loading && <span className="spinner" aria-hidden="true" />}
-            Search
-          </button>
-        </div>
-      </form>
-
-      <div style={{ marginTop: 20, display: "grid", gap: 10 }}>
-        {loading &&
-          Array.from({ length: 4 }).map((_, idx) => (
-            <div key={idx} className="card card--compact" style={{ minHeight: 150, opacity: 0.8, display: "grid", gap: 8 }}>
-              <div className="skeleton" style={{ width: "60%", height: 18 }} />
-              <div className="skeleton" style={{ width: "40%", height: 14 }} />
-              <div className="skeleton" style={{ width: "100%", height: 44 }} />
-              <div className="skeleton" style={{ width: "30%", height: 12 }} />
-            </div>
-          ))}
-        {!loading &&
-          normalizedClients.map((client) => {
-            const isOpen = activeId === client.id;
-            return (
-              <div
-                key={client.id}
-                style={{
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: 12,
-                  background: "rgba(255,255,255,0.02)",
-                  overflow: "hidden",
-                }}
-              >
+          <div className="space-y-3">
+            {filtered.map((org) => (
+              <div key={String(org.id)} className="bg-card border border-border rounded-xl overflow-hidden shadow-card">
                 <button
                   type="button"
-                  onClick={() => setActiveId(isOpen ? null : client.id)}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    width: "100%",
-                    padding: "14px 18px",
-                    border: "none",
-                    background: "transparent",
-                    color: "inherit",
-                    cursor: "pointer",
-                  }}
-                  aria-expanded={isOpen}
-                  aria-controls={`client-${client.id}`}
+                  className="w-full px-6 py-4 flex items-center justify-between text-left"
+                  onClick={() => setExpandedId(expandedId === org.id ? null : org.id)}
                 >
-                  <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
-                    <span className="section-title" style={{ margin: 0 }}>
-                      {client.displayName}
-                    </span>
-                    <span className="hero-subtitle">
-                      {client.location || "Location pending"}
-                      {client.established_year ? ` - Est. ${client.established_year}` : ""}
-                    </span>
-                  </span>
-                  <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <span className="status-pill status-pill--success">{client.status}</span>
-                    <span
-                      aria-hidden="true"
-                      style={{
-                        display: "inline-block",
-                        transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
-                        transition: "transform 220ms ease",
-                      }}
-                    >
-                      v
-                    </span>
-                  </span>
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center">
+                      <Building2 className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-foreground">{org.name}</span>
+                        <CheckCircle2 className="h-4 w-4 text-success" />
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {org.industry} - {org.country}
+                      </p>
+                    </div>
+                  </div>
+                  {expandedId === org.id ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
                 </button>
-
-                <div
-                  id={`client-${client.id}`}
-                  style={{
-                    maxHeight: isOpen ? 320 : 0,
-                    opacity: isOpen ? 1 : 0,
-                    overflow: "hidden",
-                    transition: "max-height 260ms ease, opacity 200ms ease",
-                    borderTop: "1px solid rgba(255,255,255,0.06)",
-                    background: "linear-gradient(120deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015))",
-                  }}
-                >
-                  <div style={{ padding: "16px 18px 18px", display: "grid", gap: 12 }}>
-                    <div className="hero-subtitle" style={{ margin: 0, maxHeight: 120, overflowY: "auto", paddingRight: 6 }}>
-                      {client.description || client.summary || "No public summary provided."}
-                    </div>
-                    <div style={{ display: "grid", gap: 6 }}>
-                      <div className="hero-subtitle">{client.industry || "Industry not specified"}</div>
-                      <div className="hero-subtitle">{client.country || "Global"}</div>
-                      <div className="hero-subtitle">Status: {client.status}</div>
-                    </div>
-                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                      {client.website && (
-                        <a href={client.website} target="_blank" rel="noreferrer" className="button button-secondary" style={{ marginTop: 0, padding: "8px 14px" }}>
-                          Visit site
-                        </a>
+                {expandedId === org.id && (
+                  <div className="px-6 pb-4 border-t border-border pt-4 animate-fade-in">
+                    <div className="space-y-2 text-sm">
+                      {org.website && (
+                        <p>
+                          <span className="text-muted-foreground">Website:</span> {org.website}
+                        </p>
+                      )}
+                      {org.description && (
+                        <p>
+                          <span className="text-muted-foreground">Description:</span> {org.description}
+                        </p>
+                      )}
+                      {org.masterUPI && (
+                        <p>
+                          <span className="text-muted-foreground">Master UPI:</span> <code className="font-mono">{org.masterUPI}</code>
+                        </p>
                       )}
                     </div>
                   </div>
-                </div>
+                )}
               </div>
-            );
-          })}
-
-        {!loading && !normalizedClients.length && <div className="hero-subtitle">No clients found.</div>}
+            ))}
+            {filtered.length === 0 && (
+              <p className="text-center text-muted-foreground py-8">No organizations found.</p>
+            )}
+          </div>
+        </div>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }

@@ -1,8 +1,11 @@
 """
-JSON-backed data helpers for the onboarding service.
+Data-access helpers for the Aplite backend.
 
-Stores business and payment account data inside data/store.json so that
-records persist across restarts.
+This module centralizes all Postgres queries used by the FastAPI app, including
+auth sessions, onboarding flow persistence, and payment account storage. The
+functions are intentionally flat to keep the MVP easy to scan; as the project
+grows, they can be split into domain-specific files while keeping this module
+as a compatibility re-export.
 """
 
 from __future__ import annotations
@@ -23,40 +26,6 @@ from app.utils import crypto
 from app.utils.email import send_email
 from app.utils.security import hash_session_token
 from app.utils.upi import generate_core_entity_id, generate_upi
-
-"""
-This module is the MVP data-access layer.
-
-It is intentionally "flat" (one file) for MVP speed, and contains:
-- User + session helpers
-- OTP helpers
-- Businesses + payment accounts
-- Onboarding/KYB flow persistence
-- File metadata helpers for onboarding uploads
-
-As the project grows, these functions should be split into smaller modules
-(e.g. `auth_queries.py`, `business_queries.py`, `onboarding_queries.py`)
-while keeping `queries.py` as a compatibility re-export.
-"""
-
-
-class BusinessRecord(TypedDict, total=False):
-    id: int
-    user_id: int
-    parent_upi: str
-    upi: str
-    payment_account_id: int
-    rails: List[str]
-    core_entity_id: str
-    legal_name: str
-    ein: str
-    business_type: str
-    website: Optional[str]
-    address: str
-    country: str
-    verification_status: str
-    created_at: str
-    status: str
 
 
 class PaymentAccountRecord(TypedDict, total=False):
@@ -170,6 +139,18 @@ class VerificationAttemptRecord(TypedDict, total=False):
     verified_at: Optional[str]
 
 
+class VerificationReviewRecord(TypedDict, total=False):
+    id: str
+    session_id: str
+    org_id: str
+    user_id: int
+    method: str
+    status: str
+    reason: Optional[str]
+    reviewed_by: Optional[str]
+    reviewed_at: str
+
+
 def _next_payment_index_for_org(org_id: str, *, conn: psycopg2.extensions.connection | None = None) -> int:
     """Return the next payment_index for an org's accounts."""
     params = (str(org_id),)
@@ -202,58 +183,6 @@ def _decrypt_payment_account(row: Optional[PaymentAccountRecord]) -> Optional[Pa
             continue
     decrypted.pop("enc", None)
     return decrypted
-
-
-def create_business(*, conn: psycopg2.extensions.connection | None = None, commit: bool = True, **payload: Any) -> int:
-    """Persist a business row and return its ID."""
-    def _insert(target_conn: psycopg2.extensions.connection) -> int:
-        with target_conn.cursor() as cur:
-            cur.execute(
-                """
-                insert into businesses
-                (user_id, parent_upi, upi, payment_account_id, rails, core_entity_id, legal_name, ein, business_type,
-                 website, address, country, verification_status, status, created_at)
-                values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, now())
-                returning id
-                """,
-                (
-                    payload["user_id"],
-                    payload["parent_upi"],
-                    payload["upi"],
-                    payload["payment_account_id"],
-                    payload.get("rails", []),
-                    payload["core_entity_id"],
-                    payload["legal_name"],
-                    payload["ein"],
-                    payload["business_type"],
-                    payload.get("website"),
-                    payload["address"],
-                    payload["country"],
-                    payload["verification_status"],
-                    payload.get("status", "active"),
-                ),
-            )
-            row = cur.fetchone()
-            return int(row["id"])
-
-    if conn is None:
-        with get_connection() as conn_local:
-            business_id = _insert(conn_local)
-            conn_local.commit()
-            return business_id
-
-    business_id = _insert(conn)
-    if commit:
-        conn.commit()
-    return business_id
-
-
-def update_business_status(business_id: int, *, status: str) -> Optional[BusinessRecord]:
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("update businesses set status = %s where id = %s returning *", (status, business_id))
-            conn.commit()
-            return cur.fetchone()
 
 
 def create_payment_account(*, conn: psycopg2.extensions.connection | None = None, commit: bool = True, **payload: Any) -> int:
@@ -382,13 +311,6 @@ def update_payment_account_details(
             return _decrypt_payment_account(row) if row else None
 
 
-def list_businesses() -> List[BusinessRecord]:
-    """Return all businesses (newest first)."""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("select * from businesses order by id desc")
-            return cur.fetchall()
-
 def _table_exists(table_name: str) -> bool:
     """
     Best-effort check for whether a table exists in the current database.
@@ -437,22 +359,16 @@ def _list_public_clients_sql_verified_users(*, search: Optional[str], limit: int
             )
             return cur.fetchall()
 
-def _list_public_clients_sql_verified_businesses(*, search: Optional[str], limit: int) -> List[Dict[str, Any]]:
-    # Legacy path unused in org-centric model; fall back to org query.
-    return _list_public_clients_sql_verified_users(search=search, limit=limit)
-
 def list_public_clients(*, search: Optional[str], limit: int) -> List[Dict[str, Any]]:
     """
     Return a public directory of verified clients (companies).
 
     Primary implementation uses a single SQL query for performance.
     If anything goes wrong (schema drift during MVP development, etc.),
-    it falls back to a slower Python loop to avoid hard 500s.
+    it returns an empty list to avoid hard 500s.
     """
     try:
-        if _table_exists("onboarding_sessions"):
-            return _list_public_clients_sql_verified_users(search=search, limit=limit)
-        return _list_public_clients_sql_verified_businesses(search=search, limit=limit)
+        return _list_public_clients_sql_verified_users(search=search, limit=limit)
     except Exception:
         # Ensure the failed transaction doesn't poison the connection before fallback.
         try:
@@ -460,92 +376,7 @@ def list_public_clients(*, search: Optional[str], limit: int) -> List[Dict[str, 
                 conn.rollback()
         except Exception:
             pass
-        results: List[Dict[str, Any]] = []
-        for biz in list_businesses():
-            if biz.get("status") == "deactivated":
-                continue
-            owner = get_user_by_id(biz.get("user_id")) or {}
-            verified = False
-            if owner.get("id"):
-                try:
-                    verified = is_user_verified(int(owner["id"]))
-                except Exception:
-                    verified = False
-            if owner.get("id") and not verified:
-                continue
-            display_name = owner.get("company_name") or biz.get("legal_name") or ""
-            if search and search.lower() not in display_name.lower():
-                continue
-            results.append(
-                {
-                    "id": biz.get("id"),
-                    "legal_name": biz.get("legal_name"),
-                    "company_name": display_name,
-                    "country": biz.get("country"),
-                    "state": owner.get("state"),
-                    "summary": owner.get("summary") or "",
-                    "established_year": owner.get("established_year"),
-                    "status": biz.get("status", "active"),
-                    "website": biz.get("website"),
-                    "industry": None,
-                    "description": None,
-                }
-            )
-            if len(results) >= int(limit):
-                break
-        return results
-
-
-def list_businesses_for_user(user_id: int, *, limit: int | None = None, before_id: int | None = None) -> List[BusinessRecord]:
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            params: list[Any] = [user_id]
-            where = "where user_id = %s"
-            if before_id is not None:
-                where += " and id < %s"
-                params.append(int(before_id))
-
-            sql = f"select * from businesses {where} order by id desc"
-            if limit is not None:
-                sql += " limit %s"
-                params.append(int(limit))
-            cur.execute(sql, tuple(params))
-            return cur.fetchall()
-
-
-def get_business_by_upi(upi: str) -> Optional[BusinessRecord]:
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("select * from businesses where upi = %s", (upi,))
-            return cur.fetchone()
-
-
-def get_user_business_by_upi(user_id: int, upi: str) -> Optional[BusinessRecord]:
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("select * from businesses where user_id = %s and upi = %s", (user_id, upi))
-            return cur.fetchone()
-
-
-def get_business_by_ein(ein: str) -> Optional[BusinessRecord]:
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("select * from businesses where ein = %s", (ein,))
-            return cur.fetchone()
-
-
-def get_user_business_by_ein(user_id: int, ein: str) -> Optional[BusinessRecord]:
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("select * from businesses where user_id = %s and ein = %s", (user_id, ein))
-            return cur.fetchone()
-
-
-def get_business_by_core_entity_id(core_entity_id: str) -> Optional[BusinessRecord]:
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("select * from businesses where core_entity_id = %s", (core_entity_id,))
-            return cur.fetchone()
+        return []
 
 
 def get_payment_account(
@@ -651,17 +482,18 @@ def create_child_upi(
     org_id: str,
     payment_account_id: int,
     upi: str,
+    label: str | None = None,
     status: str = "active",
 ) -> str:
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                insert into child_upis (org_id, payment_account_id, upi, status)
-                values (%s, %s, %s, %s)
+                insert into child_upis (org_id, payment_account_id, upi, label, status)
+                values (%s, %s, %s, %s, %s)
                 returning id
                 """,
-                (str(org_id), int(payment_account_id), upi, status),
+                (str(org_id), int(payment_account_id), upi, label, status),
             )
             row = cur.fetchone() or {}
             conn.commit()
@@ -707,6 +539,7 @@ def list_child_upis_for_org(
                 select
                   cu.id as child_upi_id,
                   cu.upi,
+                  cu.label,
                   cu.status,
                   cu.created_at,
                   cu.disabled_at,
@@ -727,18 +560,18 @@ def list_child_upis_for_org(
 
 
 def _set_child_upi_status(child_upi_id: str, *, status: str) -> Optional[ChildUpiRecord]:
-    disabled_at_sql = "now()" if status == "disabled" else "null"
+    disable_now = status == "disabled"
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                f"""
+                """
                 update child_upis
                 set status = %s,
-                    disabled_at = {disabled_at_sql}
+                    disabled_at = case when %s then now() else null end
                 where id = %s
                 returning *
                 """,
-                (status, str(child_upi_id)),
+                (status, disable_now, str(child_upi_id)),
             )
             row = cur.fetchone()
             conn.commit()
@@ -844,13 +677,6 @@ def get_user_by_master_upi(upi: str) -> Optional[UserRecord]:
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("select * from users where master_upi = %s", (upi,))
-            return cur.fetchone()
-
-
-def get_business_by_id(business_id: int) -> Optional[BusinessRecord]:
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("select * from businesses where id = %s", (business_id,))
             return cur.fetchone()
 
 
@@ -992,10 +818,26 @@ def reset_active_onboarding(user_id: int) -> bool:
                 return False
             org_id = session.get("org_id")
 
+            # Best-effort cleanup of dependent onboarding artifacts.
+            try:
+                if _table_exists("identity_verifications"):
+                    cur.execute("delete from identity_verifications where session_id = %s", (str(session["id"]),))
+                if _table_exists("verification_attempts"):
+                    cur.execute("delete from verification_attempts where session_id = %s", (str(session["id"]),))
+                if _table_exists("verification_calls"):
+                    cur.execute("delete from verification_calls where session_id = %s", (str(session["id"]),))
+                if org_id and _table_exists("child_upis"):
+                    cur.execute("delete from child_upis where org_id = %s", (str(org_id),))
+                if org_id and _table_exists("payment_accounts"):
+                    cur.execute("delete from payment_accounts where org_id = %s", (str(org_id),))
+            except Exception:
+                pass
+
             cur.execute("delete from onboarding_sessions where id = %s", (str(session["id"]),))
             if org_id:
                 cur.execute("delete from organizations where id = %s and user_id = %s", (str(org_id), user_id))
             conn.commit()
+            _purge_onboarding_uploads_for_user(user_id)
             return True
 
 
@@ -1561,6 +1403,105 @@ def onboarding_file_exists(*, file_id: str, user_id: int, allowed_prefixes: tupl
     return bin_path.startswith(base + os.sep) and os.path.exists(bin_path)
 
 
+def get_onboarding_file_metadata(file_id: str) -> Optional[Dict[str, Any]]:
+    """Load onboarding upload metadata for a file id."""
+    if not _is_valid_onboarding_file_id(file_id, allowed_prefixes=("id", "form")):
+        return None
+    base = onboarding_upload_base_dir()
+    meta_path = os.path.abspath(os.path.join(base, f"{file_id}.json"))
+    if not meta_path.startswith(base + os.sep) or not os.path.exists(meta_path):
+        return None
+    try:
+        with open(meta_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def get_onboarding_file_bytes(file_id: str) -> tuple[bytes, str | None, str | None] | None:
+    """
+    Fetch onboarding upload bytes and metadata (content_type, filename).
+    """
+    meta = get_onboarding_file_metadata(file_id)
+    content_type = meta.get("content_type") if isinstance(meta, dict) else None
+    filename = meta.get("filename") if isinstance(meta, dict) else None
+
+    bucket = os.getenv("DATABASE_BUCKET_NAME")
+    endpoint = os.getenv("DATABASE_BUCKET_S3_ENDPOINT")
+    access_key = os.getenv("DATABASE_BUCKET_S3_ACCESS_KEY_ID")
+    secret_key = os.getenv("DATABASE_BUCKET_S3_SECRET_ACCESS_KEY")
+    region = os.getenv("DATABASE_BUCKET_S3_REGION", "us-east-1")
+    if bucket and endpoint and access_key and secret_key:
+        try:
+            import boto3
+            from botocore.client import Config as BotoConfig
+
+            s3 = boto3.client(
+                "s3",
+                endpoint_url=endpoint,
+                region_name=region,
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                config=BotoConfig(signature_version="s3v4"),
+            )
+            key_prefix = "formations" if file_id.startswith("form_") else "ids"
+            key = f"{key_prefix}/{file_id}.bin"
+            obj = s3.get_object(Bucket=bucket, Key=key)
+            body = obj.get("Body")
+            if body is None:
+                return None
+            return body.read(), content_type, filename
+        except Exception:
+            return None
+
+    base = onboarding_upload_base_dir()
+    bin_path = os.path.abspath(os.path.join(base, f"{file_id}.bin"))
+    if not bin_path.startswith(base + os.sep) or not os.path.exists(bin_path):
+        return None
+    try:
+        with open(bin_path, "rb") as f:
+            return f.read(), content_type, filename
+    except Exception:
+        return None
+
+
+def _purge_onboarding_uploads_for_user(user_id: int) -> None:
+    """
+    Best-effort cleanup of onboarding upload metadata + local files for a user.
+
+    Note: If files are stored in S3, this only removes the local metadata.
+    """
+    base = onboarding_upload_base_dir()
+    if not os.path.isdir(base):
+        return
+    try:
+        for name in os.listdir(base):
+            if not name.endswith(".json"):
+                continue
+            meta_path = os.path.abspath(os.path.join(base, name))
+            if not meta_path.startswith(base + os.sep):
+                continue
+            try:
+                with open(meta_path, "r", encoding="utf-8") as f:
+                    meta = json.load(f)
+                if int(meta.get("user_id", -1)) != int(user_id):
+                    continue
+            except Exception:
+                continue
+            try:
+                os.remove(meta_path)
+            except Exception:
+                pass
+            bin_path = os.path.abspath(os.path.join(base, name.replace(".json", ".bin")))
+            if bin_path.startswith(base + os.sep) and os.path.exists(bin_path):
+                try:
+                    os.remove(bin_path)
+                except Exception:
+                    pass
+    except Exception:
+        return
+
+
 def set_onboarding_formation_documents(
     session_id: uuid.UUID,
     documents: list[dict],
@@ -1574,6 +1515,32 @@ def set_onboarding_formation_documents(
             cur.execute(
                 "update onboarding_sessions set step_statuses = jsonb_set(coalesce(step_statuses,'{}'::jsonb), '{formation_documents}', %s::jsonb, true), last_saved_at=now() where id=%s",
                 (json.dumps(documents), str(session_id)),
+            )
+
+    if conn is None:
+        with get_connection() as conn_local:
+            _update(conn_local)
+            conn_local.commit()
+        return
+
+    _update(conn)
+    if commit:
+        conn.commit()
+
+
+def set_onboarding_verification_method(
+    session_id: uuid.UUID,
+    *,
+    method: str,
+    conn: psycopg2.extensions.connection | None = None,
+    commit: bool = True,
+) -> None:
+    """Persist the verification method on the onboarding session."""
+    def _update(target_conn: psycopg2.extensions.connection) -> None:
+        with target_conn.cursor() as cur:
+            cur.execute(
+                "update onboarding_sessions set step_statuses = jsonb_set(coalesce(step_statuses,'{}'::jsonb), '{verification_method}', to_jsonb(%s::text), true), last_saved_at=now() where id=%s",
+                (method, str(session_id)),
             )
 
     if conn is None:
@@ -1622,45 +1589,6 @@ def create_identity_verification(
     _insert(conn)
     if commit:
         conn.commit()
-
-
-def create_bank_rail_mapping(
-    *,
-    mapping_id: uuid.UUID,
-    session_id: uuid.UUID,
-    org_id: uuid.UUID,
-    user_id: int,
-    bank_name: str,
-    account_number: str,
-    last4: str,
-    ach_routing: Optional[str],
-    wire_routing: Optional[str],
-    swift: Optional[str],
-) -> None:
-    nonce, ciphertext = crypto.encrypt_value(account_number)
-    enc = {"n": nonce, "c": ciphertext}
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                insert into bank_rail_mappings
-                (id, session_id, org_id, user_id, bank_name, account_last4, account_number_enc, ach_routing, wire_routing, swift, created_at)
-                values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, now())
-                """,
-                (
-                    str(mapping_id),
-                    str(session_id),
-                    str(org_id),
-                    user_id,
-                    bank_name,
-                    last4,
-                    json.dumps(enc),
-                    ach_routing,
-                    wire_routing,
-                    swift,
-                ),
-            )
-            conn.commit()
 
 
 def create_verification_otp(*, user_id: int, ttl: Any) -> tuple[str, str]:
@@ -1781,6 +1709,108 @@ def mark_verification_attempt_verified(attempt_id: uuid.UUID) -> None:
             conn.commit()
 
 
+def create_verification_review(
+    *,
+    review_id: uuid.UUID,
+    session_id: uuid.UUID,
+    org_id: uuid.UUID,
+    user_id: int,
+    method: str,
+    status: str,
+    reason: Optional[str],
+    reviewed_by: Optional[str],
+) -> None:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                insert into verification_reviews
+                (id, session_id, org_id, user_id, method, status, reason, reviewed_by, reviewed_at)
+                values (%s,%s,%s,%s,%s,%s,%s,%s, now())
+                """,
+                (str(review_id), str(session_id), str(org_id), user_id, method, status, reason, reviewed_by),
+            )
+            conn.commit()
+
+
+def get_latest_verification_review(session_id: uuid.UUID) -> Optional[VerificationReviewRecord]:
+    if not _table_exists("verification_reviews"):
+        return None
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select *
+                from verification_reviews
+                where session_id = %s
+                order by reviewed_at desc
+                limit 1
+                """,
+                (str(session_id),),
+            )
+            return cur.fetchone()
+
+
+def list_verification_reviews(session_id: uuid.UUID) -> List[VerificationReviewRecord]:
+    if not _table_exists("verification_reviews"):
+        return []
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select *
+                from verification_reviews
+                where session_id = %s
+                order by reviewed_at desc
+                """,
+                (str(session_id),),
+            )
+            return cur.fetchall()
+
+
+def get_identity_verification_by_session(session_id: uuid.UUID) -> Optional[Dict[str, Any]]:
+    if not _table_exists("identity_verifications"):
+        return None
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select *
+                from identity_verifications
+                where session_id = %s
+                order by created_at desc
+                limit 1
+                """,
+                (str(session_id),),
+            )
+            return cur.fetchone()
+
+
+def list_pending_verification_queue() -> List[Dict[str, Any]]:
+    if not _table_exists("onboarding_sessions"):
+        return []
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select
+                    os.*,
+                    o.legal_name,
+                    o.verification_status as org_verification_status,
+                    o.status as org_status,
+                    u.email,
+                    u.first_name,
+                    u.last_name
+                from onboarding_sessions os
+                join organizations o on o.id = os.org_id
+                join users u on u.id = os.user_id
+                where os.state in ('PENDING_CALL', 'PENDING_REVIEW')
+                order by os.last_saved_at desc
+                """
+            )
+            return cur.fetchall()
+
+
 def send_verification_message_email(*, to_address: str, code: str) -> None:
     send_email(to_address=to_address, subject="Your Aplite verification code", body=f"Your verification code is {code}. It expires in 10 minutes.")
 
@@ -1830,6 +1860,7 @@ def complete_onboarding_tx(
     """
     org_id = uuid.uuid4()
     session_id = uuid.uuid4()
+    # Owners go through call review; authorized reps go to admin review queue.
     pending_call = verification_method == "call"
 
     with transaction() as conn:
@@ -1864,6 +1895,8 @@ def complete_onboarding_tx(
         if formation_docs:
             set_onboarding_formation_documents(session_id=session_id, documents=formation_docs, conn=conn, commit=False)
 
+        set_onboarding_verification_method(session_id=session_id, method=verification_method, conn=conn, commit=False)
+
         update_onboarding_role(
             session_id=session_id,
             user_id=user_id,
@@ -1890,6 +1923,7 @@ def complete_onboarding_tx(
             commit=False,
         )
 
+        # Select one primary rail for the account based on provided routing fields.
         rail = "ACH" if bank_data.get("ach_routing") else ("WIRE_DOM" if bank_data.get("wire_routing") else "SWIFT")
         if not (bank_data.get("ach_routing") or bank_data.get("wire_routing") or bank_data.get("swift")):
             raise ValueError("Provide at least one rail (ACH routing, wire routing, or SWIFT).")
@@ -1940,22 +1974,16 @@ def complete_onboarding_tx(
                 commit=False,
             )
         else:
-            if not master_upi:
-                raise RuntimeError("Missing master UPI for user.")
-            core_id = generate_core_entity_id()
-            upi = generate_upi(core_id, payment_index=payment_index, user_id=user_id)
-            set_organization_upi(
+            set_organization_verification_status(
                 str(org_id),
-                upi,
-                payment_account_id,
-                verification_status="verified",
-                status="active",
+                verification_status="pending_review",
+                status="pending_review",
                 conn=conn,
                 commit=False,
             )
             advance_onboarding_session(
                 session_id=session_id,
-                state="VERIFIED",
+                state="PENDING_REVIEW",
                 next_step=5,
                 conn=conn,
                 commit=False,
@@ -1966,7 +1994,7 @@ def complete_onboarding_tx(
         "session_id": str(session_id),
         "upi": upi,
         "payment_account_id": payment_account_id,
-        "status": "PENDING_CALL" if pending_call else "VERIFIED",
+        "status": "PENDING_CALL" if pending_call else "PENDING_REVIEW",
     }
 
 
@@ -2002,6 +2030,7 @@ def complete_onboarding_and_issue_identifier(session_id: uuid.UUID) -> str:
     if not parent_upi:
         raise RuntimeError("Missing master UPI for user.")
 
+    # Org UPI is derived from the owner namespace and the account's payment_index.
     upi = generate_upi(core_id, payment_index, user_id=owner_user_id)
 
     set_organization_upi(str(org["id"]), upi, payment_account_id, verification_status="verified", status="active")

@@ -1,12 +1,24 @@
-import React, { useState } from "react";
+/**
+ * Onboarding step 1: organization details and formation docs.
+ * Collects legal info, address, and optional documentation uploads.
+ */
+
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
+import { ArrowRight, Loader2 } from "lucide-react";
+
 import { OnboardingShell } from "../../components/onboarding/OnboardingShell";
-// Step 1 is now local-only; final submit happens on the Verify page.
 import { useAuth } from "../../utils/auth";
 import { onboardingUploadFormation } from "../../utils/api";
 import { COUNTRIES, isCanada, isUnitedStates, US_STATES, CA_PROVINCES } from "../../utils/geo";
 import { FormationDocType, normalizeEIN, useOnboardingWizard } from "../../utils/onboardingWizard";
 import { LoadingScreen } from "../../components/LoadingScreen";
+import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
+import { Textarea } from "../../components/ui/textarea";
+import { toast } from "sonner";
 
 const FORMATION_DOCS: Record<
   string,
@@ -49,52 +61,39 @@ export default function OnboardStep1() {
   const {
     step1,
     setStep1,
-    step2,
-    setStep2,
-    step3,
-    setStep3,
-    step4,
-    setStep4,
-    verify,
     refreshSession,
-    currentStep,
-    sessionReady,
-    clearDraft,
     touchStep,
     markStepComplete,
   } = useOnboardingWizard();
 
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   const bizIsUS = isUnitedStates(step1.country);
   const bizIsCA = isCanada(step1.country);
   const formationConfig = FORMATION_DOCS[step1.entity_type] || { required: false, options: [] };
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (loading || !token) return;
-    // Fire-and-forget to see if already verified; do not block render.
     void refreshSession();
   }, [loading, token, refreshSession]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     touchStep(1);
   }, [touchStep]);
 
-  const today = React.useMemo(() => new Date().toISOString().split("T")[0], []);
+  const today = useMemo(() => new Date().toISOString().split("T")[0], []);
 
   if (loading || !token) return <LoadingScreen />;
 
-  function updateFormationDoc(doc_type: FormationDocType, updates: { file?: File; file_id?: string }) {
+  function updateFormationDoc(docType: FormationDocType, updates: { file?: File; file_id?: string }) {
     setStep1((prev) => {
       const docs = prev.formation_documents || [];
-      const idx = docs.findIndex((doc) => doc.doc_type === doc_type);
+      const idx = docs.findIndex((doc) => doc.doc_type === docType);
       const nextDocs = [...docs];
       if (idx >= 0) {
-        nextDocs[idx] = { ...nextDocs[idx], ...updates, doc_type };
+        nextDocs[idx] = { ...nextDocs[idx], ...updates, doc_type: docType };
       } else {
-        nextDocs.push({ doc_type, ...updates });
+        nextDocs.push({ doc_type: docType, ...updates });
       }
       return { ...prev, formation_documents: nextDocs };
     });
@@ -103,8 +102,6 @@ export default function OnboardStep1() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    setSaved(null);
-    setError(null);
     try {
       const industry = step1.industry === "Other" ? step1.industry_other : step1.industry;
       if (step1.industry === "Other" && !step1.industry_other.trim()) {
@@ -119,162 +116,119 @@ export default function OnboardStep1() {
         }
         for (const doc of provided) {
           if (doc.file && !doc.file_id) {
-            // Upload now so the final submit only sends file_id references.
             const res = await onboardingUploadFormation(doc.file, doc.doc_type);
             updateFormationDoc(doc.doc_type, { file_id: res.file_id, file: undefined });
           }
         }
       }
-      // Only validate required fields for Step 1; final submit happens on Verify.
-      setSaved("Saved locally");
+      toast.success("Saved");
       markStepComplete(1);
       router.push("/onboard/step-2");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to save step");
+      toast.error(err instanceof Error ? err.message : "Unable to save step");
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <OnboardingShell title="Stage 1" subtitle="Establish your legal entity. Address becomes read-only after submission." activeStep={1}>
-      {saved && (
-        <div className="status-pill" role="status" aria-live="polite">
-          {saved}
+    <OnboardingShell activeStep={1}>
+      <form className="space-y-6 animate-fade-in" onSubmit={handleSubmit}>
+        <div>
+          <h2 className="text-xl font-semibold text-foreground mb-2">Business Identity</h2>
+          <p className="text-muted-foreground">Tell us about your business.</p>
         </div>
-      )}
-      {error && (
-        <div className="error-box" role="alert" aria-live="assertive">
-          {error}
-        </div>
-      )}
 
-      <form className="card form-card" onSubmit={handleSubmit}>
-        <h2 style={{ marginTop: 0 }}>Establish Legal Entity</h2>
-
-        <div className="form-section">
-          <p className="section-title">Business identity</p>
-          <div className="form-grid" style={{ gridTemplateColumns: "1fr", marginTop: 12 }}>
-            <div className="input-group">
-              <label className="input-label" htmlFor="legal_name">
-                Legal name
-              </label>
-              <input id="legal_name" className="input-control" value={step1.legal_name} onChange={(e) => setStep1((p) => ({ ...p, legal_name: e.target.value }))} required />
+        <div className="space-y-6">
+          <section className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="legal_name">Legal entity name *</Label>
+              <Input id="legal_name" value={step1.legal_name} onChange={(e) => setStep1((p) => ({ ...p, legal_name: e.target.value }))} required />
             </div>
-            <div className="input-group">
-              <label className="input-label" htmlFor="dba">
-                DBA (optional)
-              </label>
-              <input id="dba" className="input-control" value={step1.dba} onChange={(e) => setStep1((p) => ({ ...p, dba: e.target.value }))} />
+            <div className="space-y-2">
+              <Label htmlFor="dba">DBA (optional)</Label>
+              <Input id="dba" value={step1.dba} onChange={(e) => setStep1((p) => ({ ...p, dba: e.target.value }))} />
             </div>
-            <div className="input-group">
-              <label className="input-label" htmlFor="ein">
-                EIN
-              </label>
-              <input
-                id="ein"
-                className="input-control mono"
-                value={step1.ein}
-                onChange={(e) => setStep1((p) => ({ ...p, ein: normalizeEIN(e.target.value) }))}
-                placeholder="12-3456789"
-                required
-              />
-              <span className="hero-subtitle" style={{ fontSize: "0.85rem" }}>
-                Format: NN-NNNNNNN
-              </span>
-            </div>
-            <div className="input-group">
-              <label className="input-label" htmlFor="formation_date">
-                Formation date
-              </label>
-              <input
-                id="formation_date"
-                type="date"
-                className="input-control"
-                value={step1.formation_date}
-                max={today}
-                onChange={(e) => setStep1((p) => ({ ...p, formation_date: e.target.value }))}
-                required
-              />
-            </div>
-            <div className="input-group">
-              <label className="input-label" htmlFor="formation_state">
-                Formation state
-              </label>
-              <input
-                id="formation_state"
-                list={bizIsUS ? "formation-states-us" : bizIsCA ? "formation-provinces-ca" : undefined}
-                className="input-control"
-                value={step1.formation_state}
-                onChange={(e) => setStep1((p) => ({ ...p, formation_state: e.target.value }))}
-                placeholder={bizIsUS ? "CA" : bizIsCA ? "ON" : "State / Region"}
-                required
-              />
-              {bizIsUS && (
-                <datalist id="formation-states-us">
-                  {US_STATES.map((s) => (
-                    <option key={s} value={s} />
-                  ))}
-                </datalist>
-              )}
-              {bizIsCA && (
-                <datalist id="formation-provinces-ca">
-                  {CA_PROVINCES.map((p) => (
-                    <option key={p} value={p} />
-                  ))}
-                </datalist>
-              )}
-            </div>
-            <div className="input-group">
-              <label className="input-label" htmlFor="entity_type">
-                Entity type
-              </label>
-              <select
-                id="entity_type"
-                className="input-control"
+            <div className="space-y-2">
+              <Label htmlFor="entity_type">Business type *</Label>
+              <Select
                 value={step1.entity_type}
-                onChange={(e) => setStep1((p) => ({ ...p, entity_type: e.target.value, formation_documents: [] }))}
+                onValueChange={(value) => setStep1((p) => ({ ...p, entity_type: value, formation_documents: [] }))}
               >
-                <option value="LLC">LLC</option>
-                <option value="C-Corp">C-Corp</option>
-                <option value="S-Corp">S-Corp</option>
-                <option value="Partnership">Partnership</option>
-                <option value="Non-Profit">Non-Profit</option>
-                <option value="Sole Proprietor">Sole Proprietor</option>
-              </select>
+                <SelectTrigger id="entity_type">
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="LLC">LLC</SelectItem>
+                  <SelectItem value="C-Corp">Corporation</SelectItem>
+                  <SelectItem value="S-Corp">S Corporation</SelectItem>
+                  <SelectItem value="Partnership">Partnership</SelectItem>
+                  <SelectItem value="Non-Profit">Non-Profit</SelectItem>
+                  <SelectItem value="Sole Proprietor">Sole Proprietor</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          </div>
-        </div>
-
-        <div className="form-section">
-          <p className="section-title">Legal address</p>
-          <div className="form-grid" style={{ gridTemplateColumns: "1fr", marginTop: 12 }}>
-            <div className="input-group">
-              <label className="input-label" htmlFor="street1">
-                Street 1
-              </label>
-              <input id="street1" className="input-control" value={step1.street1} onChange={(e) => setStep1((p) => ({ ...p, street1: e.target.value }))} required />
+            <div className="space-y-2">
+              <Label htmlFor="industry">Industry *</Label>
+              <Select value={step1.industry} onValueChange={(value) => setStep1((p) => ({ ...p, industry: value }))}>
+                <SelectTrigger id="industry">
+                  <SelectValue placeholder="Select industry" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Software">Software</SelectItem>
+                  <SelectItem value="Fintech">Fintech</SelectItem>
+                  <SelectItem value="E-commerce">E-commerce</SelectItem>
+                  <SelectItem value="Marketplace">Marketplace</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <div className="input-group">
-              <label className="input-label" htmlFor="street2">
-                Street 2 (optional)
-              </label>
-              <input id="street2" className="input-control" value={step1.street2} onChange={(e) => setStep1((p) => ({ ...p, street2: e.target.value }))} />
+            {step1.industry === "Other" && (
+              <div className="space-y-2">
+                <Label htmlFor="industry_other">Specify industry *</Label>
+                <Input id="industry_other" value={step1.industry_other} onChange={(e) => setStep1((p) => ({ ...p, industry_other: e.target.value }))} required />
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="country">Country *</Label>
+              <Input
+                id="country"
+                list="countries"
+                value={step1.country}
+                onChange={(e) => setStep1((p) => ({ ...p, country: e.target.value, state: "", formation_state: "" }))}
+                placeholder="United States"
+                required
+              />
+              <datalist id="countries">
+                {COUNTRIES.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
             </div>
-            <div className="input-group">
-              <label className="input-label" htmlFor="city">
-                City
-              </label>
-              <input id="city" className="input-control" value={step1.city} onChange={(e) => setStep1((p) => ({ ...p, city: e.target.value }))} required />
+            <div className="space-y-2">
+              <Label htmlFor="street1">Address *</Label>
+              <Textarea
+                id="street1"
+                rows={3}
+                value={step1.street1}
+                onChange={(e) => setStep1((p) => ({ ...p, street1: e.target.value }))}
+                placeholder="Street, city, state, zip"
+                required
+              />
             </div>
-            <div className="input-group">
-              <label className="input-label" htmlFor="state">
-                State
-              </label>
-              <input
+            <div className="space-y-2">
+              <Label htmlFor="street2">Address line 2 (optional)</Label>
+              <Input id="street2" value={step1.street2} onChange={(e) => setStep1((p) => ({ ...p, street2: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="city">City *</Label>
+              <Input id="city" value={step1.city} onChange={(e) => setStep1((p) => ({ ...p, city: e.target.value }))} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="state">State / Region *</Label>
+              <Input
                 id="state"
                 list={bizIsUS ? "address-states-us" : bizIsCA ? "address-provinces-ca" : undefined}
-                className="input-control"
                 value={step1.state}
                 onChange={(e) => setStep1((p) => ({ ...p, state: e.target.value }))}
                 placeholder={bizIsUS ? "CA" : bizIsCA ? "ON" : "State / Region"}
@@ -295,109 +249,110 @@ export default function OnboardStep1() {
                 </datalist>
               )}
             </div>
-            <div className="input-group">
-              <label className="input-label" htmlFor="zip">
-                ZIP
-              </label>
-              <input id="zip" className="input-control mono" value={step1.zip} onChange={(e) => setStep1((p) => ({ ...p, zip: e.target.value }))} placeholder="94105" required />
+            <div className="space-y-2">
+              <Label htmlFor="zip">ZIP *</Label>
+              <Input id="zip" className="font-mono" value={step1.zip} onChange={(e) => setStep1((p) => ({ ...p, zip: e.target.value }))} placeholder="94105" required />
             </div>
-            <div className="input-group">
-              <label className="input-label" htmlFor="country">
-                Country
-              </label>
-              <input
-                id="country"
-                list="countries"
-                className="input-control"
-                value={step1.country}
-                onChange={(e) => setStep1((p) => ({ ...p, country: e.target.value, state: "", formation_state: "" }))}
-                placeholder="United States"
+            <div className="space-y-2">
+              <Label htmlFor="ein">EIN *</Label>
+              <Input
+                id="ein"
+                className="font-mono"
+                value={step1.ein}
+                onChange={(e) => setStep1((p) => ({ ...p, ein: normalizeEIN(e.target.value) }))}
+                placeholder="12-3456789"
                 required
               />
-              <datalist id="countries">
-                {COUNTRIES.map((c) => (
-                  <option key={c} value={c} />
-                ))}
-              </datalist>
+              <p className="text-xs text-muted-foreground">Format: NN-NNNNNNN</p>
             </div>
-          </div>
-        </div>
+            <div className="space-y-2">
+              <Label htmlFor="formation_date">Formation date *</Label>
+              <Input
+                id="formation_date"
+                type="date"
+                value={step1.formation_date}
+                max={today}
+                onChange={(e) => setStep1((p) => ({ ...p, formation_date: e.target.value }))}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="formation_state">Formation state *</Label>
+              <Input
+                id="formation_state"
+                list={bizIsUS ? "formation-states-us" : bizIsCA ? "formation-provinces-ca" : undefined}
+                value={step1.formation_state}
+                onChange={(e) => setStep1((p) => ({ ...p, formation_state: e.target.value }))}
+                placeholder={bizIsUS ? "CA" : bizIsCA ? "ON" : "State / Region"}
+                required
+              />
+              {bizIsUS && (
+                <datalist id="formation-states-us">
+                  {US_STATES.map((s) => (
+                    <option key={s} value={s} />
+                  ))}
+                </datalist>
+              )}
+              {bizIsCA && (
+                <datalist id="formation-provinces-ca">
+                  {CA_PROVINCES.map((p) => (
+                    <option key={p} value={p} />
+                  ))}
+                </datalist>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="website">Website (optional)</Label>
+              <Input id="website" type="url" value={step1.website} onChange={(e) => setStep1((p) => ({ ...p, website: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="description">Description (optional)</Label>
+              <Textarea
+                id="description"
+                rows={3}
+                value={step1.description}
+                onChange={(e) => setStep1((p) => ({ ...p, description: e.target.value }))}
+              />
+            </div>
+          </section>
 
-        <div className="form-section">
-          <p className="section-title">Business profile</p>
-          <div className="form-grid" style={{ gridTemplateColumns: "1fr", marginTop: 12 }}>
-            <div className="input-group">
-              <label className="input-label" htmlFor="industry">
-                Industry
-              </label>
-              <select id="industry" className="input-control" value={step1.industry} onChange={(e) => setStep1((p) => ({ ...p, industry: e.target.value }))} required>
-                <option value="">Select...</option>
-                <option value="Software">Software</option>
-                <option value="Fintech">Fintech</option>
-                <option value="E-commerce">E-commerce</option>
-                <option value="Marketplace">Marketplace</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
-            {step1.industry === "Other" && (
-              <div className="input-group">
-                <label className="input-label" htmlFor="industry_other">
-                  Specify industry
-                </label>
-                <input id="industry_other" className="input-control" value={step1.industry_other} onChange={(e) => setStep1((p) => ({ ...p, industry_other: e.target.value }))} required />
+          {formationConfig.options.length > 0 && (
+            <section className="space-y-4">
+              <h3 className="text-sm font-semibold text-muted-foreground">Formation documents</h3>
+              <p className="text-sm text-muted-foreground">Upload at least one of the acceptable documents below.</p>
+              <div className="grid gap-4">
+                {formationConfig.options.map((option) => {
+                  const doc = step1.formation_documents.find((item) => item.doc_type === option.type);
+                  return (
+                    <div className="rounded-lg border border-border bg-muted/30 p-4" key={option.type}>
+                      <Label htmlFor={`formation-${option.type}`}>{option.label}</Label>
+                      <Input
+                        id={`formation-${option.type}`}
+                        type="file"
+                        accept="image/jpeg,image/png,application/pdf"
+                        className="mt-2"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          updateFormationDoc(option.type, { file, file_id: undefined });
+                        }}
+                      />
+                      {doc?.file_id && <p className="text-xs text-muted-foreground mt-2">Uploaded: {doc.file_id}</p>}
+                    </div>
+                  );
+                })}
               </div>
-            )}
-            <div className="input-group">
-              <label className="input-label" htmlFor="website">
-                Website (domain)
-              </label>
-              <input id="website" className="input-control mono" value={step1.website} onChange={(e) => setStep1((p) => ({ ...p, website: e.target.value }))} placeholder="example.com" />
-            </div>
-            <div className="input-group">
-              <label className="input-label" htmlFor="description">
-                Description (optional)
-              </label>
-              <textarea id="description" className="input-control" rows={3} value={step1.description} onChange={(e) => setStep1((p) => ({ ...p, description: e.target.value }))} placeholder="Briefly describe what you do." />
-            </div>
-          </div>
+            </section>
+          )}
         </div>
 
-        {formationConfig.options.length > 0 && (
-          <div className="form-section">
-            <p className="section-title">Formation documents</p>
-            <p className="hero-subtitle">Upload at least one of the acceptable documents below.</p>
-            <div className="form-grid" style={{ gridTemplateColumns: "1fr", marginTop: 12 }}>
-              {formationConfig.options.map((option) => {
-                const doc = step1.formation_documents.find((item) => item.doc_type === option.type);
-                return (
-                  <div className="input-group" key={option.type}>
-                    <label className="input-label" htmlFor={`formation-${option.type}`}>
-                      {option.label}
-                    </label>
-                    <input
-                      id={`formation-${option.type}`}
-                      type="file"
-                      accept="image/jpeg,image/png,application/pdf"
-                      className="input-control"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        updateFormationDoc(option.type, { file, file_id: undefined });
-                      }}
-                    />
-                    {doc?.file_id && <span className="hero-subtitle">Uploaded: {doc.file_id}</span>}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 18 }}>
-          <button className="button" type="submit" disabled={loading}>
-            {saving && <span className="spinner" aria-hidden="true" />}
-            Save & Continue
-          </button>
+        <div className="flex items-center justify-between mt-8 pt-6 border-t border-border">
+          <div />
+          <Button type="submit" variant="hero" disabled={loading || saving}>
+            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Continue
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
         </div>
       </form>
     </OnboardingShell>

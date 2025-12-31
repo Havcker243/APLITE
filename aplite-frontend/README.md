@@ -29,6 +29,7 @@ Create `aplite-frontend/.env.local`:
 - Backend must be running with the `schema-final.sql` schema (not `aplite-backend/data/schema.sql`) so onboarding columns exist.
 - Onboarding is local-only until final submit (`/onboarding/complete`); there are no per-step save endpoints.
 - Role-based flow (current): owners go through call verification; authorized reps upload ID.
+- Submissions move to `PENDING_CALL` or `PENDING_REVIEW` until admin approval/rejection.
 
 ## Notes
-- Auth tokens are stored in `localStorage` by the MVP (`aplite-frontend/src/utils/auth.tsx`).
+- Auth uses HttpOnly cookies with in-memory state; no localStorage token persistence.

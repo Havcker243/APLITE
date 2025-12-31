@@ -9,8 +9,8 @@ It is written to be **implementation-ready** for the current repo:
 ## Current implementation notes (MVP)
 - Onboarding is a single-submit flow (`/onboarding/complete`) with local drafts stored in sessionStorage.
 - There are no per-step save/resume endpoints; `/onboarding/current` only reflects finalized sessions.
-- Role flow: owners go through call verification; authorized reps upload ID.
-- Step 5 is review + submit only (no OTP UI or call scheduling yet).
+- Role flow: owners go through call verification; authorized reps upload ID (admin completes verification).
+- Step 5 is review + submit; Step 6 lets owners schedule/confirm a verification call.
 - Child UPIs exist and can be created from existing or new payment accounts.
 
 ---
@@ -86,7 +86,7 @@ Never use bright red or neon green; keep everything muted and professional.
 - Headline: large, bold, tight tracking
 - Body: clean sans-serif, comfortable line height
 - Emphasis: use weight + color, not underline
-- Numbers/codes: monospaced for routing/account/OTP inputs
+- Numbers/codes: monospaced for routing/account/UPI inputs
 
 ### Spacing + Layout
 - Wide whitespace
@@ -177,7 +177,7 @@ Instead of only forms everywhere, provide a **command entry point** where the us
 
 ---
 
-# B. FinTech B2B Onboarding Flow (5 Steps)
+# B. FinTech B2B Onboarding Flow (5 Steps + Verification)
 
 ## B0) Main onboarding requirements (current MVP)
 
@@ -187,6 +187,7 @@ Must have:
 - Data persistence between steps
 - Local draft persistence (sessionStorage)
 - Role-based verification path (call for owners, ID for authorized reps)
+- Admin review queue for approval/rejection
 
 ## B1) Suggested 5-step wizard (draft)
 
@@ -197,6 +198,7 @@ This is the high-level flow the UI should support. Current MVP uses local drafts
 3. Add representative / user identity (owner or authorized rep)
 4. Connect payout rails (ACH / wire / SWIFT)
 5. Review + submit; verification path determined by role (call for owners, ID for reps)
+6. Owner call scheduling + confirmation (owners only)
 
 ---
 
@@ -220,7 +222,7 @@ Fields:
 - `business_description`
 - `legal_address` (structured)
 - `risk_score` (computed)
-- `verification_status` (`pending` / `verified` / `needs_review` / `rejected`)
+- `verification_status` (`PENDING_REVIEW` / `PENDING_CALL` / `VERIFIED` / `REJECTED`)
 - `created_at`, `updated_at`
 
 ### 2) User
@@ -243,21 +245,21 @@ Tracks finalized onboarding submissions.
 Fields:
 - `org_id`
 - `user_id`
-- `current_step` (1“5)
+- `current_step` (1-6)
 - `step_statuses` (JSON)
 - `last_saved_at`
 - `completed_at`
 
-### 4) VerificationAttempt
+### 4) VerificationReview
 
-Stores OTP attempts and call scheduling.
+Admin review audit trail for onboarding verification.
 
 Fields:
+- `session_id`
 - `org_id`
-- `user_id`
-- `type` (`email_otp` / `sms_otp` / `call`)
-- `destination` (email/phone)
-- `status` (`sent` / `verified` / `expired` / `failed`)
+- `reviewer_id` (admin)
+- `status` (`APPROVED` / `REJECTED`)
+- `reason` (required on rejection)
 - `created_at`
 
 ### 5) BankRailMapping
@@ -288,11 +290,11 @@ Possible states:
 - `STEP_3_IN_PROGRESS` / `STEP_3_VERIFICATION_PENDING` / `STEP_3_COMPLETE`
 - `STEP_4_IN_PROGRESS` / `STEP_4_COMPLETE`
 - `STEP_5_PENDING_VERIFICATION`
-- `VERIFIED` / `NEEDS_REVIEW` / `REJECTED`
+- `PENDING_REVIEW` / `PENDING_CALL` / `VERIFIED` / `REJECTED`
 
 Rules (current):
 - Client enforces step gating locally.
-- Server stores only the final submission and marks the session `VERIFIED` (or `pending_call`).
+- Server stores only the final submission and marks the session `PENDING_REVIEW` or `PENDING_CALL`.
 
 ---
 
@@ -430,7 +432,8 @@ Purpose:
 - Bank name required
 - Account number:
   - required
-  - numeric only
+  - numeric only for ACH/Wire
+  - alphanumeric for SWIFT (IBAN)
 - Routing numbers:
   - numeric only
   - length checks (ACH usually 9 digits)
@@ -452,18 +455,20 @@ Purpose:
 ### UI requirements (current)
 - Review the full onboarding payload
 - Submit and receive confirmation
-- No OTP UI or call scheduling yet
+- Verification status is set based on role:
+  - Owners: `PENDING_CALL`
+  - Authorized reps: `PENDING_REVIEW`
 
 ### Verification method selection (current)
-- Owners: call verification (status `pending_call`).
-- Authorized reps: ID document required.
+- Owners: call verification (admin completes after call).
+- Authorized reps: ID + formation documents reviewed by admin.
 
-## Step 6: Verification pending (Call scheduling)
+## Step 6: Owner call scheduling (current MVP)
 
 ### UI requirements (current MVP)
-- After a call is booked, show a waiting state until verification completes.
+- Owners schedule/confirm a verification call and then move to pending.
 - Status auto-refreshes from the backend; redirect to dashboard on `VERIFIED`.
-- Provide a reschedule link (Cal.com) when configured.
+- Provide a reschedule link when configured.
 
 ---
 
@@ -491,7 +496,7 @@ Purpose:
 1. User chooses method OR system chooses automatically
 2. System sends 6-digit code
 3. User enters code
-4. Code verified â†’ onboarding complete â†’ issue identifier
+4. Code verified -> onboarding complete -> issue identifier
 
 ### Backend rules
 - Code expires in 10 minutes
@@ -546,7 +551,7 @@ Payload:
 # F. UX Details That Make It Feel Enterprise
 
 ## F1) Wizard behavior
-- Top progress bar with steps 1“5
+- Top progress bar with steps 1-6
 - Completed steps show checkmark
 - Current step highlighted
 - Cannot skip ahead
@@ -564,7 +569,7 @@ Payload:
 - Always show:
   - what went wrong
   - how to fix it
-- Avoid generic –invalid input→ without guidance.
+- Avoid generic "invalid input" without guidance.
 
 # G. MVP Build Order (Current)
 ---
@@ -596,15 +601,15 @@ It intentionally slows the user slightly to build confidence.
 
 1. Single-submit onboarding payload (`/onboarding/complete`)
 2. Formation + ID uploads (`/onboarding/upload-formation`, `/onboarding/upload-id`)
-3. Issue org UPI after submit
+3. Admin review queue for approve/reject
 4. Add child UPIs using existing or new payment accounts
-5. (Future) OTP + call scheduling flows
+5. (Future) OTP + deeper call scheduling flows
 
 ---
 
 # H. Deliverable (Copy/Paste Task for Another Agent)
 
-**Task:** Implement B2B fintech onboarding in 5 steps with enterprise UI and dark theme.
+**Task:** Implement B2B fintech onboarding in 5 steps + owner verification with enterprise UI and dark theme.
 
 **UI:** Premium dark gradient theme (minimal, agent-first), but onboarding uses a clean step wizard.
 
@@ -614,6 +619,7 @@ It intentionally slows the user slightly to build confidence.
 3. Identity verification (full name + title + upload government ID + attestation)
 4. Bank rails mapping (bank name, acct number encrypted, ACH/wire routing, SWIFT optional; address read-only)
 5. Review + submit (call for owners, ID for authorized reps)
+6. Owner call scheduling + pending screen
 
 **Requirements:**
 - Autosave drafts in sessionStorage, strict step gating

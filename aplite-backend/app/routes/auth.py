@@ -1,4 +1,12 @@
+"""Authentication and profile-related routes.
+
+Handles signup/login, session creation, CSRF token issuance, and profile
+updates tied to the onboarding flow. Session validation is enforced here
+so downstream routes can trust the active user context.
+"""
+
 from datetime import datetime, timedelta, timezone
+import uuid
 import hashlib
 import hmac
 import os
@@ -13,7 +21,7 @@ from pydantic import BaseModel, EmailStr, Field
 from app.db import queries
 from app.utils.email import send_email
 from app.utils.ratelimit import RateLimit, check_rate_limit
-from app.utils.security import generate_session_token, hash_password, verify_password
+from app.utils.security import generate_csrf_token, generate_session_token, hash_password, verify_password
 from app.utils.upi import generate_core_entity_id, generate_upi
 
 router = APIRouter()
@@ -24,13 +32,8 @@ class SignupRequest(BaseModel):
     first_name: str
     last_name: str
     email: EmailStr
-    company: str = Field(..., alias="company_name")
-    summary: str | None = None
-    established_year: int | None = Field(default=None, ge=1800, le=datetime.now().year)
-    state: str | None = None
-    country: str | None = None
-    password: str
-    confirm_password: str
+    password: str = Field(min_length=8)
+    confirm_password: str = Field(min_length=8)
     accept_terms: bool
 
 
@@ -108,6 +111,7 @@ def _issue_session(user_id: int) -> str:
 def _set_session_cookie(response: Response, token: str):
     """Set an HttpOnly session cookie alongside the token response."""
     secure_cookie = os.getenv("SESSION_COOKIE_SECURE", "0") not in ("0", "false", "False")
+    # Cookie auth is the default for the frontend; keep it HttpOnly to avoid JS access.
     response.set_cookie(
         key="aplite_session",
         value=token,
@@ -147,6 +151,7 @@ def get_current_user(request: Request, authorization: str | None = Header(defaul
         queries.delete_session(token)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
 
+    # Enforce session TTL on read; expired sessions are removed lazily.
     ttl_hours = int(os.getenv("SESSION_TTL_HOURS", "168"))  # default: 7 days
     if datetime.now(timezone.utc) > created_at + timedelta(hours=ttl_hours):
         queries.delete_session(token)
@@ -181,12 +186,12 @@ def signup(payload: SignupRequest, response: Response):
         first_name=payload.first_name.strip(),
         last_name=payload.last_name.strip(),
         email=payload.email.lower(),
-        company=payload.company.strip(),
-        company_name=payload.company.strip(),
-        summary=(payload.summary or "").strip(),
-        established_year=payload.established_year,
-        state=(payload.state or "").strip() or None,
-        country=(payload.country or "").strip() or None,
+        company="",
+        company_name="",
+        summary="",
+        established_year=None,
+        state=None,
+        country=None,
         password_hash=password_hash,
         master_upi="",
     )
@@ -204,6 +209,7 @@ def login_start(payload: LoginStartRequest, background_tasks: BackgroundTasks, r
     ip = (request.client.host if request.client else "unknown").strip()
     email = payload.email.lower().strip()
 
+    # Rate limit both by IP and email to slow brute-force attempts without leaking account existence.
     ip_rule = RateLimit(limit=int(os.getenv("RL_LOGIN_IP_LIMIT", "30")), window_seconds=int(os.getenv("RL_LOGIN_IP_WINDOW_SECONDS", "600")))
     email_rule = RateLimit(limit=int(os.getenv("RL_LOGIN_EMAIL_LIMIT", "10")), window_seconds=int(os.getenv("RL_LOGIN_EMAIL_WINDOW_SECONDS", "600")))
     ok, retry = check_rate_limit(f"login_start:ip:{ip}", ip_rule)
@@ -215,11 +221,12 @@ def login_start(payload: LoginStartRequest, background_tasks: BackgroundTasks, r
 
     user = queries.get_user_by_email(email)
     if not user:
-        # Clear message to guide users without an account.
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No account found for this email.")
+        # Avoid leaking account existence.
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     if not verify_password(payload.password, user.get("password_hash", "")):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
+    # The OTP itself is never stored in plaintext; we keep only a salted HMAC digest.
     login_id = secrets.token_urlsafe(16)
     code = f"{secrets.randbelow(999999):06d}"
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
@@ -274,6 +281,7 @@ def login_verify(payload: LoginVerifyRequest, response: Response):
     if datetime.now(timezone.utc) > expires_at:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Code expired")
 
+    # Recompute the OTP digest and compare in constant time.
     expected = hmac.new(record.get("salt", "").encode("utf-8"), payload.code.encode("utf-8"), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, record.get("digest", "")):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid code")
@@ -291,13 +299,24 @@ def login_verify(payload: LoginVerifyRequest, response: Response):
 
 
 @router.post("/api/auth/logout")
-def logout(response: Response, user=Depends(get_current_user), authorization: str | None = Header(default=None)):
+def logout(request: Request, response: Response, user=Depends(get_current_user), authorization: str | None = Header(default=None)):
     """Invalidate the current session token (best-effort)."""
-    token = _bearer_token_from_header(authorization) or ""
+    token = _bearer_token_from_header(authorization) or request.cookies.get("aplite_session") or ""
     if token:
         queries.delete_session(token)
     _clear_session_cookie(response)
     return {"detail": "Logged out"}
+
+
+@router.get("/api/auth/csrf")
+def get_csrf_token(request: Request, user=Depends(get_current_user), authorization: str | None = Header(default=None)):
+    """Return a CSRF token for the active session."""
+    # CSRF tokens are derived from the session token and sent via X-CSRF-Token on state-changing requests.
+    # Prefer bearer tokens when present, otherwise fall back to the session cookie.
+    token = _bearer_token_from_header(authorization) or request.cookies.get("aplite_session")
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing or invalid token")
+    return {"csrf_token": generate_csrf_token(token)}
 
 
 @router.get("/api/profile")
@@ -318,14 +337,18 @@ def get_profile_details(user=Depends(get_current_user)):
     """
     latest_session = None
     org = None
+    latest_review = None
     try:
         latest_session = queries.get_latest_onboarding_session(user["id"])
         if latest_session and latest_session.get("org_id"):
             org = queries.get_organization(str(latest_session["org_id"]), user["id"])
+        if latest_session and latest_session.get("id"):
+            latest_review = queries.get_latest_verification_review(uuid.UUID(str(latest_session["id"])))
     except Exception:
         # Keep profile page functional even if onboarding tables aren't present yet.
         latest_session = None
         org = None
+        latest_review = None
 
     stats = queries.get_user_stats(user["id"])
     # Canonical onboarding status for the frontend guard.
@@ -337,6 +360,7 @@ def get_profile_details(user=Depends(get_current_user)):
             "organization": org,
             "stats": stats,
             "onboarding_status": onboarding_status,
+            "verification_review": latest_review,
         }
     )
 
@@ -407,11 +431,33 @@ class ChildUpiRequest(BaseModel):
 
 
 @router.post("/api/orgs/child-upi")
-def create_child_upi(payload: ChildUpiRequest, user=Depends(get_current_user)):
+def create_child_upi(payload: ChildUpiRequest, request: Request, user=Depends(get_current_user)):
     """
     Issue a child/org UPI for the current user's verified org, using an existing or new payment account.
     """
-    logger.info("child-upi request received", extra={"user_id": user.get("id"), "payload": payload.model_dump()})
+    _limit = int(os.getenv("RL_CHILD_UPI_CREATE_LIMIT", "30"))
+    _window = int(os.getenv("RL_CHILD_UPI_CREATE_WINDOW_SECONDS", "3600"))
+    if _limit > 0:
+        ip = (request.client.host if request.client else "unknown").strip()
+        ok, retry = check_rate_limit(f"child_upi_create:{ip}:{user.get('id')}", RateLimit(limit=_limit, window_seconds=_window))
+        if not ok:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many requests. Try again soon.",
+                headers={"Retry-After": str(retry)},
+            )
+    safe_payload = payload.model_dump(
+        exclude={
+            "ach_account",
+            "wire_account",
+            "iban",
+            "ach_routing",
+            "wire_routing",
+            "swift_bic",
+            "bank_address",
+        }
+    )
+    logger.info("child-upi request received", extra={"user_id": user.get("id"), "payload": safe_payload})
     latest_session = queries.get_latest_onboarding_session(user["id"])
     if not latest_session or str(latest_session.get("state")).upper() != "VERIFIED":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Complete onboarding first.")
@@ -464,6 +510,7 @@ def create_child_upi(payload: ChildUpiRequest, user=Depends(get_current_user)):
 
     child_upi_id = None
     upi = None
+    label = payload.name.strip() if payload.name else None
     for _ in range(3):
         try:
             core_id = generate_core_entity_id()
@@ -472,6 +519,7 @@ def create_child_upi(payload: ChildUpiRequest, user=Depends(get_current_user)):
                 org_id=str(org_id),
                 payment_account_id=int(payment_account_id),
                 upi=upi,
+                label=label,
             )
             break
         except UniqueViolation:
@@ -514,6 +562,7 @@ def list_child_upis(
             {
                 "child_upi_id": row.get("child_upi_id"),
                 "upi": row.get("upi") or "",
+                "label": row.get("label"),
                 "payment_account_id": row.get("payment_account_id"),
                 "rail": row.get("rail", ""),
                 "bank_name": row.get("bank_name"),

@@ -1,3 +1,8 @@
+/**
+ * Geographic constants used by onboarding forms.
+ * Includes state/province lists and a lightweight country list.
+ */
+
 export const US_STATES = [
   "AL",
   "AK",
