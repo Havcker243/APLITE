@@ -61,7 +61,7 @@ export default function OnboardStep5() {
   }, [step4.account_number]);
 
   // Keep verification method in sync with backend expectations.
-  const verificationMethod = step2.role === "owner" ? "call" : "id";
+  const verificationMethod: "call" | "id" = step2.role === "owner" ? "call" : "id";
 
   if (loading || !token || !mounted) return <LoadingScreen />;
 
