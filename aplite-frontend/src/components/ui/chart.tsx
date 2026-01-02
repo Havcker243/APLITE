@@ -8,14 +8,15 @@ import { Tooltip, type TooltipProps, ResponsiveContainer } from "recharts";
 import { cn } from "../../utils/cn";
 
 type ChartContainerProps = React.HTMLAttributes<HTMLDivElement> & {
-  children: React.ReactNode;
+  children?: React.ReactNode;
 };
 
 function ChartContainer({ className, children, ...props }: ChartContainerProps) {
+  const content = React.isValidElement(children) ? children : <></>;
   return (
     <div className={cn("h-[320px] w-full", className)} {...props}>
       <ResponsiveContainer width="100%" height="100%">
-        {children}
+        {content}
       </ResponsiveContainer>
     </div>
   );
