@@ -106,6 +106,10 @@ export default function ProfilePage() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canEditProfile) {
+      toast.error("Complete onboarding before editing your profile.");
+      return;
+    }
     setSaving(true);
     try {
       const updates: Promise<unknown>[] = [];
@@ -151,6 +155,7 @@ export default function ProfilePage() {
   const isPending = onboardingState === "PENDING_CALL" || onboardingState === "PENDING_REVIEW";
   const isRejected = onboardingState === "REJECTED";
   const rejectionReason = profile?.verification_review?.reason || "";
+  const canEditProfile = isVerified;
 
   const orgAddress = organization?.address || {};
   const addressLine = orgAddress
@@ -304,6 +309,11 @@ export default function ProfilePage() {
               </p>
             </div>
             <div className="p-6">
+              {!canEditProfile && (
+                <div className="mb-4 rounded-lg border border-warning/20 bg-warning/5 p-3 text-sm text-warning">
+                  Complete onboarding to unlock profile edits.
+                </div>
+              )}
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="space-y-6">
                   <div className="space-y-4">
@@ -317,6 +327,7 @@ export default function ProfilePage() {
                           value={organization?.dba || ""}
                           onChange={(e) => setOrganization((prev: any) => ({ ...(prev || {}), dba: e.target.value }))}
                           placeholder="Doing business as"
+                          disabled={!canEditProfile}
                         />
                       </div>
                       <div className="space-y-2">
@@ -327,6 +338,7 @@ export default function ProfilePage() {
                           value={organization?.industry || ""}
                           onChange={(e) => setOrganization((prev: any) => ({ ...(prev || {}), industry: e.target.value }))}
                           placeholder="e.g. Software"
+                          disabled={!canEditProfile}
                         />
                       </div>
                       <div className="space-y-2">
@@ -337,6 +349,7 @@ export default function ProfilePage() {
                           value={organization?.website || ""}
                           onChange={(e) => setOrganization((prev: any) => ({ ...(prev || {}), website: e.target.value }))}
                           placeholder="example.com"
+                          disabled={!canEditProfile}
                         />
                       </div>
                       <div className="space-y-2">
@@ -348,6 +361,7 @@ export default function ProfilePage() {
                           onChange={(e) => setOrganization((prev: any) => ({ ...(prev || {}), description: e.target.value }))}
                           rows={4}
                           placeholder="What does your business do?"
+                          disabled={!canEditProfile}
                         />
                       </div>
                       <div className="rounded-lg border border-border bg-muted/30 p-4">
@@ -365,7 +379,14 @@ export default function ProfilePage() {
                     <div className="space-y-3">
                       <div className="space-y-2">
                         <Label htmlFor="company_name">Company Name</Label>
-                        <Input id="company_name" name="company_name" value={form.company_name} onChange={handleChange} required />
+                        <Input
+                          id="company_name"
+                          name="company_name"
+                          value={form.company_name}
+                          onChange={handleChange}
+                          required
+                          disabled={!canEditProfile}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="established_year">Year Established</Label>
@@ -374,6 +395,7 @@ export default function ProfilePage() {
                           name="established_year"
                           value={form.established_year}
                           onChange={(value) => setForm((p) => ({ ...p, established_year: value }))}
+                          disabled={!canEditProfile}
                         />
                       </div>
                       <div className="space-y-2">
@@ -385,6 +407,7 @@ export default function ProfilePage() {
                           value={form.state}
                           onChange={handleChange}
                           placeholder={isUS ? "CA" : isCA ? "ON" : "State / Region"}
+                          disabled={!canEditProfile}
                         />
                         {isUS && (
                           <datalist id="us-states">
@@ -413,6 +436,7 @@ export default function ProfilePage() {
                             setForm((prev) => ({ ...prev, country: value, state: "" }));
                           }}
                           required
+                          disabled={!canEditProfile}
                         />
                         <datalist id="countries">
                           {COUNTRIES.map((c) => (
@@ -422,14 +446,21 @@ export default function ProfilePage() {
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="summary">Public Summary</Label>
-                        <Textarea id="summary" name="summary" value={form.summary} onChange={handleChange} rows={4} />
+                        <Textarea
+                          id="summary"
+                          name="summary"
+                          value={form.summary}
+                          onChange={handleChange}
+                          rows={4}
+                          disabled={!canEditProfile}
+                        />
                       </div>
                     </div>
                   </div>
                 </div>
 
                 <div className="flex justify-end">
-                  <Button type="submit" variant="hero" disabled={saving}>
+                  <Button type="submit" variant="hero" disabled={saving || !canEditProfile}>
                     Save Changes
                   </Button>
                 </div>

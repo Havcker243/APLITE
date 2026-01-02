@@ -10,11 +10,11 @@ const csp = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  `connect-src 'self' ${apiOrigin}`,
+  "connect-src 'self' https://app.cal.com https://cal.com https://api.cal.com " + apiOrigin,
   "frame-ancestors 'none'",
   "frame-src 'self' https://cal.com https://app.cal.com",
   "base-uri 'self'",
-  `form-action 'self' ${apiOrigin}`,
+  `form-action 'self' ${apiOrigin} https://cal.com https://app.cal.com`,
 ].join("; ");
 
 const nextConfig = {
