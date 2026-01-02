@@ -11,6 +11,7 @@ export function YearInput({
   name,
   value,
   onChange,
+  disabled = false,
   minYear = 1800,
   maxYear = new Date().getFullYear(),
 }: {
@@ -18,6 +19,7 @@ export function YearInput({
   name: string;
   value: string;
   onChange: (value: string) => void;
+  disabled?: boolean;
   minYear?: number;
   maxYear?: number;
 }) {
@@ -39,6 +41,7 @@ export function YearInput({
         placeholder={String(maxYear)}
         list={listId}
         className="max-w-[220px]"
+        disabled={disabled}
       />
       <datalist id={listId}>
         {years.map((y) => (
