@@ -22,10 +22,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!adminKey || Array.isArray(adminKey)) {
     return res.status(400).json({ detail: "Missing admin key" });
   }
+  const headerKey = String(adminKey).trim();
 
   try {
     const response = await fetch(`${API_BASE_URL}/api/admin/verification/file/${encodeURIComponent(file_id)}`, {
-      headers: { "X-Admin-Key": adminKey },
+      headers: { "X-Admin-Key": headerKey },
     });
     res.status(response.status);
     response.headers.forEach((value, key) => {

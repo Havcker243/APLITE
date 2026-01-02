@@ -21,6 +21,7 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { useAuth } from "../utils/auth";
+import { useAppData } from "../utils/appData";
 import DashboardLayout from "../components/DashboardLayout";
 import { toast } from "sonner";
 import {
@@ -40,44 +41,20 @@ import {
 } from "../components/ui/select";
 import {
   createChildUpi,
-  listAccounts,
-  listChildUpis,
   disableChildUpi,
   reactivateChildUpi,
   resolveUPI,
 } from "../utils/api";
 
 const UPI_PATTERN = /^[A-Z0-9]{14}$/;
-const CHILD_UPI_PAGE_SIZE = 6;
-
-const isBrowser = typeof window !== "undefined";
-let cachedAccounts: any[] | null = null;
-let cachedAccountsPromise: Promise<any[]> | null = null;
-let cachedChildUpis: Array<{
-  child_upi_id?: string;
-  upi: string;
-  payment_account_id: number;
-  rail: string;
-  bank_name?: string;
-  created_at?: string;
-  status?: string;
-  label?: string | null;
-}> | null = null;
-let cachedChildUpisCursor: string | null = null;
-let cachedChildUpisHasMore = true;
-let cachedChildUpisPromise: Promise<any[]> | null = null;
-let cachedToken: string | null = null;
 
 export default function DashboardPage() {
   const router = useRouter();
   const { token, loading, profile } = useAuth();
-  const [accounts, setAccounts] = useState<any[]>([]);
+  const { accounts, upis, refreshAccounts, refreshUpis } = useAppData();
   const [childUpis, setChildUpis] = useState<
     Array<{ child_upi_id?: string; upi: string; payment_account_id: number; rail: string; bank_name?: string; created_at?: string; status?: string }>
   >([]);
-  const [childUpisCursor, setChildUpisCursor] = useState<string | null>(null);
-  const [childUpisHasMore, setChildUpisHasMore] = useState(true);
-  const [childUpisLoadingMore, setChildUpisLoadingMore] = useState(false);
   const [childUpiBusy, setChildUpiBusy] = useState<Record<string, boolean>>({});
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState("");
@@ -98,87 +75,14 @@ export default function DashboardPage() {
       return;
     }
     if (isVerified) {
-      void loadAccounts();
-      void loadChildUpis();
+      void refreshAccounts();
+      void refreshUpis();
     }
-  }, [loading, token, isVerified, router]);
+  }, [loading, token, isVerified, router, refreshAccounts, refreshUpis]);
 
-  async function loadAccounts(force = false) {
-    if (!token) return;
-    if (!force && cachedToken !== token) {
-      cachedToken = token;
-      cachedAccounts = null;
-      cachedAccountsPromise = null;
-      cachedChildUpis = null;
-      cachedChildUpisPromise = null;
-      cachedChildUpisCursor = null;
-      cachedChildUpisHasMore = true;
-    }
-    if (isBrowser && !force && cachedAccounts) {
-      setAccounts(cachedAccounts);
-      return;
-    }
-    if (isBrowser && !force && cachedAccountsPromise) {
-      const res = await cachedAccountsPromise;
-      setAccounts(res);
-      return;
-    }
-    try {
-      const fetchPromise = listAccounts();
-      if (isBrowser) cachedAccountsPromise = fetchPromise;
-      const res = await fetchPromise;
-      setAccounts(res);
-      if (isBrowser) {
-        cachedAccounts = res;
-        cachedAccountsPromise = null;
-      }
-    } catch (err) {
-      if (isBrowser) cachedAccountsPromise = null;
-      toast.error("Accounts unavailable", { description: "Unable to load accounts." });
-    }
-  }
-
-  async function loadChildUpis(options?: { append?: boolean; force?: boolean }) {
-    try {
-      const append = options?.append ?? false;
-      const force = options?.force ?? false;
-      if (isBrowser && !force && !append && cachedChildUpis) {
-        setChildUpis(cachedChildUpis);
-        setChildUpisHasMore(cachedChildUpisHasMore);
-        setChildUpisCursor(cachedChildUpisCursor);
-        return;
-      }
-      if (isBrowser && !force && !append && cachedChildUpisPromise) {
-        const res = await cachedChildUpisPromise;
-        setChildUpis(res as any);
-        return;
-      }
-      const fetchPromise = listChildUpis({
-        limit: CHILD_UPI_PAGE_SIZE,
-        before: append ? childUpisCursor || undefined : undefined,
-      });
-      if (isBrowser && !force && !append) cachedChildUpisPromise = fetchPromise;
-      const res = await fetchPromise;
-      setChildUpis((prev) => (append ? [...prev, ...res] : res));
-      setChildUpisHasMore(res.length === CHILD_UPI_PAGE_SIZE);
-      const last = res[res.length - 1];
-      if (last?.created_at) {
-        setChildUpisCursor(last.created_at);
-      } else if (!append) {
-        setChildUpisCursor(null);
-      }
-      if (isBrowser) {
-        const nextList = append ? [...childUpis, ...res] : res;
-        cachedChildUpis = nextList;
-        cachedChildUpisHasMore = res.length === CHILD_UPI_PAGE_SIZE;
-        cachedChildUpisCursor = last?.created_at || null;
-        cachedChildUpisPromise = null;
-      }
-    } catch (err) {
-      if (isBrowser) cachedChildUpisPromise = null;
-      toast.error("UPIs unavailable", { description: "Unable to load child UPIs." });
-    }
-  }
+  useEffect(() => {
+    setChildUpis(upis);
+  }, [upis]);
 
   const getNextAction = () => {
     if (isUnverified) {
@@ -228,14 +132,14 @@ export default function DashboardPage() {
     try {
       const response = await createChildUpi({
         account_id: Number(selectedAccountId),
-        name: upiLabel || "Payment",
+        name: upiLabel || undefined,
         type: "payment",
       });
       toast.success(`UPI created: ${response.upi}`);
       setIsCreateOpen(false);
       setSelectedAccountId("");
       setUpiLabel("");
-      await loadChildUpis({ force: true });
+      await refreshUpis({ force: true });
     } catch (err) {
       toast.error("UPI failed", { description: "Unable to create UPI." });
     }
@@ -272,7 +176,7 @@ export default function DashboardPage() {
       } else {
         await reactivateChildUpi(childUpiId);
       }
-      await loadChildUpis({ force: true });
+      await refreshUpis({ force: true });
     } catch (err) {
       toast.error("Update failed", { description: "Unable to update UPI status." });
     } finally {

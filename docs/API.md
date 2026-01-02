@@ -30,9 +30,9 @@ This file documents the backend routes used by the frontend.
 - `POST /onboarding/reset`
   - Reset in-progress onboarding session (also removes related org payment accounts and child UPIs).
 - `POST /onboarding/upload-id`
-  - Upload identity doc.
+  - Upload identity doc (requires S3 storage config).
 - `POST /onboarding/upload-formation`
-  - Upload formation doc.
+  - Upload formation doc (requires S3 storage config).
 - `POST /onboarding/complete`
   - Single-submit onboarding (all steps).
 

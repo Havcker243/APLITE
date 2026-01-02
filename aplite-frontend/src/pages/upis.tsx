@@ -3,7 +3,7 @@
  * Lists issued UPIs and allows creating or disabling them.
  */
 
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import { CheckCircle2, Copy, Key, MoreHorizontal, Plus, XCircle } from "lucide-react";
 
@@ -37,8 +37,9 @@ import {
   DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu";
 import DashboardLayout from "../components/DashboardLayout";
-import { createChildUpi, disableChildUpi, listAccounts, listChildUpis, reactivateChildUpi } from "../utils/api";
+import { createChildUpi, disableChildUpi, reactivateChildUpi } from "../utils/api";
 import { useAuth } from "../utils/auth";
+import { useAppData } from "../utils/appData";
 import { toast } from "sonner";
 
 type ChildUpi = {
@@ -51,18 +52,10 @@ type ChildUpi = {
   created_at?: string;
 };
 
-const isBrowser = typeof window !== "undefined";
-let cachedAccounts: any[] | null = null;
-let cachedAccountsPromise: Promise<any[]> | null = null;
-let cachedUpis: ChildUpi[] | null = null;
-let cachedUpisPromise: Promise<ChildUpi[]> | null = null;
-let cachedToken: string | null = null;
-
 export default function UpisPage() {
   const router = useRouter();
   const { token, loading, profile } = useAuth();
-  const [accounts, setAccounts] = useState<any[]>([]);
-  const [upis, setUpis] = useState<ChildUpi[]>([]);
+  const { accounts, upis, refreshAccounts, refreshUpis } = useAppData();
   const [isCreatingUPI, setIsCreatingUPI] = useState(false);
   const [upiToDisable, setUpiToDisable] = useState<string | null>(null);
   const [newUPI, setNewUPI] = useState({ payoutAccountId: "", label: "" });
@@ -80,49 +73,9 @@ export default function UpisPage() {
       router.replace("/login");
       return;
     }
-    void loadData();
-  }, [loading, token, router]);
-
-  async function loadData(force = false) {
-    if (!token) return;
-    if (!force && cachedToken !== token) {
-      cachedToken = token;
-      cachedAccounts = null;
-      cachedAccountsPromise = null;
-      cachedUpis = null;
-      cachedUpisPromise = null;
-    }
-
-    try {
-      if (isBrowser && !force && cachedAccounts && cachedUpis) {
-        setAccounts(cachedAccounts);
-        setUpis(cachedUpis);
-        return;
-      }
-
-      const accountsPromise = isBrowser && !force && cachedAccountsPromise ? cachedAccountsPromise : listAccounts();
-      const upisPromise = isBrowser && !force && cachedUpisPromise ? cachedUpisPromise : listChildUpis();
-      if (isBrowser && !force) {
-        cachedAccountsPromise = accountsPromise;
-        cachedUpisPromise = upisPromise;
-      }
-      const [accountsRes, upisRes] = await Promise.all([accountsPromise, upisPromise]);
-      setAccounts(accountsRes);
-      setUpis(upisRes);
-      if (isBrowser) {
-        cachedAccounts = accountsRes;
-        cachedUpis = upisRes;
-        cachedAccountsPromise = null;
-        cachedUpisPromise = null;
-      }
-    } catch {
-      if (isBrowser) {
-        cachedAccountsPromise = null;
-        cachedUpisPromise = null;
-      }
-      toast.error("Unable to load UPIs", { description: "Please try again." });
-    }
-  }
+    void refreshAccounts();
+    void refreshUpis();
+  }, [loading, token, router, refreshAccounts, refreshUpis]);
 
   const handleCreateUPI = async () => {
     if (!newUPI.payoutAccountId) {
@@ -132,13 +85,13 @@ export default function UpisPage() {
     try {
       const response = await createChildUpi({
         account_id: Number(newUPI.payoutAccountId),
-        name: newUPI.label || "Payment",
+        name: newUPI.label || undefined,
         type: "payment",
       });
       toast.success("UPI created", { description: `Your new UPI is ${response.upi}` });
       setNewUPI({ payoutAccountId: "", label: "" });
       setIsCreatingUPI(false);
-      await loadData(true);
+      await refreshUpis({ force: true });
     } catch {
       toast.error("UPI failed", { description: "Unable to create UPI." });
     }
@@ -150,7 +103,7 @@ export default function UpisPage() {
       await disableChildUpi(upiId);
       toast("UPI disabled", { description: "This UPI can no longer be resolved." });
       setUpiToDisable(null);
-      await loadData(true);
+      await refreshUpis({ force: true });
     } catch {
       toast.error("Update failed", { description: "Unable to disable UPI." });
     } finally {
@@ -163,7 +116,7 @@ export default function UpisPage() {
     try {
       await reactivateChildUpi(upiId);
       toast("UPI reactivated", { description: "This UPI can now be resolved." });
-      await loadData(true);
+      await refreshUpis({ force: true });
     } catch {
       toast.error("Update failed", { description: "Unable to reactivate UPI." });
     } finally {

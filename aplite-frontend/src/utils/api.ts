@@ -456,7 +456,7 @@ export async function fetchProfileDetails(): Promise<ProfileDetailsResponse> {
 }
 
 export async function createChildUpi(data: {
-  name: string;
+  name?: string;
   type: string;
   website?: string;
   account_id?: number;

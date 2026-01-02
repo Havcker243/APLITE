@@ -11,6 +11,7 @@ import "../styles/globals.css";
 import { AuthProvider } from "../utils/auth";
 import { OnboardingProvider } from "../utils/onboardingWizard";
 import { Toaster } from "../components/ui/sonner";
+import { AppDataProvider } from "../utils/appData";
 
 export default function App({ Component, pageProps }: AppProps) {
   return (
@@ -18,12 +19,14 @@ export default function App({ Component, pageProps }: AppProps) {
       <Head>
         <meta name="theme-color" content="#05060a" />
       </Head>
-      <OnboardingProvider>
-        <Layout>
-          <Component {...pageProps} />
-        </Layout>
-        <Toaster />
-      </OnboardingProvider>
+      <AppDataProvider>
+        <OnboardingProvider>
+          <Layout>
+            <Component {...pageProps} />
+          </Layout>
+          <Toaster />
+        </OnboardingProvider>
+      </AppDataProvider>
     </AuthProvider>
   );
 }

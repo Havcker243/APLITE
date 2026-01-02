@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Building2, CheckCircle2, ChevronDown, ChevronUp, Search } from "lucide-react";
 
-import { fetchPublicClients } from "../utils/api";
+import { useAppData } from "../utils/appData";
 import DashboardLayout from "../components/DashboardLayout";
 import { Input } from "../components/ui/input";
 import { toast } from "sonner";
@@ -27,47 +27,16 @@ type Client = {
   master_upi?: string | null;
 };
 
-const isBrowser = typeof window !== "undefined";
-let cachedClients: Client[] | null = null;
-let cachedClientsPromise: Promise<Client[]> | null = null;
-
 export default function Clients() {
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | number | null>(null);
-  const [clients, setClients] = useState<Client[]>([]);
+  const { clients, refreshClients } = useAppData();
 
   useEffect(() => {
-    if (isBrowser && cachedClients) {
-      setClients(cachedClients);
-      return;
-    }
-    if (isBrowser && cachedClientsPromise) {
-      cachedClientsPromise
-        .then((data) => {
-          setClients(data);
-        })
-        .catch((err) => {
-          toast.error(err instanceof Error ? err.message : "Unable to load clients");
-          setClients([]);
-        });
-      return;
-    }
-    const fetchPromise = fetchPublicClients();
-    if (isBrowser) cachedClientsPromise = fetchPromise;
-    fetchPromise
-      .then((res) => {
-        setClients(res);
-        if (isBrowser) {
-          cachedClients = res;
-          cachedClientsPromise = null;
-        }
-      })
-      .catch(() => {
-        if (isBrowser) cachedClientsPromise = null;
-        toast.error("Unable to load clients");
-        setClients([]);
-      });
-  }, []);
+    refreshClients().catch((err) => {
+      toast.error(err instanceof Error ? err.message : "Unable to load clients");
+    });
+  }, [refreshClients]);
 
   const normalized = useMemo(() => {
     return clients.map((client) => {

@@ -12,9 +12,11 @@ type AuthContextType = {
   token: string | null;
   profile: ProfileDetailsResponse | null;
   loading: boolean;
+  isBootstrapping: boolean;
+  isRefreshing: boolean;
   login: (payload: AuthResponse) => void;
   logout: () => void;
-  refreshProfile: () => Promise<ProfileDetailsResponse | null>;
+  refreshProfile: (options?: { silent?: boolean }) => Promise<ProfileDetailsResponse | null>;
 };
 
 const AuthContext = createContext<AuthContextType>({
@@ -22,6 +24,8 @@ const AuthContext = createContext<AuthContextType>({
   token: null,
   profile: null,
   loading: true,
+  isBootstrapping: true,
+  isRefreshing: false,
   login: () => undefined,
   logout: () => undefined,
   refreshProfile: async () => null,
@@ -31,11 +35,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileDetailsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Pull the canonical profile snapshot from the server (single source of truth).
-  const refreshProfile = async () => {
-    setLoading(true);
+  const refreshProfile = async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
+    if (!silent) setIsRefreshing(true);
     try {
       const details = await fetchProfileDetails();
       // Server snapshot is canonical; update all auth-facing state from it.
@@ -53,13 +59,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setCsrfToken(null);
       return null;
     } finally {
-      setLoading(false);
+      if (!silent) setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
     // Rely on cookie-based auth; refreshProfile will set token to "cookie" when valid.
-    void refreshProfile();
+    (async () => {
+      try {
+        await refreshProfile({ silent: true });
+      } finally {
+        setIsBootstrapping(false);
+      }
+    })();
   }, []);
 
   const handleLogin = (payload: AuthResponse) => {
@@ -87,7 +99,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, profile, loading, login: handleLogin, logout: handleLogout, refreshProfile }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        token,
+        profile,
+        loading: isBootstrapping,
+        isBootstrapping,
+        isRefreshing,
+        login: handleLogin,
+        logout: handleLogout,
+        refreshProfile,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

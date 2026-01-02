@@ -6,7 +6,7 @@ This document describes the current MVP architecture for Aplite. It is intention
 - Frontend: Next.js (pages router) app in `aplite-frontend/`
 - Backend: FastAPI service in `aplite-backend/`
 - Database: Postgres schema in `schema-final.sql`
-- Storage: Optional S3-compatible bucket for uploads; local fallback
+- Storage: S3-compatible bucket required for onboarding uploads (no local fallback)
 
 ## Core domains
 - Users: account identity + profile fields

@@ -3,7 +3,7 @@
  * Lists existing rails and allows creating new payment accounts.
  */
 
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { 
   CreditCard, 
@@ -33,21 +33,17 @@ import {
 } from "../components/ui/dropdown-menu";
 import DashboardLayout from "../components/DashboardLayout";
 import { useAuth } from "../utils/auth";
+import { useAppData } from "../utils/appData";
 import { toast } from "sonner";
-import { createAccount, listAccounts, updateAccount } from "../utils/api";
+import { createAccount, updateAccount } from "../utils/api";
 import { requireVerifiedOrRedirect } from "../utils/requireVerified";
 
 type RailType = "ach" | "wire" | "swift";
 
-const isBrowser = typeof window !== "undefined";
-let cachedAccounts: any[] | null = null;
-let cachedAccountsPromise: Promise<any[]> | null = null;
-let cachedToken: string | null = null;
-
 export default function Accounts() {
   const router = useRouter();
   const { token, loading, profile } = useAuth();
-  const [accounts, setAccounts] = useState<any[]>([]);
+  const { accounts, refreshAccounts } = useAppData();
   const [isAddingAccount, setIsAddingAccount] = useState(false);
   const [isEditingNickname, setIsEditingNickname] = useState(false);
   const [editingAccountId, setEditingAccountId] = useState<number | null>(null);
@@ -69,44 +65,12 @@ export default function Accounts() {
       return;
     }
     requireVerifiedOrRedirect({ profile, router });
-    void loadAccounts();
-  }, [loading, token, profile, router]);
-
-  async function loadAccounts(force = false) {
-    if (!token) return;
-    if (!force && cachedToken !== token) {
-      cachedToken = token;
-      cachedAccounts = null;
-      cachedAccountsPromise = null;
-    }
-    if (isBrowser && !force && cachedAccounts) {
-      setAccounts(cachedAccounts);
-      return;
-    }
-    if (isBrowser && !force && cachedAccountsPromise) {
-      const res = await cachedAccountsPromise;
-      setAccounts(res);
-      return;
-    }
-
-    try {
-      const fetchPromise = listAccounts();
-      if (isBrowser) cachedAccountsPromise = fetchPromise;
-      const res = await fetchPromise;
-      setAccounts(res);
-      if (isBrowser) {
-        cachedAccounts = res;
-        cachedAccountsPromise = null;
-      }
-    } catch (err) {
-      if (isBrowser) cachedAccountsPromise = null;
-      toast.error("Failed to load accounts");
-    }
-  }
+    void refreshAccounts();
+  }, [loading, token, profile, router, refreshAccounts]);
 
   async function handleAddAccount() {
-    if (!newAccount.nickname || !newAccount.bankName || !newAccount.accountNumber) {
-      toast.error("Please fill in all required fields.");
+    if (!newAccount.bankName || !newAccount.accountNumber) {
+      toast.error("Please fill in the required fields.");
       return;
     }
 
@@ -116,7 +80,7 @@ export default function Accounts() {
       await createAccount({
         rail,
         bank_name: newAccount.bankName,
-        account_name: newAccount.nickname,
+        account_name: newAccount.nickname || newAccount.bankName,
         ach_routing: newAccount.railType === "ach" ? newAccount.routingNumber : undefined,
         ach_account: newAccount.railType === "ach" ? newAccount.accountNumber : undefined,
         wire_routing: newAccount.railType === "wire" ? newAccount.routingNumber : undefined,
@@ -135,7 +99,7 @@ export default function Accounts() {
       });
       setIsAddingAccount(false);
       toast.success("Payout account added successfully.");
-      await loadAccounts(true);
+      await refreshAccounts({ force: true });
     } catch (err) {
       toast.error("Please try again.");
     }
@@ -155,7 +119,7 @@ export default function Accounts() {
       setIsEditingNickname(false);
       setEditingAccountId(null);
       setEditingNickname("");
-      await loadAccounts(true);
+      await refreshAccounts({ force: true });
     } catch (err) {
       toast.error("Please try again.");
     } finally {
@@ -197,7 +161,7 @@ export default function Accounts() {
                 
                 <div className="space-y-4 py-4">
                   <div className="space-y-2">
-                    <Label htmlFor="add-nickname">Account nickname *</Label>
+                    <Label htmlFor="add-nickname">Account nickname (optional)</Label>
                     <Input
                       id="add-nickname"
                       placeholder="Primary checking"

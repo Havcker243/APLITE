@@ -1378,29 +1378,26 @@ def onboarding_file_exists(*, file_id: str, user_id: int, allowed_prefixes: tupl
     access_key = os.getenv("DATABASE_BUCKET_S3_ACCESS_KEY_ID")
     secret_key = os.getenv("DATABASE_BUCKET_S3_SECRET_ACCESS_KEY")
     region = os.getenv("DATABASE_BUCKET_S3_REGION", "us-east-1")
-    if bucket and endpoint and access_key and secret_key:
-        try:
-            import boto3
-            from botocore.client import Config as BotoConfig
+    if not (bucket and endpoint and access_key and secret_key):
+        return False
+    try:
+        import boto3
+        from botocore.client import Config as BotoConfig
 
-            s3 = boto3.client(
-                "s3",
-                endpoint_url=endpoint,
-                region_name=region,
-                aws_access_key_id=access_key,
-                aws_secret_access_key=secret_key,
-                config=BotoConfig(signature_version="s3v4"),
-            )
-            key_prefix = "formations" if file_id.startswith("form_") else "ids"
-            key = f"{key_prefix}/{file_id}.bin"
-            s3.head_object(Bucket=bucket, Key=key)
-            return True
-        except Exception:
-            return False
-
-    # Fallback: ensure local file exists.
-    bin_path = os.path.abspath(os.path.join(base, f"{file_id}.bin"))
-    return bin_path.startswith(base + os.sep) and os.path.exists(bin_path)
+        s3 = boto3.client(
+            "s3",
+            endpoint_url=endpoint,
+            region_name=region,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            config=BotoConfig(signature_version="s3v4"),
+        )
+        key_prefix = "formations" if file_id.startswith("form_") else "ids"
+        key = f"{key_prefix}/{file_id}.bin"
+        s3.head_object(Bucket=bucket, Key=key)
+        return True
+    except Exception:
+        return False
 
 
 def get_onboarding_file_metadata(file_id: str) -> Optional[Dict[str, Any]]:
@@ -1431,36 +1428,27 @@ def get_onboarding_file_bytes(file_id: str) -> tuple[bytes, str | None, str | No
     access_key = os.getenv("DATABASE_BUCKET_S3_ACCESS_KEY_ID")
     secret_key = os.getenv("DATABASE_BUCKET_S3_SECRET_ACCESS_KEY")
     region = os.getenv("DATABASE_BUCKET_S3_REGION", "us-east-1")
-    if bucket and endpoint and access_key and secret_key:
-        try:
-            import boto3
-            from botocore.client import Config as BotoConfig
-
-            s3 = boto3.client(
-                "s3",
-                endpoint_url=endpoint,
-                region_name=region,
-                aws_access_key_id=access_key,
-                aws_secret_access_key=secret_key,
-                config=BotoConfig(signature_version="s3v4"),
-            )
-            key_prefix = "formations" if file_id.startswith("form_") else "ids"
-            key = f"{key_prefix}/{file_id}.bin"
-            obj = s3.get_object(Bucket=bucket, Key=key)
-            body = obj.get("Body")
-            if body is None:
-                return None
-            return body.read(), content_type, filename
-        except Exception:
-            return None
-
-    base = onboarding_upload_base_dir()
-    bin_path = os.path.abspath(os.path.join(base, f"{file_id}.bin"))
-    if not bin_path.startswith(base + os.sep) or not os.path.exists(bin_path):
+    if not (bucket and endpoint and access_key and secret_key):
         return None
     try:
-        with open(bin_path, "rb") as f:
-            return f.read(), content_type, filename
+        import boto3
+        from botocore.client import Config as BotoConfig
+
+        s3 = boto3.client(
+            "s3",
+            endpoint_url=endpoint,
+            region_name=region,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            config=BotoConfig(signature_version="s3v4"),
+        )
+        key_prefix = "formations" if file_id.startswith("form_") else "ids"
+        key = f"{key_prefix}/{file_id}.bin"
+        obj = s3.get_object(Bucket=bucket, Key=key)
+        body = obj.get("Body")
+        if body is None:
+            return None
+        return body.read(), content_type, filename
     except Exception:
         return None
 

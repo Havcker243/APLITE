@@ -110,14 +110,20 @@ def _issue_session(user_id: int) -> str:
 
 def _set_session_cookie(response: Response, token: str):
     """Set an HttpOnly session cookie alongside the token response."""
+    samesite = os.getenv("SESSION_COOKIE_SAMESITE", "lax").lower()
+    if samesite not in ("lax", "strict", "none"):
+        samesite = "lax"
     secure_cookie = os.getenv("SESSION_COOKIE_SECURE", "0") not in ("0", "false", "False")
+    if samesite == "none":
+        # Browsers require Secure when SameSite=None.
+        secure_cookie = True
     # Cookie auth is the default for the frontend; keep it HttpOnly to avoid JS access.
     response.set_cookie(
         key="aplite_session",
         value=token,
         httponly=True,
         secure=secure_cookie,
-        samesite="lax",
+        samesite=samesite,
         max_age=int(os.getenv("SESSION_TTL_HOURS", "168")) * 3600,
         path="/",
     )
@@ -412,7 +418,7 @@ def update_profile(payload: ProfileUpdateRequest, user=Depends(get_current_user)
 
 
 class ChildUpiRequest(BaseModel):
-    name: str
+    name: str | None = None
     type: str
     website: str | None = None
     account_id: int | None = None
@@ -488,7 +494,7 @@ def create_child_upi(payload: ChildUpiRequest, request: Request, user=Depends(ge
                 org_id=str(org_id),
                 rail=payload.rail,
                 bank_name=payload.bank_name.strip(),
-                account_name=payload.account_name or payload.name,
+                account_name=payload.account_name or payload.name or payload.bank_name,
                 ach_routing=payload.ach_routing if payload.rail == "ACH" else None,
                 ach_account=payload.ach_account if payload.rail == "ACH" else None,
                 wire_routing=payload.wire_routing if payload.rail == "WIRE_DOM" else None,

@@ -25,12 +25,17 @@ from app.utils.ratelimit import RateLimit, check_rate_limit
 from app.utils.security import verify_csrf_token
 
 app = FastAPI()
+default_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+env_origins = os.getenv("FRONTEND_ORIGINS", "")
+extra_origins = [origin.strip() for origin in env_origins.split(",") if origin.strip()]
+allow_origins = list(dict.fromkeys(default_origins + extra_origins))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

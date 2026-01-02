@@ -68,12 +68,17 @@ export default function AdminVerifyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminKey, authed]);
 
-  async function refreshQueue(options?: { persistOnSuccess?: boolean }) {
+  async function refreshQueue(options?: { persistOnSuccess?: boolean; keyOverride?: string }) {
     setLoadingQueue(true);
     try {
+      const headerKey = (options?.keyOverride ?? adminKey).trim();
+      if (!headerKey) {
+        toast.error("Missing admin key");
+        return;
+      }
       // Queue endpoint doubles as admin-key validation for initial login.
       const res = await fetch("/api/admin/queue", {
-        headers: { "X-Admin-Key": adminKey },
+        headers: { "X-Admin-Key": headerKey },
       });
       if (!res.ok) {
         if (res.status === 403) {
@@ -114,7 +119,7 @@ export default function AdminVerifyPage() {
     try {
       // Load the full onboarding snapshot for the selected session.
       const res = await fetch(`/api/admin/session/${sessionId}`, {
-        headers: { "X-Admin-Key": adminKey },
+        headers: { "X-Admin-Key": adminKey.trim() },
       });
       if (!res.ok) {
         const message = await res.text();
@@ -134,7 +139,7 @@ export default function AdminVerifyPage() {
     try {
       const res = await fetch(`/api/admin/session/${selectedId}/approve`, {
         method: "POST",
-        headers: { "X-Admin-Key": adminKey },
+        headers: { "X-Admin-Key": adminKey.trim() },
       });
       if (!res.ok) {
         const message = await res.text();
@@ -158,7 +163,7 @@ export default function AdminVerifyPage() {
     try {
       const res = await fetch(`/api/admin/session/${selectedId}/reject`, {
         method: "POST",
-        headers: { "X-Admin-Key": adminKey, "Content-Type": "application/json" },
+        headers: { "X-Admin-Key": adminKey.trim(), "Content-Type": "application/json" },
         body: JSON.stringify({ reason: reason.trim() }),
       });
       if (!res.ok) {
@@ -177,7 +182,7 @@ export default function AdminVerifyPage() {
   async function openFile(fileId: string) {
     try {
       const res = await fetch(`/api/admin/file/${fileId}`, {
-        headers: { "X-Admin-Key": adminKey },
+        headers: { "X-Admin-Key": adminKey.trim() },
       });
       if (!res.ok) {
         const message = await res.text();
@@ -198,7 +203,7 @@ export default function AdminVerifyPage() {
     const nextKey = adminKeyInput.trim();
     if (!nextKey) return;
     setAdminKey(nextKey);
-    void refreshQueue();
+    void refreshQueue({ keyOverride: nextKey });
   }
 
   function handleAdminLogout() {
@@ -283,15 +288,15 @@ export default function AdminVerifyPage() {
             <Button variant="ghost" onClick={handleAdminLogout}>
               Sign out
             </Button>
-            <Button variant="ghost" onClick={() => (window.location.href = "/login")}>
-              Back
-            </Button>
           </div>
         </div>
 
       <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
         <div className="rounded-xl border border-border bg-card p-4 h-[70vh] overflow-y-auto">
-          <div className="text-xs uppercase text-muted-foreground mb-3">Pending</div>
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-xs uppercase text-muted-foreground">Pending</div>
+            <div className="text-xs text-muted-foreground">{queue.length} total</div>
+          </div>
           {loadingQueue && <div className="text-sm text-muted-foreground">Loading queue...</div>}
           {!loadingQueue && queue.length === 0 && <div className="text-sm text-muted-foreground">No pending reviews.</div>}
           <div className="space-y-3">
@@ -316,8 +321,15 @@ export default function AdminVerifyPage() {
                     <div className="flex-1">
                       <div className="font-medium text-foreground text-sm">{item.org?.legal_name || "Unknown org"}</div>
                       <div className="text-xs text-muted-foreground">{item.user?.email || "Unknown email"}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {item.last_saved_at ? new Date(item.last_saved_at).toLocaleString() : "Updated recently"}
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground uppercase">{item.method}</div>
+                    <div className="flex flex-col items-end gap-1 text-xs text-muted-foreground uppercase">
+                      <span>{item.state?.replace("_", " ")}</span>
+                      <span>{item.method}</span>
+                      <span>{item.risk_level}</span>
+                    </div>
                   </div>
                 </button>
               );
@@ -345,6 +357,26 @@ export default function AdminVerifyPage() {
               {loadingDetail && <div className="text-sm text-muted-foreground">Loading details...</div>}
               {!loadingDetail && detail && (
                 <div className="space-y-6">
+                  <section className="rounded-lg border border-border p-4">
+                    <div className="text-sm font-semibold text-foreground mb-2">Applicant</div>
+                    <div className="text-sm text-muted-foreground space-y-1">
+                      <div>Name: {detail.user?.first_name || "-"} {detail.user?.last_name || ""}</div>
+                      <div>Email: {detail.user?.email || "-"}</div>
+                      <div>User ID: {detail.user?.id || "-"}</div>
+                    </div>
+                  </section>
+
+                  <section className="rounded-lg border border-border p-4">
+                    <div className="text-sm font-semibold text-foreground mb-2">Session</div>
+                    <div className="text-sm text-muted-foreground space-y-1">
+                      <div>Session ID: {detail.session?.id || "-"}</div>
+                      <div>Org ID: {detail.org?.id || "-"}</div>
+                      <div>State: {detail.session?.state || "-"}</div>
+                      <div>Method: {detail.method || "-"}</div>
+                      <div>Risk: {detail.session?.risk_level || "-"}</div>
+                    </div>
+                  </section>
+
                   <section className="rounded-lg border border-border p-4">
                     <div className="text-sm font-semibold text-foreground mb-2">Business info</div>
                     <div className="text-sm text-muted-foreground space-y-1">

@@ -3,7 +3,7 @@
  * Explains next steps while verification is in review.
  */
 
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import { Calendar, Clock, XCircle } from "lucide-react";
 import { getCalApi } from "@calcom/embed-react";
@@ -64,7 +64,7 @@ export default function OnboardPendingPage() {
       // Poll the profile snapshot to see if admin has verified or rejected.
       setChecking(true);
       try {
-        const details = await refreshProfile();
+        const details = await refreshProfile({ silent: true });
         if (!details) return;
         if (!active) return;
         const nextStatus = String(details.onboarding_status || details.onboarding?.state || "NOT_STARTED");
@@ -72,7 +72,7 @@ export default function OnboardPendingPage() {
         setReviewReason(details.verification_review?.reason || "");
         setLastCheckedAt(new Date());
         if (nextStatus === "VERIFIED") {
-          await refreshProfile();
+          await refreshProfile({ silent: true });
           router.replace("/dashboard");
         }
       } catch {

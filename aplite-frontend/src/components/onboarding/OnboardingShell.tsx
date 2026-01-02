@@ -5,7 +5,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/router";
-import { Shield } from "lucide-react";
+import { ArrowLeft, Shield } from "lucide-react";
 
 import { OnboardingStepper } from "../OnboardingStepper";
 import { useOnboardingWizard } from "../../utils/onboardingWizard";
@@ -30,6 +30,7 @@ export function OnboardingShell({
   const router = useRouter();
   const { profile } = useAuth();
   const { completedThrough } = useOnboardingWizard();
+  const previousStep = Math.max(1, activeStep - 1);
 
   useEffect(() => {
     // If already verified, do not allow re-entering onboarding flow.
@@ -42,14 +43,30 @@ export function OnboardingShell({
     <div className="min-h-screen bg-background">
       <header className="bg-card border-b border-border">
         <div className="container mx-auto px-6 h-16 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => router.push("/dashboard")}
-            className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <Shield className="h-6 w-6" />
-            <span className="font-semibold">Aplite</span>
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => {
+                if (activeStep <= 1) {
+                  router.push("/dashboard");
+                } else {
+                  router.push(stepPath(previousStep));
+                }
+              }}
+              className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span className="text-sm font-medium">Back</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard")}
+              className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Shield className="h-6 w-6" />
+              <span className="font-semibold">Aplite</span>
+            </button>
+          </div>
         </div>
       </header>
 

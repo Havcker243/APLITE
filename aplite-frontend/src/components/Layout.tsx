@@ -8,9 +8,9 @@ import { useAuth } from "../utils/auth";
 import { LoadingScreen } from "./LoadingScreen";
 
 export function Layout({ children }: PropsWithChildren) {
-  const { token, loading } = useAuth();
+  const { token, isBootstrapping } = useAuth();
 
-  if (token && loading) {
+  if (token && isBootstrapping) {
     return <LoadingScreen />;
   }
 

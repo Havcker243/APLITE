@@ -306,7 +306,7 @@ async def _store_uploaded_file(
     doc_category: str | None = None,
     doc_type: str | None = None,
 ) -> tuple[str, str]:
-    # Accept uploads into S3 when configured; otherwise persist locally for MVP.
+    # Uploads are stored in S3-compatible storage; local fallback is disabled.
     # We always store metadata in Postgres to enforce ownership checks later.
     if not file.filename:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing file.")
@@ -331,32 +331,22 @@ async def _store_uploaded_file(
     secret_key = os.getenv("DATABASE_BUCKET_S3_SECRET_ACCESS_KEY")
     region = os.getenv("DATABASE_BUCKET_S3_REGION", "us-east-1")
     key = f"{key_prefix}/{file_id}.bin"
-    uploaded = False
-    storage = "local"
-    if bucket and endpoint and access_key and secret_key:
-        try:
-            s3 = boto3.client(
-                "s3",
-                endpoint_url=endpoint,
-                region_name=region,
-                aws_access_key_id=access_key,
-                aws_secret_access_key=secret_key,
-                config=BotoConfig(signature_version="s3v4"),
-            )
-            s3.put_object(Bucket=bucket, Key=key, Body=data, ContentType=content_type)
-            uploaded = True
-            storage = "s3"
-        except Exception as exc:
-            logger.exception("Failed to upload ID document to Supabase storage: %s", exc)
-
-    if not uploaded:
-        base = queries.onboarding_upload_base_dir()
-        os.makedirs(base, exist_ok=True)
-        bin_path = os.path.abspath(os.path.join(base, f"{file_id}.bin"))
-        if not bin_path.startswith(base + os.sep):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid upload id")
-        with open(bin_path, "wb") as out:
-            out.write(data)
+    storage = "s3"
+    if not (bucket and endpoint and access_key and secret_key):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="File storage is not configured.")
+    try:
+        s3 = boto3.client(
+            "s3",
+            endpoint_url=endpoint,
+            region_name=region,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            config=BotoConfig(signature_version="s3v4"),
+        )
+        s3.put_object(Bucket=bucket, Key=key, Body=data, ContentType=content_type)
+    except Exception as exc:
+        logger.exception("Failed to upload ID document to Supabase storage: %s", exc)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to upload file.") from exc
 
     # Always store metadata locally to validate ownership and audit the upload.
     queries.store_onboarding_file_metadata(
