@@ -16,6 +16,7 @@ import { LoadingScreen } from "../../components/LoadingScreen";
 import { Button } from "../../components/ui/button";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Label } from "../../components/ui/label";
+import { normalizeCalLink } from "../../utils/cal";
 
 export default function OnboardStep6() {
   const router = useRouter();
@@ -30,18 +31,19 @@ export default function OnboardStep6() {
   const shouldBlockExit = needsCall && !callScheduled;
 
   const calLink = process.env.NEXT_PUBLIC_CAL_LINK || "";
+  const calEmbedLink = normalizeCalLink(calLink);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   useEffect(() => {
-    if (!calLink) return;
+    if (!calEmbedLink) return;
     (async function initCal() {
       const cal = await getCalApi({ namespace: "30min" });
       cal("ui", { hideEventTypeDetails: false, layout: "month_view" });
     })();
-  }, [calLink]);
+  }, [calEmbedLink]);
 
   useEffect(() => {
     if (!shouldBlockExit) return;
@@ -128,15 +130,15 @@ export default function OnboardStep6() {
         <Button
           variant="hero"
           size="lg"
-          disabled={!calLink}
+          disabled={!calEmbedLink}
           data-cal-namespace="30min"
-          data-cal-link={calLink}
+          data-cal-link={calEmbedLink}
           data-cal-config='{"layout":"month_view"}'
         >
           <Calendar className="h-4 w-4 mr-2" />
           Schedule Call
         </Button>
-        {!calLink && (
+        {!calEmbedLink && (
           <p className="text-xs text-muted-foreground">
             Cal.com booking is not configured. Set `NEXT_PUBLIC_CAL_LINK`.
           </p>

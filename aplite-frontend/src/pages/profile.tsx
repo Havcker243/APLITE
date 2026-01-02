@@ -19,6 +19,7 @@ import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
 import { cn } from "../utils/cn";
 import { toast } from "sonner";
+import { normalizeCalLink } from "../utils/cal";
 
 const initialState = {
   company_name: "",
@@ -39,6 +40,7 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
 
   const calLink = process.env.NEXT_PUBLIC_CAL_LINK || "";
+  const calEmbedLink = normalizeCalLink(calLink);
 
   const isUS = isUnitedStates(form.country);
   const isCA = isCanada(form.country);
@@ -53,12 +55,12 @@ export default function ProfilePage() {
   }, [loading, token, router]);
 
   useEffect(() => {
-    if (!calLink) return;
+    if (!calEmbedLink) return;
     (async function initCal() {
       const cal = await getCalApi({ namespace: "30min" });
       cal("ui", { hideEventTypeDetails: false, layout: "month_view" });
     })();
-  }, [calLink]);
+  }, [calEmbedLink]);
 
   async function loadProfile() {
     try {
@@ -219,12 +221,12 @@ export default function ProfilePage() {
 
                 {isPending && onboardingState === "PENDING_CALL" && (
                   <div className="mt-4">
-                    {calLink ? (
+                    {calEmbedLink ? (
                       <Button
                         variant="outline"
                         size="sm"
                         data-cal-namespace="30min"
-                        data-cal-link={calLink}
+                        data-cal-link={calEmbedLink}
                         data-cal-config='{"layout":"month_view"}'
                       >
                         <Calendar className="h-4 w-4 mr-2" />
