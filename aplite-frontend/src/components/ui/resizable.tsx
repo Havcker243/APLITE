@@ -13,7 +13,9 @@ const ResizablePanel = ResizablePrimitive.Panel;
 
 const ResizableHandle = React.forwardRef<
   React.ElementRef<typeof ResizablePrimitive.PanelResizeHandle>,
-  React.ComponentPropsWithoutRef<typeof ResizablePrimitive.PanelResizeHandle>
+  React.ComponentPropsWithoutRef<typeof ResizablePrimitive.PanelResizeHandle> & {
+    withHandle?: boolean;
+  }
 >(({ className, withHandle, ...props }, ref) => (
   <ResizablePrimitive.PanelResizeHandle
     ref={ref}
