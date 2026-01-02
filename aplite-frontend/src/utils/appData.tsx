@@ -3,7 +3,7 @@
  * Keeps shared data alive across route changes to avoid reload flicker.
  */
 
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { fetchPublicClients, listAccounts, listChildUpis } from "./api";
 import { useAuth } from "./auth";
 
@@ -69,9 +69,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     }
   }, [token]);
 
-  const refreshAccounts = async (options?: { force?: boolean }) => {
+  const refreshAccounts = useCallback(async (options?: { force?: boolean }) => {
     if (!token) return [];
     if (!options?.force && lastFetched.accounts && accounts.length) return accounts;
+    if (!options?.force && loading.accounts) return accounts;
     setLoading((prev) => ({ ...prev, accounts: true }));
     try {
       const data = await listAccounts();
@@ -81,11 +82,12 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading((prev) => ({ ...prev, accounts: false }));
     }
-  };
+  }, [accounts, lastFetched.accounts, loading.accounts, token]);
 
-  const refreshUpis = async (options?: { force?: boolean }) => {
+  const refreshUpis = useCallback(async (options?: { force?: boolean }) => {
     if (!token) return [];
     if (!options?.force && lastFetched.upis && upis.length) return upis;
+    if (!options?.force && loading.upis) return upis;
     setLoading((prev) => ({ ...prev, upis: true }));
     try {
       const data = await listChildUpis({ limit: 200 });
@@ -95,10 +97,11 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading((prev) => ({ ...prev, upis: false }));
     }
-  };
+  }, [lastFetched.upis, loading.upis, token, upis]);
 
-  const refreshClients = async (options?: { force?: boolean }) => {
+  const refreshClients = useCallback(async (options?: { force?: boolean }) => {
     if (!options?.force && lastFetched.clients && clients.length) return clients;
+    if (!options?.force && loading.clients) return clients;
     setLoading((prev) => ({ ...prev, clients: true }));
     try {
       const data = await fetchPublicClients();
@@ -108,14 +111,14 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading((prev) => ({ ...prev, clients: false }));
     }
-  };
+  }, [clients, lastFetched.clients, loading.clients]);
 
-  const clearCache = () => {
+  const clearCache = useCallback(() => {
     setAccounts([]);
     setUpis([]);
     setClients([]);
     setLastFetched({ accounts: null, upis: null, clients: null });
-  };
+  }, []);
 
   const value = useMemo(
     () => ({
@@ -129,7 +132,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       refreshClients,
       clearCache,
     }),
-    [accounts, upis, clients, lastFetched, loading]
+    [accounts, upis, clients, lastFetched, loading, refreshAccounts, refreshUpis, refreshClients, clearCache]
   );
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;
