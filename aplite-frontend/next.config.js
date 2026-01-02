@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
-const apiOrigin = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const apiOriginRaw = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const apiOrigin = apiOriginRaw.trim().replace(/\/+$/, "");
 const isProd = process.env.NODE_ENV === "production";
 
 // React Refresh in dev relies on eval; loosen CSP only in development.
