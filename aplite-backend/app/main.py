@@ -36,7 +36,8 @@ default_origins = [
 env_origins = os.getenv("FRONTEND_ORIGINS", "")
 extra_origins = [origin.strip() for origin in env_origins.split(",") if origin.strip()]
 allow_origins = list(dict.fromkeys(default_origins + extra_origins))
-allow_origin_regex = os.getenv("FRONTEND_ORIGIN_REGEX") or r"^https://.*\\.vercel\\.app$"
+# Loosened CORS for demo/testing; override with FRONTEND_ORIGIN_REGEX when tightening.
+allow_origin_regex = os.getenv("FRONTEND_ORIGIN_REGEX") or r"^https?://.*$"
 
 app.add_middleware(
     CORSMiddleware,
