@@ -18,6 +18,18 @@ const csp = [
 ].join("; ");
 
 const nextConfig = {
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: `${apiOrigin}/api/:path*`,
+      },
+      {
+        source: "/onboarding/:path*",
+        destination: `${apiOrigin}/onboarding/:path*`,
+      },
+    ];
+  },
   async headers() {
     return [
       {
