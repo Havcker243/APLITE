@@ -3,7 +3,8 @@
  * Manages auth/CSRF tokens and provides shared request/response types.
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const USE_PROXY = process.env.NEXT_PUBLIC_API_PROXY === "1";
+const API_BASE_URL = USE_PROXY ? "" : (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000");
 // In-memory tokens only; cookies remain the primary auth mechanism.
 let authToken: string | null = null;
 let csrfToken: string | null = null;
