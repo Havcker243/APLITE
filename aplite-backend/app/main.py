@@ -10,6 +10,8 @@ import os
 import time
 import uuid
 
+from dotenv import load_dotenv
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -23,6 +25,8 @@ from app.routes.onboarding import router as onboarding_router
 from app.routes.admin import router as admin_router
 from app.utils.ratelimit import RateLimit, check_rate_limit
 from app.utils.security import verify_csrf_token
+
+load_dotenv()
 
 app = FastAPI()
 default_origins = [
