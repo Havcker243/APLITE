@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import { supabase } from "../../utils/supabase";
+import { getSupabaseClient } from "../../utils/supabase";
 
 export default function AuthCallback() {
   const router = useRouter();
@@ -22,6 +22,11 @@ export default function AuthCallback() {
       }
 
       const code = router.query.code;
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        setMessage("Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY.");
+        return;
+      }
       if (typeof code === "string") {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (error) {
