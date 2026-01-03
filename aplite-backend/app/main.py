@@ -107,6 +107,11 @@ async def csrf_middleware(request: Request, call_next):
     if method in ("GET", "HEAD", "OPTIONS"):
         return await call_next(request)
 
+    path = request.url.path
+    if path.startswith("/api/auth/"):
+        # Auth endpoints may be hit before a session exists; skip CSRF here.
+        return await call_next(request)
+
     session_token = request.cookies.get("aplite_session")
     if session_token:
         # For cookie-based sessions, require a CSRF token on all state-changing requests.
