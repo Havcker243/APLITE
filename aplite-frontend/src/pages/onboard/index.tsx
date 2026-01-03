@@ -32,7 +32,16 @@ export default function OnboardIndex() {
       return;
     }
     if (status === "PENDING_CALL") {
-      router.replace("/onboard/step-6");
+      const userId = profile?.user?.id;
+      let scheduled = false;
+      if (typeof window !== "undefined" && userId) {
+        try {
+          scheduled = window.localStorage.getItem(`aplite_call_scheduled:${userId}`) === "1";
+        } catch {
+          scheduled = false;
+        }
+      }
+      router.replace(scheduled ? "/onboard/pending" : "/onboard/step-6");
       return;
     }
     if (status === "PENDING_REVIEW") {

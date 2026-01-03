@@ -30,12 +30,23 @@ export default function OnboardStep6() {
   const needsCall = onboardingStatus === "PENDING_CALL";
   const shouldBlockExit = needsCall && !callScheduled;
 
+  const userId = profile?.user?.id;
   const calLink = process.env.NEXT_PUBLIC_CAL_LINK || "";
   const calEmbedLink = normalizeCalLink(calLink);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !userId) return;
+    try {
+      const stored = window.localStorage.getItem(`aplite_call_scheduled:${userId}`);
+      setCallScheduled(stored === "1");
+    } catch {
+      // ignore storage errors
+    }
+  }, [userId]);
 
   useEffect(() => {
     if (!calEmbedLink) return;
@@ -80,11 +91,23 @@ export default function OnboardStep6() {
   }, [touchStep, completedThrough, needsCall, onboardingStatus, router]);
 
   useEffect(() => {
+    if (!userId) return;
     if (callScheduled) {
+      try {
+        window.localStorage.setItem(`aplite_call_scheduled:${userId}`, "1");
+      } catch {
+        // ignore storage errors
+      }
       markStepComplete(6);
       router.push("/onboard/pending");
+      return;
     }
-  }, [callScheduled, markStepComplete, router]);
+    try {
+      window.localStorage.removeItem(`aplite_call_scheduled:${userId}`);
+    } catch {
+      // ignore storage errors
+    }
+  }, [callScheduled, markStepComplete, router, userId]);
 
   if (loading || !token || !mounted) return <LoadingScreen />;
 
