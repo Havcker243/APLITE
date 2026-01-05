@@ -2,6 +2,7 @@
 const apiOriginRaw = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 const apiOrigin = apiOriginRaw.trim().replace(/\/+$/, "");
 const isProd = process.env.NODE_ENV === "production";
+const useProxy = process.env.NEXT_PUBLIC_API_PROXY === "1";
 
 // React Refresh in dev relies on eval; loosen CSP only in development.
 const csp = [
@@ -19,6 +20,7 @@ const csp = [
 
 const nextConfig = {
   async rewrites() {
+    if (!useProxy) return [];
     return [
       {
         source: "/api/:path*",
