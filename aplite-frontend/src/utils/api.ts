@@ -5,6 +5,9 @@
 
 const USE_PROXY = process.env.NEXT_PUBLIC_API_PROXY === "1";
 const API_BASE_URL = USE_PROXY ? "" : (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000");
+const NGROK_SKIP_HEADER = API_BASE_URL.includes("ngrok-free.dev")
+  ? { "ngrok-skip-browser-warning": "true" }
+  : {};
 // In-memory tokens only; cookies remain the primary auth mechanism.
 let authToken: string | null = null;
 let csrfToken: string | null = null;
@@ -21,7 +24,9 @@ export async function fetchCsrfToken(): Promise<string | null> {
   try {
     const res = await fetch(`${API_BASE_URL}/api/auth/csrf`, {
       credentials: "include",
-      headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
+      headers: authToken
+        ? { ...NGROK_SKIP_HEADER, Authorization: `Bearer ${authToken}` }
+        : { ...NGROK_SKIP_HEADER },
     });
     if (!res.ok) return null;
     const body = await res.json();
@@ -238,7 +243,7 @@ const defaultInit: RequestInit = { credentials: "include" };
 
 function withAuth(init?: RequestInit): RequestInit {
   // Attach Authorization when available; cookies remain the primary auth mechanism.
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...NGROK_SKIP_HEADER };
   if (init?.headers) {
     if (init.headers instanceof Headers) {
       init.headers.forEach((value, key) => {
@@ -551,7 +556,9 @@ export async function fetchPublicClients(query?: string) {
   /** Load the public directory of verified clients (optional `search` filter). */
   const params = new URLSearchParams();
   if (query) params.set("search", query);
-  const res = await fetch(`${API_BASE_URL}/api/public/clients${params.toString() ? `?${params.toString()}` : ""}`);
+  const res = await fetch(`${API_BASE_URL}/api/public/clients${params.toString() ? `?${params.toString()}` : ""}`, {
+    headers: NGROK_SKIP_HEADER,
+  });
   if (!res.ok) {
     throw new Error("Failed to load clients");
   }
