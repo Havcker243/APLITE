@@ -6,7 +6,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-const NGROK_SKIP_HEADER = API_BASE_URL.includes("ngrok-free.dev")
+const NGROK_SKIP_HEADER: Record<string, string> = API_BASE_URL.includes("ngrok-free.dev")
   ? { "ngrok-skip-browser-warning": "true" }
   : {};
 
@@ -28,8 +28,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const headerKey = String(adminKey).trim();
 
   try {
+    const headers: Record<string, string> = { ...NGROK_SKIP_HEADER };
+    headers["X-Admin-Key"] = headerKey;
     const response = await fetch(`${API_BASE_URL}/api/admin/verification/file/${encodeURIComponent(file_id)}`, {
-      headers: { ...NGROK_SKIP_HEADER, "X-Admin-Key": headerKey },
+      headers,
     });
     res.status(response.status);
     response.headers.forEach((value, key) => {
