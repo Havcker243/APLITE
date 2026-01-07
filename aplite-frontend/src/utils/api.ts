@@ -5,7 +5,7 @@
 
 const USE_PROXY = process.env.NEXT_PUBLIC_API_PROXY === "1";
 const API_BASE_URL = USE_PROXY ? "" : (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000");
-const NGROK_SKIP_HEADER = API_BASE_URL.includes("ngrok-free.dev")
+const NGROK_SKIP_HEADER: Record<string, string> = API_BASE_URL.includes("ngrok-free.dev")
   ? { "ngrok-skip-browser-warning": "true" }
   : {};
 // In-memory tokens only; cookies remain the primary auth mechanism.
@@ -22,11 +22,11 @@ export function setCsrfToken(token: string | null) {
 
 export async function fetchCsrfToken(): Promise<string | null> {
   try {
+    const headers: Record<string, string> = { ...NGROK_SKIP_HEADER };
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
     const res = await fetch(`${API_BASE_URL}/api/auth/csrf`, {
       credentials: "include",
-      headers: authToken
-        ? { ...NGROK_SKIP_HEADER, Authorization: `Bearer ${authToken}` }
-        : { ...NGROK_SKIP_HEADER },
+      headers,
     });
     if (!res.ok) return null;
     const body = await res.json();
