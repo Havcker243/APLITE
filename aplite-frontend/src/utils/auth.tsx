@@ -4,8 +4,9 @@
  */
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { AuthResponse, logout as apiLogout, User, fetchProfileDetails, ProfileDetailsResponse, fetchCsrfToken } from "./api";
+import { User, fetchProfileDetails, ProfileDetailsResponse } from "./api";
 import { setAuthToken, setCsrfToken } from "./api";
+import { getSupabaseClient } from "./supabase";
 
 type AuthContextType = {
   user: User | null;
@@ -14,7 +15,7 @@ type AuthContextType = {
   loading: boolean;
   isBootstrapping: boolean;
   isRefreshing: boolean;
-  login: (payload: AuthResponse) => void;
+  login: (accessToken: string) => void;
   logout: () => void;
   refreshProfile: (options?: { silent?: boolean }) => Promise<ProfileDetailsResponse | null>;
 };
@@ -47,10 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Server snapshot is canonical; update all auth-facing state from it.
       setUser(details.user);
       setProfile(details);
-      setToken((prev) => prev || "cookie");
-      // CSRF token is required for cookie-based write requests.
-      const csrf = await fetchCsrfToken();
-      setCsrfToken(csrf);
+      setToken((prev) => prev || null);
       return details;
     } catch {
       setUser(null);
@@ -64,30 +62,64 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    // Rely on cookie-based auth; refreshProfile will set token to "cookie" when valid.
-    (async () => {
+    const stored = (typeof window !== "undefined" && window.localStorage.getItem("aplite_auth_storage")) || "local";
+    const supabase = getSupabaseClient(stored === "session" ? "session" : "local");
+    if (!supabase) {
+      setIsBootstrapping(false);
+      return;
+    }
+
+    const boot = async () => {
       try {
-        await refreshProfile({ silent: true });
+        const { data } = await supabase.auth.getSession();
+        const accessToken = data.session?.access_token || null;
+        if (accessToken) {
+          setToken(accessToken);
+          setAuthToken(accessToken);
+          await refreshProfile({ silent: true });
+        }
       } finally {
         setIsBootstrapping(false);
       }
-    })();
+    };
+
+    void boot();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      const accessToken = session?.access_token || null;
+      if (accessToken) {
+        setToken(accessToken);
+        setAuthToken(accessToken);
+        void refreshProfile({ silent: true });
+      } else {
+        setUser(null);
+        setProfile(null);
+        setToken(null);
+        setAuthToken(null);
+        setCsrfToken(null);
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
-  const handleLogin = (payload: AuthResponse) => {
-    setUser(payload.user);
-    // Token is only used for API clients; UI relies on HttpOnly cookies.
-    setToken(payload.token || "cookie");
-    if (payload.token) setAuthToken(payload.token);
+  const handleLogin = (accessToken: string) => {
+    setToken(accessToken);
+    setAuthToken(accessToken);
     void refreshProfile();
   };
 
   const handleLogout = () => {
-    void apiLogout().finally(() => {
+    const supabase = getSupabaseClient();
+    const signOut = supabase ? supabase.auth.signOut() : Promise.resolve();
+    void signOut.finally(() => {
       setUser(null);
       setToken(null);
       setProfile(null);
       setAuthToken(null);
+      setCsrfToken(null);
       if (typeof window !== "undefined") {
         try {
           window.sessionStorage.removeItem("aplite_onboarding_session_v2"); // clear onboarding draft/progress

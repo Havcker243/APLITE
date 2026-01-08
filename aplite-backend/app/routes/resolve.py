@@ -209,9 +209,15 @@ def resolve_upi(payload: ResolveUPIRequest, request: Request, user=Depends(get_c
                 "bank_city": account.get("bank_city"),
             }
 
+        address = org.get("address") or {}
         business = {
             "legal_name": org.get("legal_name") or "",
-            "country": (org.get("address") or {}).get("country") or owner.get("country") or "",
+            "street1": address.get("street1") or "",
+            "street2": address.get("street2") or "",
+            "city": address.get("city") or "",
+            "state": address.get("state") or "",
+            "country": address.get("country") or owner.get("country") or "",
+            "website": org.get("website") or "",
         }
 
         return {
@@ -271,10 +277,16 @@ def resolve_upi(payload: ResolveUPIRequest, request: Request, user=Depends(get_c
             "bank_city": account.get("bank_city"),
         }
 
+    address = org.get("address") or {}
     business = {
         "legal_name": org.get("legal_name") or "",
-        # Country is stored inside the onboarding address blob; fall back to user country.
-        "country": (org.get("address") or {}).get("country") or owner.get("country") or "",
+        # Address details are stored inside the onboarding address blob.
+        "street1": address.get("street1") or "",
+        "street2": address.get("street2") or "",
+        "city": address.get("city") or "",
+        "state": address.get("state") or "",
+        "country": address.get("country") or owner.get("country") or "",
+        "website": org.get("website") or "",
     }
 
     return {

@@ -8,8 +8,8 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { ArrowRight, Loader2, Lock, Mail, Shield, User, Eye, EyeOff } from "lucide-react";
 
-import { signup } from "../utils/api";
 import { useAuth } from "../utils/auth";
+import { getSupabaseClient } from "../utils/supabase";
 import { Button } from "../components/ui/button";
 import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
@@ -61,23 +61,58 @@ export default function SignupPage() {
       if (!form.accept_terms) {
         throw new Error("You must accept the Terms of Service.");
       }
-      const response = await signup({
-        ...form,
+      // Legacy API signup flow (kept for reference):
+      // const response = await signup({ ...form });
+      // login(response);
+
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        throw new Error("Supabase is not configured.");
+      }
+
+      const { data, error } = await supabase.auth.signUp({
+        email: form.email.trim(),
+        password: form.password,
+        options: {
+          data: {
+            first_name: form.first_name.trim(),
+            last_name: form.last_name.trim(),
+          },
+        },
       });
-      login(response);
-      const details = await refreshProfile();
-      const status = String(details?.onboarding_status || "NOT_STARTED");
-      const next =
-        typeof router.query.next === "string"
-          ? router.query.next
-          : status !== "VERIFIED"
-          ? "/onboard"
-          : "/dashboard";
-      router.push(next);
+
+      if (error) {
+        throw new Error(error.message || "Unable to create account.");
+      }
+
+      const accessToken = data.session?.access_token;
+      if (accessToken) {
+        login(accessToken);
+        await refreshProfile();
+        router.push("/onboard");
+      } else {
+        toast.success("Check your email", { description: "Confirm your email to finish creating your account." });
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Unable to create account");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleOAuth(provider: "google" | "apple") {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      toast.error("Supabase is not configured.");
+      return;
+    }
+    const redirectTo = typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : undefined;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo },
+    });
+    if (error) {
+      toast.error("OAuth failed", { description: error.message });
     }
   }
 
@@ -239,11 +274,9 @@ export default function SignupPage() {
             <button
               type="button"
               className="flex items-center justify-center w-full h-11 px-4 bg-background text-foreground border border-border rounded-lg font-medium transition-colors active:opacity-80 active:scale-[0.98]"
-              title="Coming soon"
               aria-label="Continue with Google"
-              aria-disabled="true"
               tabIndex={0}
-              onClick={(event) => event.preventDefault()}
+              onClick={() => handleOAuth("google")}
             >
               <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24" aria-hidden="true">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -256,11 +289,9 @@ export default function SignupPage() {
             <button
               type="button"
               className="flex items-center justify-center w-full h-11 px-4 bg-black text-white border border-black rounded-lg font-medium transition-colors active:opacity-80 active:scale-[0.98]"
-              title="Coming soon"
               aria-label="Continue with Apple"
-              aria-disabled="true"
               tabIndex={0}
-              onClick={(event) => event.preventDefault()}
+              onClick={() => handleOAuth("apple")}
             >
               <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="white" aria-hidden="true">
                 <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />

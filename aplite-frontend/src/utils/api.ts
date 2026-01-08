@@ -181,7 +181,15 @@ export type LoginStartResponse = {
 export type ResolveResult = {
   upi: string;
   rail: string;
-  business: { legal_name: string; country: string };
+  business: {
+    legal_name: string;
+    street1?: string;
+    street2?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    website?: string;
+  };
   profile: {
     company_name?: string;
     summary?: string;
@@ -273,8 +281,9 @@ function withAuth(init?: RequestInit): RequestInit {
 
 async function authedFetch(input: RequestInfo | URL, init?: RequestInit) {
   const method = (init?.method || "GET").toUpperCase();
-  // CSRF token is required for cookie-based writes; fetch on-demand to avoid extra calls for reads.
-  if (!["GET", "HEAD", "OPTIONS"].includes(method) && !csrfToken) {
+  const hasBearer = Boolean(authToken);
+  // CSRF token is required for cookie-based writes; skip when using Bearer auth.
+  if (!hasBearer && !["GET", "HEAD", "OPTIONS"].includes(method) && !csrfToken) {
     await fetchCsrfToken();
   }
   return fetch(input, withAuth(init));

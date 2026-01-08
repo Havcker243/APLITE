@@ -161,6 +161,14 @@ export default function ResolvePage() {
     "";
   const swiftCode =
     result?.coordinates?.swift || result?.coordinates?.swift_bic || "";
+  const businessAddressParts = [
+    result?.business?.street1,
+    result?.business?.street2,
+    result?.business?.city,
+    result?.business?.state,
+    result?.business?.country,
+  ].filter(Boolean);
+  const businessAddress = businessAddressParts.length ? businessAddressParts.join(", ") : "";
 
   return (
     <DashboardLayout>
@@ -248,6 +256,31 @@ export default function ResolvePage() {
                       </div>
 
                       <div className="space-y-3">
+                        {result.business?.legal_name && (
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">Business name</span>
+                            <span className="text-sm font-medium text-foreground">{result.business.legal_name}</span>
+                          </div>
+                        )}
+                        {businessAddress && (
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">Business address</span>
+                            <span className="text-sm font-medium text-foreground text-right">{businessAddress}</span>
+                          </div>
+                        )}
+                        {result.business?.website && (
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">Website</span>
+                            <a
+                              href={result.business.website}
+                              className="text-sm font-medium text-accent hover:underline"
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              {result.business.website}
+                            </a>
+                          </div>
+                        )}
                         {result.coordinates?.bank_name && (
                           <div className="flex justify-between">
                             <span className="text-sm text-muted-foreground">Bank name</span>

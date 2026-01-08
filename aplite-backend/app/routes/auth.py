@@ -13,6 +13,8 @@ import os
 import secrets
 import logging
 
+import jwt
+from jwt import PyJWTError, PyJWKClient
 from psycopg2.errors import UniqueViolation
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Header, Request, Response, status, Query
 from fastapi.encoders import jsonable_encoder
@@ -101,6 +103,66 @@ def _bearer_token_from_header(authorization: str | None) -> str | None:
     return authorization.removeprefix("Bearer ").strip() or None
 
 
+def _resolve_jwks_url() -> str:
+    jwks_url = os.getenv("SUPABASE_JWKS_URL", "").strip()
+    if jwks_url:
+        return jwks_url
+    supabase_url = os.getenv("SUPABASE_URL", "").strip()
+    if supabase_url:
+        return f"{supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
+    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Supabase JWKS URL not configured")
+
+
+def _decode_supabase_token(token: str) -> dict:
+    jwks_url = _resolve_jwks_url()
+    try:
+        header = jwt.get_unverified_header(token)
+        alg = header.get("alg")
+        if alg not in ("ES256", "RS256"):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unsupported token algorithm")
+        jwk_client = PyJWKClient(jwks_url)
+        signing_key = jwk_client.get_signing_key_from_jwt(token).key
+        return jwt.decode(token, signing_key, algorithms=[alg], options={"verify_aud": False})
+    except PyJWTError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
+
+
+def _get_or_create_user_from_supabase(payload: dict) -> dict:
+    email = (payload.get("email") or "").lower().strip()
+    if not email:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
+
+    user = queries.get_user_by_email(email)
+    if user:
+        return user
+
+    metadata = payload.get("user_metadata") or {}
+    first_name = (metadata.get("first_name") or metadata.get("firstName") or "").strip()
+    last_name = (metadata.get("last_name") or metadata.get("lastName") or "").strip()
+    if not first_name:
+        first_name = (email.split("@")[0] or "User")[:80]
+    if not last_name:
+        last_name = ""
+
+    core_id = generate_core_entity_id()
+    user_id = queries.create_user(
+        first_name=first_name,
+        last_name=last_name,
+        email=email,
+        company="",
+        company_name="",
+        summary="",
+        established_year=None,
+        state=None,
+        country=None,
+        password_hash="",
+        master_upi="",
+    )
+    master_upi = generate_upi(core_id, payment_index=0, user_id=user_id)
+    queries.update_user_master_upi(user_id, master_upi)
+    return queries.get_user_by_id(user_id) or {}
+
+
 def _issue_session(user_id: int) -> str:
     """Create and persist a new session token for the user."""
     token = generate_session_token()
@@ -146,27 +208,31 @@ def get_current_user(request: Request, authorization: str | None = Header(defaul
     - Session expiry is enforced at request time, not via a background cleanup.
     - Expired sessions are deleted lazily when encountered.
     """
-    token = _bearer_token_from_header(authorization) or request.cookies.get("aplite_session")
+    token = _bearer_token_from_header(authorization)
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing or invalid token")
-    session = queries.get_session(token)
-    if not session:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
-    created_at = _coerce_utc_datetime(session.get("created_at"))
-    if created_at is None:
-        queries.delete_session(token)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
+    payload = _decode_supabase_token(token)
+    return _get_or_create_user_from_supabase(payload)
 
-    # Enforce session TTL on read; expired sessions are removed lazily.
-    ttl_hours = int(os.getenv("SESSION_TTL_HOURS", "168"))  # default: 7 days
-    if datetime.now(timezone.utc) > created_at + timedelta(hours=ttl_hours):
-        queries.delete_session(token)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
-
-    user = queries.get_user_by_id(session["user_id"])
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    return user
+    # Legacy session-based auth (kept for reference):
+    # token = _bearer_token_from_header(authorization) or request.cookies.get("aplite_session")
+    # if not token:
+    #     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing or invalid token")
+    # session = queries.get_session(token)
+    # if not session:
+    #     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
+    # created_at = _coerce_utc_datetime(session.get("created_at"))
+    # if created_at is None:
+    #     queries.delete_session(token)
+    #     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
+    # ttl_hours = int(os.getenv("SESSION_TTL_HOURS", "168"))
+    # if datetime.now(timezone.utc) > created_at + timedelta(hours=ttl_hours):
+    #     queries.delete_session(token)
+    #     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
+    # user = queries.get_user_by_id(session["user_id"])
+    # if not user:
+    #     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    # return user
 
 
 @router.post("/api/auth/signup", response_model=AuthResponse)

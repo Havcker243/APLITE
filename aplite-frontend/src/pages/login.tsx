@@ -11,8 +11,8 @@ import { Shield, Mail, Lock, ArrowRight, Loader2, Eye, EyeOff } from "lucide-rea
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { loginStart, loginVerify } from "../utils/api";
 import { useAuth } from "../utils/auth";
+import { getSupabaseClient } from "../utils/supabase";
 import { toast } from "sonner";
 
 export default function LoginPage() {
@@ -21,8 +21,15 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [otp, setOtp] = useState("");
-  const [loginId, setLoginId] = useState<string | null>(null);
+  const [rememberMe, setRememberMe] = useState(true);
+
+  useEffect(() => {
+    const stored = typeof window !== "undefined" ? window.localStorage.getItem("aplite_auth_storage") : null;
+    if (stored === "session") setRememberMe(false);
+  }, []);
+  // Legacy OTP flow (kept for reference):
+  // const [otp, setOtp] = useState("");
+  // const [loginId, setLoginId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -41,29 +48,34 @@ export default function LoginPage() {
 
     setSubmitting(true);
     try {
-      const response = await loginStart({ email: email.trim(), password });
-      setLoginId(response.login_id);
-      toast.success("Check your email", { description: "Enter the 6-digit verification code." });
-    } catch (err) {
-      toast.error("Login failed", {
-        description: err instanceof Error ? err.message : "Unable to start login.",
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  }
+      // Legacy OTP login flow (kept for reference):
+      // const response = await loginStart({ email: email.trim(), password });
+      // setLoginId(response.login_id);
+      // toast.success("Check your email", { description: "Enter the 6-digit verification code." });
 
-  async function handleVerify(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!loginId) return;
-    if (!otp.trim()) {
-      toast.warning("Missing code", { description: "Enter the 6-digit verification code." });
-      return;
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("aplite_auth_storage", rememberMe ? "local" : "session");
+      }
+      if (typeof window !== "undefined") {
+      window.localStorage.setItem("aplite_auth_storage", rememberMe ? "local" : "session");
     }
-    setSubmitting(true);
-    try {
-      const response = await loginVerify({ login_id: loginId, code: otp.trim() });
-      setAuth(response);
+    const supabase = getSupabaseClient(rememberMe ? "local" : "session");
+      if (!supabase) {
+        toast.error("Supabase is not configured.");
+        return;
+      }
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      if (error) {
+        throw new Error(error.message || "Unable to sign in.");
+      }
+      const accessToken = data.session?.access_token;
+      if (!accessToken) {
+        throw new Error("No session returned.");
+      }
+      setAuth(accessToken);
       const details = await refreshProfile();
       const status = String(details?.onboarding_status || "NOT_STARTED");
       const next =
@@ -74,12 +86,50 @@ export default function LoginPage() {
           : "/dashboard";
       router.push(next);
     } catch (err) {
-      toast.error("Verification failed", {
-        description: err instanceof Error ? err.message : "Unable to verify code.",
+      toast.error("Login failed", {
+        description: err instanceof Error ? err.message : "Unable to start login.",
       });
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // Legacy OTP verification flow (kept for reference):
+  // async function handleVerify(event: FormEvent<HTMLFormElement>) { ... }
+
+  async function handleOAuth(provider: "google" | "apple") {
+    const supabase = getSupabaseClient(rememberMe ? "local" : "session");
+    if (!supabase) {
+      toast.error("Supabase is not configured.");
+      return;
+    }
+    const redirectTo = typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : undefined;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo },
+    });
+    if (error) {
+      toast.error("OAuth failed", { description: error.message });
+    }
+  }
+
+  async function handleForgotPassword() {
+    if (!email.trim()) {
+      toast.warning("Enter your email first.");
+      return;
+    }
+    const supabase = getSupabaseClient(rememberMe ? "local" : "session");
+    if (!supabase) {
+      toast.error("Supabase is not configured.");
+      return;
+    }
+    const redirectTo = typeof window !== "undefined" ? `${window.location.origin}/login` : undefined;
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
+    if (error) {
+      toast.error("Reset failed", { description: error.message });
+      return;
+    }
+    toast.success("Check your email", { description: "We sent a password reset link." });
   }
 
   if (!loading && token) return null;
@@ -101,7 +151,7 @@ export default function LoginPage() {
             Sign in to your account to continue.
           </p>
 
-          <form onSubmit={loginId ? handleVerify : handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
               <Label htmlFor="email">Email address</Label>
               <div className="relative">
@@ -120,7 +170,7 @@ export default function LoginPage() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Password</Label>
-                <button type="button" className="text-sm text-accent hover:underline">
+                <button type="button" className="text-sm text-accent hover:underline" onClick={handleForgotPassword}>
                   Forgot password?
                 </button>
               </div>
@@ -145,7 +195,20 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {loginId && (
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-current"
+                  checked={rememberMe}
+                  onChange={(event) => setRememberMe(event.target.checked)}
+                />
+                Remember me
+              </label>
+            </div>
+
+            {/* Legacy OTP input (kept for reference) */}
+            {/* {loginId && (
               <div className="space-y-2">
                 <Label htmlFor="otp">Verification code</Label>
                 <Input
@@ -158,7 +221,7 @@ export default function LoginPage() {
                   required
                 />
               </div>
-            )}
+            )} */}
 
             <Button type="submit" variant="hero" size="lg" className="w-full" disabled={submitting}>
               {submitting ? (
@@ -168,7 +231,7 @@ export default function LoginPage() {
                 </>
               ) : (
                 <>
-                  {loginId ? "Verify code" : "Sign in"}
+                  Sign in
                   <ArrowRight className="h-4 w-4" />
                 </>
               )}
@@ -188,11 +251,9 @@ export default function LoginPage() {
             <button
               type="button"
               className="flex items-center justify-center w-full h-11 px-4 bg-background text-foreground border border-border rounded-lg font-medium transition-colors active:opacity-80 active:scale-[0.98]"
-              title="Coming soon"
               aria-label="Continue with Google"
-              aria-disabled="true"
               tabIndex={0}
-              onClick={(event) => event.preventDefault()}
+              onClick={() => handleOAuth("google")}
             >
               <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24" aria-hidden="true">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -205,11 +266,9 @@ export default function LoginPage() {
             <button
               type="button"
               className="flex items-center justify-center w-full h-11 px-4 bg-black text-white border border-black rounded-lg font-medium transition-colors active:opacity-80 active:scale-[0.98]"
-              title="Coming soon"
               aria-label="Continue with Apple"
-              aria-disabled="true"
               tabIndex={0}
-              onClick={(event) => event.preventDefault()}
+              onClick={() => handleOAuth("apple")}
             >
               <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="white" aria-hidden="true">
                 <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />

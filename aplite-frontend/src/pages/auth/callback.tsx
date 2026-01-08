@@ -22,7 +22,7 @@ export default function AuthCallback() {
       }
 
       const code = router.query.code;
-      const supabase = getSupabaseClient();
+      const supabase = getSupabaseClient("local");
       if (!supabase) {
         setMessage("Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY.");
         return;
@@ -32,6 +32,20 @@ export default function AuthCallback() {
         if (error) {
           setMessage(error.message || "Unable to complete sign-in.");
           return;
+        }
+      } else if (typeof window !== "undefined" && window.location.hash) {
+        const hash = new URLSearchParams(window.location.hash.slice(1));
+        const accessToken = hash.get("access_token");
+        const refreshToken = hash.get("refresh_token");
+        if (accessToken && refreshToken) {
+          const { error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (error) {
+            setMessage(error.message || "Unable to complete sign-in.");
+            return;
+          }
         }
       }
 
