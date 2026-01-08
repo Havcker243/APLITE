@@ -124,6 +124,9 @@ async def csrf_middleware(request: Request, call_next):
 
 @app.middleware("http")
 async def db_connection_middleware(request: Request, call_next):
+    # Skip DB checkout for health checks and preflight requests.
+    if request.method == "OPTIONS" or request.url.path == "/health":
+        return await call_next(request)
     # Use one pooled DB connection per request to reduce pool churn.
     with request_connection():
         return await call_next(request)

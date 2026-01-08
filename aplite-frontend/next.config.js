@@ -11,7 +11,7 @@ const csp = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  "connect-src 'self' https://app.cal.com https://cal.com https://api.cal.com https://dkmiberadlbashogpdrp.supabase.co https://*.supabase.co " + apiOrigin,
+  "connect-src 'self' https://app.cal.com https://cal.com https://api.cal.com https://dkmiberadlbashogpdrp.supabase.co https://*.supabase.co https://aplite-2.onrender.com " + apiOrigin,
   "frame-ancestors 'none'",
   "frame-src 'self' https://cal.com https://app.cal.com",
   "base-uri 'self'",
