@@ -11,7 +11,6 @@ import time
 import uuid
 
 from dotenv import load_dotenv
-import sentry_sdk
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,12 +31,13 @@ from app.utils.security import verify_csrf_token
 
 load_dotenv()
 
-sentry_dsn = os.getenv("SENTRY_DSN")
-if sentry_dsn:
-    sentry_sdk.init(
-        dsn=sentry_dsn,
-        send_default_pii=True,
-    )
+# Sentry placeholder: re-enable when needed.
+# sentry_dsn = os.getenv("SENTRY_DSN")
+# if sentry_dsn:
+#     sentry_sdk.init(
+#         dsn=sentry_dsn,
+#         send_default_pii=True,
+#     )
 
 
 def _scrub_sensitive_data(event, _hint):
@@ -181,6 +181,4 @@ def health_check():
     return {"status": "ok"}
 
 
-@app.get("/sentry-debug")
-def sentry_debug():
-    division_by_zero = 1 / 0
+# Sentry debug endpoint placeholder (kept for future use).
