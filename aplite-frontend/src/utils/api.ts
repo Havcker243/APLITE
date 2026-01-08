@@ -131,6 +131,12 @@ export type OnboardingStep4Payload = {
   swift?: string;
 };
 
+export type OnboardingDraftPayload = {
+  step: 1 | 2 | 3 | 4;
+  data: OnboardingStep1Payload | OnboardingStep2Payload | OnboardingStep3Payload | OnboardingStep4Payload;
+  completed?: boolean;
+};
+
 
 export type AccountPayload = {
   rail: "ACH" | "WIRE_DOM" | "SWIFT";
@@ -640,6 +646,17 @@ export async function onboardingReset() {
   /** Delete any in-progress onboarding session to restart from Step 1. */
   const res = await authedFetch(`${API_BASE_URL}/onboarding/reset`, { method: "POST" });
   if (!res.ok) throw new Error(await parseError(res, "Unable to reset onboarding session"));
+  return res.json();
+}
+
+export async function onboardingSaveDraft(payload: OnboardingDraftPayload) {
+  /** Save onboarding draft data for a single step. */
+  const res = await authedFetch(`${API_BASE_URL}/onboarding/draft`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await parseError(res, "Unable to save onboarding draft"));
   return res.json();
 }
 

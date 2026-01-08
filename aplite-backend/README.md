@@ -8,6 +8,7 @@ FastAPI service for onboarding organizations, managing payment accounts, issuing
 - Secrets: `ENCRYPTION_KEY`, `UPI_SECRET_KEY` (already in your `.env`; not modified here)
 - Sessions: `SESSION_TTL_HOURS` (optional; default `168` = 7 days)
 - Email (optional): `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL` to send OTP emails via SendGrid; otherwise emails log to stdout.
+- Error monitoring (optional): `SENTRY_DSN`, `ENVIRONMENT`, `SENTRY_TRACES_SAMPLE_RATE`
 
 ## Install (backend-only)
 ```bash
@@ -32,7 +33,7 @@ Run from `aplite-backend/` so `.env` is loaded correctly (or export env vars you
 - Auth: `/api/auth/signup`, `/api/auth/login/start`, `/api/auth/login/verify`, `/api/auth/logout`
 - Profile: `GET/PUT /api/profile`
 - Profile (extended): `GET /api/profile/details`, `PUT /api/profile/onboarding`
-- Onboarding: `/onboarding/current`, `/onboarding/complete`, `/onboarding/upload-id`, `/onboarding/upload-formation`, `/onboarding/reset`
+- Onboarding: `/onboarding/current`, `/onboarding/draft`, `/onboarding/complete`, `/onboarding/upload-id`, `/onboarding/upload-formation`, `/onboarding/reset`
 - Payment accounts: `/api/accounts` (list/create), `PUT /api/accounts/{id}` (rail fields lock once linked to a UPI)
 - Child UPIs: `/api/orgs/child-upi`, `/api/orgs/child-upis` (supports `limit` + `before`), `/api/orgs/child-upis/{id}/disable`, `/api/orgs/child-upis/{id}/reactivate`
 - Resolve UPI: `/api/resolve`, `/api/upi/lookup`

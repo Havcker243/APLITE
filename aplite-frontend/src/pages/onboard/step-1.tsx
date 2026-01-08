@@ -9,7 +9,7 @@ import { ArrowRight, Loader2 } from "lucide-react";
 
 import { OnboardingShell } from "../../components/onboarding/OnboardingShell";
 import { useAuth } from "../../utils/auth";
-import { onboardingUploadFormation } from "../../utils/api";
+import { onboardingSaveDraft, onboardingUploadFormation } from "../../utils/api";
 import { COUNTRIES, isCanada, isUnitedStates, US_STATES, CA_PROVINCES } from "../../utils/geo";
 import { FormationDocType, normalizeEIN, useOnboardingWizard } from "../../utils/onboardingWizard";
 import { LoadingScreen } from "../../components/LoadingScreen";
@@ -114,13 +114,76 @@ export default function OnboardStep1() {
         if (!hasAny) {
           throw new Error("Upload at least one valid formation document for this entity type.");
         }
+        const updatedDocs = [...step1.formation_documents];
         for (const doc of provided) {
           if (doc.file && !doc.file_id) {
             const res = await onboardingUploadFormation(doc.file, doc.doc_type);
             updateFormationDoc(doc.doc_type, { file_id: res.file_id, file: undefined });
+            const idx = updatedDocs.findIndex((item) => item.doc_type === doc.doc_type);
+            if (idx >= 0) {
+              updatedDocs[idx] = { ...updatedDocs[idx], file_id: res.file_id, file: undefined };
+            }
           }
         }
+        const formationDocs = updatedDocs
+          .filter((doc) => Boolean(doc.file_id))
+          .map((doc) => ({ doc_type: doc.doc_type, file_id: doc.file_id as string }));
+        await onboardingSaveDraft({
+          step: 1,
+          completed: true,
+          data: {
+            legal_name: step1.legal_name,
+            dba: step1.dba || undefined,
+            ein: step1.ein,
+            formation_date: step1.formation_date,
+            formation_state: step1.formation_state,
+            entity_type: step1.entity_type,
+            formation_documents: formationDocs.length ? formationDocs : undefined,
+            address: {
+              street1: step1.street1,
+              street2: step1.street2 || undefined,
+              city: step1.city,
+              state: step1.state,
+              zip: step1.zip,
+              country: step1.country,
+            },
+            industry,
+            website: step1.website || undefined,
+            description: step1.description || undefined,
+          },
+        });
+        toast.success("Saved");
+        markStepComplete(1);
+        router.push("/onboard/step-2");
+        return;
       }
+      const formationDocs = step1.formation_documents
+        .filter((doc) => Boolean(doc.file_id))
+        .map((doc) => ({ doc_type: doc.doc_type, file_id: doc.file_id as string }));
+      await onboardingSaveDraft({
+        step: 1,
+        completed: true,
+        data: {
+          legal_name: step1.legal_name,
+          dba: step1.dba || undefined,
+          ein: step1.ein,
+          formation_date: step1.formation_date,
+          formation_state: step1.formation_state,
+          entity_type: step1.entity_type,
+          formation_documents: formationDocs.length ? formationDocs : undefined,
+          address: {
+            street1: step1.street1,
+            street2: step1.street2 || undefined,
+            city: step1.city,
+            state: step1.state,
+            zip: step1.zip,
+            country: step1.country,
+          },
+          industry,
+          website: step1.website || undefined,
+          description: step1.description || undefined,
+        },
+      });
       toast.success("Saved");
       markStepComplete(1);
       router.push("/onboard/step-2");

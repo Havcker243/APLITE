@@ -180,16 +180,75 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     try {
       const current = await onboardingCurrent();
       setSession(current);
-      // Server only tracks steps 1-5; step 6 is client-only call scheduling.
+      // Server tracks steps 1-5; step 6 is client-only call scheduling.
       const serverStep = Math.min(Math.max(Number(current.current_step || 1), 1), 5) as OnboardingStep;
-      // Only override local progress if server is already verified; otherwise stay client-driven.
-      if (current.state === "VERIFIED") {
-        setCurrentStep(serverStep);
-        setCompletedThrough((prev) => Math.max(prev, serverStep - 1));
+      setCurrentStep(serverStep);
+
+      const stepStatuses = current.step_statuses || {};
+      const completedSteps = Array.isArray(stepStatuses.completed_steps) ? stepStatuses.completed_steps : [];
+      const completedMax = completedSteps.length ? Math.max(...completedSteps) : Math.max(serverStep - 1, 0);
+      setCompletedThrough((prev) => Math.max(prev, completedMax));
+
+      const industries = new Set(["Software", "Fintech", "E-commerce", "Marketplace", "Other"]);
+      const step1Draft = stepStatuses.step1 || null;
+      const org = current.org || {};
+      if (step1Draft || org) {
+        const address = step1Draft?.address || org.address || {};
+        const industryValue = step1Draft?.industry || org.industry || "";
+        const isKnownIndustry = industries.has(industryValue);
+        setStep1((prev) => ({
+          ...prev,
+          legal_name: step1Draft?.legal_name ?? org.legal_name ?? prev.legal_name,
+          dba: step1Draft?.dba ?? org.dba ?? prev.dba,
+          ein: step1Draft?.ein ?? org.ein ?? prev.ein,
+          formation_date: step1Draft?.formation_date ?? org.formation_date ?? prev.formation_date,
+          formation_state: step1Draft?.formation_state ?? org.formation_state ?? prev.formation_state,
+          entity_type: step1Draft?.entity_type ?? org.entity_type ?? prev.entity_type,
+          formation_documents: (step1Draft?.formation_documents || prev.formation_documents || []).map((doc: any) => ({
+            doc_type: doc.doc_type,
+            file_id: doc.file_id,
+          })),
+          street1: address.street1 ?? prev.street1,
+          street2: address.street2 ?? prev.street2,
+          city: address.city ?? prev.city,
+          state: address.state ?? prev.state,
+          zip: address.zip ?? prev.zip,
+          country: address.country ?? prev.country,
+          industry: isKnownIndustry ? industryValue : "Other",
+          industry_other: isKnownIndustry ? prev.industry_other : industryValue,
+          website: step1Draft?.website ?? org.website ?? prev.website,
+          description: step1Draft?.description ?? org.description ?? prev.description,
+        }));
       }
-      const roleInfo = current.step_statuses?.role || {};
-      if (roleInfo.role && (!step2.role || step2.role !== roleInfo.role)) {
-        setStep2((prev) => ({ ...prev, role: roleInfo.role, title: roleInfo.title || "" }));
+
+      const step2Draft = stepStatuses.step2 || stepStatuses.role || {};
+      if (step2Draft.role || step2Draft.title) {
+        setStep2((prev) => ({ ...prev, role: step2Draft.role || prev.role, title: step2Draft.title || prev.title }));
+      }
+
+      const step3Draft = stepStatuses.step3 || {};
+      if (Object.keys(step3Draft).length) {
+        setStep3((prev) => ({
+          ...prev,
+          full_name: step3Draft.full_name ?? prev.full_name,
+          title: step3Draft.title ?? prev.title,
+          phone: step3Draft.phone ?? prev.phone,
+          file_id: step3Draft.id_document_id ?? prev.file_id,
+          attestation: Boolean(step3Draft.attestation ?? prev.attestation),
+          file: undefined,
+        }));
+      }
+
+      const step4Draft = stepStatuses.step4 || {};
+      if (Object.keys(step4Draft).length) {
+        setStep4((prev) => ({
+          ...prev,
+          bank_name: step4Draft.bank_name ?? prev.bank_name,
+          account_number: step4Draft.account_number ?? prev.account_number,
+          ach_routing: step4Draft.ach_routing ?? prev.ach_routing,
+          wire_routing: step4Draft.wire_routing ?? prev.wire_routing,
+          swift: step4Draft.swift ?? prev.swift,
+        }));
       }
       return serverStep;
     } catch {

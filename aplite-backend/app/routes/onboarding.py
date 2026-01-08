@@ -216,6 +216,12 @@ class CompletePayload(BaseModel):
     id_document_id: str | None = None
 
 
+class DraftPayload(BaseModel):
+    step: int = Field(ge=1, le=4)
+    data: dict
+    completed: bool = False
+
+
 @router.get("/onboarding/current", response_model=CurrentOnboardingResponse)
 def onboarding_current(user=Depends(get_current_user)):
     session = queries.get_active_onboarding_session(user["id"])
@@ -243,6 +249,123 @@ def onboarding_reset(user=Depends(get_current_user)):
     """
     queries.reset_active_onboarding(user["id"])
     return {"detail": "reset"}
+
+
+@router.post("/onboarding/draft")
+def onboarding_save_draft(payload: DraftPayload, user=Depends(get_current_user)):
+    """
+    Save onboarding draft data for a single step.
+
+    Creates an onboarding session on first Step 1 save; later steps require an active session.
+    """
+    step = int(payload.step)
+    session = queries.get_active_onboarding_session(user["id"])
+    if session and str(session.get("state")) in ("PENDING_CALL", "PENDING_REVIEW", "VERIFIED"):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Onboarding is already submitted.")
+
+    step_data = None
+    if step == 1:
+        step_data = Step1Payload(**payload.data)
+    elif step == 2:
+        step_data = Step2Payload(**payload.data)
+    elif step == 3:
+        step_data = Step3Payload(**payload.data)
+    elif step == 4:
+        step_data = Step4Payload(**payload.data)
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid step.")
+
+    session_id: uuid.UUID
+    org_id: uuid.UUID
+    if step == 1:
+        if session and session.get("org_id"):
+            org_id = uuid.UUID(str(session["org_id"]))
+            session_id = uuid.UUID(str(session["id"]))
+            queries.update_organization_step1(
+                org_id=org_id,
+                user_id=user["id"],
+                legal_name=step_data.legal_name.strip(),
+                dba=(step_data.dba or "").strip() or None,
+                ein=step_data.ein,
+                formation_date=step_data.formation_date,
+                formation_state=step_data.formation_state.strip(),
+                entity_type=step_data.entity_type.strip(),
+                address=step_data.address.model_dump(),
+                industry=step_data.industry.strip(),
+                website=step_data.website,
+                description=(step_data.description or "").strip() or None,
+            )
+        else:
+            org_id = uuid.uuid4()
+            session_id = uuid.uuid4()
+            queries.create_organization_step1(
+                org_id=org_id,
+                user_id=user["id"],
+                legal_name=step_data.legal_name.strip(),
+                dba=(step_data.dba or "").strip() or None,
+                ein=step_data.ein,
+                formation_date=step_data.formation_date,
+                formation_state=step_data.formation_state.strip(),
+                entity_type=step_data.entity_type.strip(),
+                address=step_data.address.model_dump(),
+                industry=step_data.industry.strip(),
+                website=step_data.website,
+                description=(step_data.description or "").strip() or None,
+            )
+            queries.create_onboarding_session(
+                session_id=session_id,
+                org_id=org_id,
+                user_id=user["id"],
+                state="DRAFT",
+                current_step=1,
+                address_locked=False,
+            )
+    else:
+        if not session or not session.get("org_id"):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Start Step 1 before saving drafts.")
+        org_id = uuid.UUID(str(session["org_id"]))
+        session_id = uuid.UUID(str(session["id"]))
+
+    existing_statuses = session.get("step_statuses") if isinstance(session, dict) else None
+    step_statuses = dict(existing_statuses) if isinstance(existing_statuses, dict) else {}
+
+    step_key = f"step{step}"
+    step_statuses[step_key] = step_data.model_dump()
+
+    if step == 1:
+        formation_docs = step_data.formation_documents or []
+        step_statuses["formation_documents"] = [doc.model_dump() for doc in formation_docs]
+    if step == 2:
+        step_statuses["role"] = {"role": step_data.role, "title": step_data.title}
+
+    completed_steps = step_statuses.get("completed_steps")
+    if not isinstance(completed_steps, list):
+        completed_steps = []
+    if payload.completed and step not in completed_steps:
+        completed_steps.append(step)
+        completed_steps.sort()
+    step_statuses["completed_steps"] = completed_steps
+
+    current_step = int(session.get("current_step") or 1) if session else 1
+    target_step = step + (1 if payload.completed else 0)
+    current_step = max(current_step, target_step)
+    if current_step > 5:
+        current_step = 5
+
+    updated = queries.update_onboarding_session(
+        session_id,
+        state="DRAFT",
+        current_step=current_step,
+        address_locked=bool(session.get("address_locked", False)) if session else False,
+        step_statuses=step_statuses,
+    )
+
+    return {
+        "session_id": str(session_id),
+        "org_id": str(org_id),
+        "current_step": int(updated.get("current_step") if updated else current_step),
+        "step_statuses": step_statuses,
+    }
 
 
 @router.post("/onboarding/upload-id")
@@ -458,6 +581,17 @@ async def onboarding_complete(
     # Default verification path: owners go through a call; reps provide ID.
     verification_method = payload.verification_method or ("call" if payload.role.role == "owner" else "id")
 
+    active_session = queries.get_active_onboarding_session(user["id"])
+    existing_session_id = None
+    existing_org_id = None
+    if active_session:
+        state = str(active_session.get("state") or "")
+        if state in ("PENDING_CALL", "PENDING_REVIEW", "VERIFIED"):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Onboarding is already submitted.")
+        if active_session.get("org_id"):
+            existing_session_id = uuid.UUID(str(active_session["id"]))
+            existing_org_id = uuid.UUID(str(active_session["org_id"]))
+
     try:
         # Step 3: identity validation
         if not payload.identity.attestation:
@@ -513,6 +647,8 @@ async def onboarding_complete(
             verification_method=verification_method,
             risk_level=risk_level,
             master_upi=user.get("master_upi") or "",
+            existing_session_id=existing_session_id,
+            existing_org_id=existing_org_id,
         )
 
     except HTTPException:

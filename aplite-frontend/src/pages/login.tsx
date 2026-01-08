@@ -69,7 +69,13 @@ export default function LoginPage() {
         password,
       });
       if (error) {
-        throw new Error(error.message || "Unable to sign in.");
+        const message = error.message || "Unable to sign in.";
+        if (message.toLowerCase().includes("confirm") && message.toLowerCase().includes("email")) {
+          toast.info("Confirm your email", { description: "Please verify your email before signing in." });
+          router.push(`/confirm-email?email=${encodeURIComponent(email.trim())}`);
+          return;
+        }
+        throw new Error(message);
       }
       const accessToken = data.session?.access_token;
       if (!accessToken) {

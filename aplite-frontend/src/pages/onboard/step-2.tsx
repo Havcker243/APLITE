@@ -10,6 +10,7 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 import { OnboardingShell } from "../../components/onboarding/OnboardingShell";
 import { useAuth } from "../../utils/auth";
 import { useOnboardingWizard } from "../../utils/onboardingWizard";
+import { onboardingSaveDraft } from "../../utils/api";
 import { LoadingScreen } from "../../components/LoadingScreen";
 import { Button } from "../../components/ui/button";
 import { Label } from "../../components/ui/label";
@@ -42,6 +43,14 @@ export default function OnboardStep2() {
     setSaving(true);
     try {
       if (!step2.role) throw new Error("Select your role to continue.");
+      await onboardingSaveDraft({
+        step: 2,
+        completed: true,
+        data: {
+          role: step2.role,
+          title: step2.title || undefined,
+        },
+      });
       toast.success("Saved");
       markStepComplete(2);
       router.push("/onboard/step-3");

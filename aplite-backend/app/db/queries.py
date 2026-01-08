@@ -1019,9 +1019,11 @@ def update_organization_step1(
     industry: str,
     website: Optional[str],
     description: Optional[str],
+    conn: psycopg2.extensions.connection | None = None,
+    commit: bool = True,
 ) -> None:
-    with get_connection() as conn:
-        with conn.cursor() as cur:
+    def _update(target_conn: psycopg2.extensions.connection) -> None:
+        with target_conn.cursor() as cur:
             cur.execute(
                 """
                 update organizations
@@ -1044,7 +1046,16 @@ def update_organization_step1(
                     user_id,
                 ),
             )
-            conn.commit()
+
+    if conn is None:
+        with get_connection() as conn_local:
+            _update(conn_local)
+            conn_local.commit()
+        return
+
+    _update(conn)
+    if commit:
+        conn.commit()
 
 
 def get_organization(org_id: str, user_id: int) -> Optional[OrganizationRecord]:
@@ -1226,6 +1237,54 @@ def advance_onboarding_session(
     _update(conn)
     if commit:
         conn.commit()
+
+
+def update_onboarding_session(
+    session_id: uuid.UUID,
+    *,
+    state: str | None = None,
+    current_step: int | None = None,
+    address_locked: bool | None = None,
+    step_statuses: Dict[str, Any] | None = None,
+    conn: psycopg2.extensions.connection | None = None,
+    commit: bool = True,
+) -> Optional[OnboardingSessionRecord]:
+    assignments: list[str] = ["last_saved_at=now()"]
+    params: list[Any] = []
+    if state is not None:
+        assignments.append("state=%s")
+        params.append(state)
+    if current_step is not None:
+        assignments.append("current_step=%s")
+        params.append(int(current_step))
+    if address_locked is not None:
+        assignments.append("address_locked=%s")
+        params.append(bool(address_locked))
+    if step_statuses is not None:
+        assignments.append("step_statuses=%s::jsonb")
+        params.append(json.dumps(step_statuses))
+
+    if len(assignments) == 1:
+        return get_onboarding_session_by_id(session_id)
+
+    params.append(str(session_id))
+    sql = f"update onboarding_sessions set {', '.join(assignments)} where id=%s returning *"
+
+    def _update(target_conn: psycopg2.extensions.connection) -> Optional[OnboardingSessionRecord]:
+        with target_conn.cursor() as cur:
+            cur.execute(sql, tuple(params))
+            return cur.fetchone()
+
+    if conn is None:
+        with get_connection() as conn_local:
+            row = _update(conn_local)
+            conn_local.commit()
+            return row
+
+    row = _update(conn)
+    if commit:
+        conn.commit()
+    return row
 
 
 def complete_onboarding_session(
@@ -1840,45 +1899,73 @@ def complete_onboarding_tx(
     verification_method: str,
     risk_level: str,
     master_upi: str,
+    existing_session_id: uuid.UUID | None = None,
+    existing_org_id: uuid.UUID | None = None,
 ) -> Dict[str, Any]:
     """
     Atomically complete onboarding in a single transaction.
 
     All database operations succeed or fail together, preventing orphaned records.
     """
-    org_id = uuid.uuid4()
-    session_id = uuid.uuid4()
+    org_id = existing_org_id or uuid.uuid4()
+    session_id = existing_session_id or uuid.uuid4()
     # Owners go through call review; authorized reps go to admin review queue.
     pending_call = verification_method == "call"
 
     with transaction() as conn:
-        create_organization_step1(
-            org_id=org_id,
-            user_id=user_id,
-            legal_name=org_data["legal_name"],
-            dba=org_data.get("dba"),
-            ein=org_data["ein"],
-            formation_date=org_data["formation_date"],
-            formation_state=org_data["formation_state"],
-            entity_type=org_data["entity_type"],
-            address=org_data["address"],
-            industry=org_data["industry"],
-            website=org_data.get("website"),
-            description=org_data.get("description"),
-            conn=conn,
-            commit=False,
-        )
+        if existing_session_id and existing_org_id:
+            update_organization_step1(
+                org_id=org_id,
+                user_id=user_id,
+                legal_name=org_data["legal_name"],
+                dba=org_data.get("dba"),
+                ein=org_data["ein"],
+                formation_date=org_data["formation_date"],
+                formation_state=org_data["formation_state"],
+                entity_type=org_data["entity_type"],
+                address=org_data["address"],
+                industry=org_data["industry"],
+                website=org_data.get("website"),
+                description=org_data.get("description"),
+                conn=conn,
+                commit=False,
+            )
+            update_onboarding_session(
+                session_id=session_id,
+                state="STEP_2_COMPLETE",
+                current_step=3,
+                address_locked=True,
+                conn=conn,
+                commit=False,
+            )
+        else:
+            create_organization_step1(
+                org_id=org_id,
+                user_id=user_id,
+                legal_name=org_data["legal_name"],
+                dba=org_data.get("dba"),
+                ein=org_data["ein"],
+                formation_date=org_data["formation_date"],
+                formation_state=org_data["formation_state"],
+                entity_type=org_data["entity_type"],
+                address=org_data["address"],
+                industry=org_data["industry"],
+                website=org_data.get("website"),
+                description=org_data.get("description"),
+                conn=conn,
+                commit=False,
+            )
 
-        create_onboarding_session(
-            session_id=session_id,
-            org_id=org_id,
-            user_id=user_id,
-            state="STEP_2_COMPLETE",
-            current_step=3,
-            address_locked=True,
-            conn=conn,
-            commit=False,
-        )
+            create_onboarding_session(
+                session_id=session_id,
+                org_id=org_id,
+                user_id=user_id,
+                state="STEP_2_COMPLETE",
+                current_step=3,
+                address_locked=True,
+                conn=conn,
+                commit=False,
+            )
 
         if formation_docs:
             set_onboarding_formation_documents(session_id=session_id, documents=formation_docs, conn=conn, commit=False)

@@ -24,10 +24,12 @@ Frontend runs on `http://localhost:3000`.
 
 Create `aplite-frontend/.env.local`:
 - `NEXT_PUBLIC_API_URL` (defaults to `http://127.0.0.1:8000`)
+- `NEXT_PUBLIC_SENTRY_DSN` (optional)
+- `NEXT_PUBLIC_ENVIRONMENT` (optional)
 
 ## Onboarding notes (backend alignment)
 - Backend must be running with the `schema-final.sql` schema (not `aplite-backend/data/schema.sql`) so onboarding columns exist.
-- Onboarding is local-only until final submit (`/onboarding/complete`); there are no per-step save endpoints.
+- Onboarding drafts are saved server-side on step completion via `/onboarding/draft`.
 - Role-based flow (current): owners go through call verification; authorized reps upload ID.
 - Submissions move to `PENDING_CALL` or `PENDING_REVIEW` until admin approval/rejection.
 

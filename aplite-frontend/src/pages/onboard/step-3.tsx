@@ -8,7 +8,7 @@ import { useRouter } from "next/router";
 import { ArrowLeft, ArrowRight, Loader2, Upload } from "lucide-react";
 
 import { OnboardingShell } from "../../components/onboarding/OnboardingShell";
-import { onboardingUploadId } from "../../utils/api";
+import { onboardingSaveDraft, onboardingUploadId } from "../../utils/api";
 import { useAuth } from "../../utils/auth";
 import { useOnboardingWizard } from "../../utils/onboardingWizard";
 import { LoadingScreen } from "../../components/LoadingScreen";
@@ -60,6 +60,17 @@ export default function OnboardStep3() {
         setStep3((prev) => ({ ...prev, file_id: fileId }));
       }
 
+      await onboardingSaveDraft({
+        step: 3,
+        completed: true,
+        data: {
+          full_name: step3.full_name,
+          title: step3.title || undefined,
+          id_document_id: fileId || undefined,
+          phone: step3.phone || undefined,
+          attestation: step3.attestation,
+        },
+      });
       toast.success(storageHint || "Saved");
       markStepComplete(3);
       router.push("/onboard/step-4");

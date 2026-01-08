@@ -92,6 +92,8 @@ export default function SignupPage() {
         router.push("/onboard");
       } else {
         toast.success("Check your email", { description: "Confirm your email to finish creating your account." });
+        const email = form.email.trim();
+        router.push(`/confirm-email?email=${encodeURIComponent(email)}`);
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Unable to create account");
@@ -242,7 +244,15 @@ export default function SignupPage() {
                 onCheckedChange={(checked) => setForm((prev) => ({ ...prev, accept_terms: Boolean(checked) }))}
               />
               <Label htmlFor="accept_terms" className="text-sm text-muted-foreground font-normal leading-relaxed cursor-pointer">
-                I agree to Aplite&apos;s Terms of Service and Privacy Policy, and consent to the verification process.
+                I agree to Aplite&apos;s{" "}
+                <Link href="/terms-of-service" className="text-accent hover:underline">
+                  Terms of Service
+                </Link>{" "}
+                and{" "}
+                <Link href="/privacy-policy" className="text-accent hover:underline">
+                  Privacy Policy
+                </Link>
+                , and consent to the verification process.
               </Label>
             </div>
 

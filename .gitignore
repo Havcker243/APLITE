@@ -48,3 +48,6 @@ aplite-backend/data/uploads/
 *.claude/
 .claude/
 aplite-backend/nul
+
+# Sentry Config File
+.env.sentry-build-plugin

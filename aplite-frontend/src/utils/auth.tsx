@@ -12,6 +12,8 @@ type AuthContextType = {
   user: User | null;
   token: string | null;
   profile: ProfileDetailsResponse | null;
+  emailConfirmed: boolean;
+  userEmail: string | null;
   loading: boolean;
   isBootstrapping: boolean;
   isRefreshing: boolean;
@@ -24,6 +26,8 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   token: null,
   profile: null,
+  emailConfirmed: true,
+  userEmail: null,
   loading: true,
   isBootstrapping: true,
   isRefreshing: false,
@@ -36,6 +40,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileDetailsResponse | null>(null);
+  const [emailConfirmed, setEmailConfirmed] = useState(true);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -76,7 +82,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (accessToken) {
           setToken(accessToken);
           setAuthToken(accessToken);
+          const sessionUser = data.session?.user;
+          const confirmed = Boolean(sessionUser?.email_confirmed_at || sessionUser?.confirmed_at);
+          setEmailConfirmed(confirmed);
+          setUserEmail(sessionUser?.email || null);
           await refreshProfile({ silent: true });
+        } else {
+          setEmailConfirmed(true);
+          setUserEmail(null);
         }
       } finally {
         setIsBootstrapping(false);
@@ -90,6 +103,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (accessToken) {
         setToken(accessToken);
         setAuthToken(accessToken);
+        const confirmed = Boolean(session?.user?.email_confirmed_at || session?.user?.confirmed_at);
+        setEmailConfirmed(confirmed);
+        setUserEmail(session?.user?.email || null);
         void refreshProfile({ silent: true });
       } else {
         setUser(null);
@@ -97,6 +113,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setToken(null);
         setAuthToken(null);
         setCsrfToken(null);
+        setEmailConfirmed(true);
+        setUserEmail(null);
       }
     });
 
@@ -120,6 +138,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setProfile(null);
       setAuthToken(null);
       setCsrfToken(null);
+      setEmailConfirmed(true);
+      setUserEmail(null);
       if (typeof window !== "undefined") {
         try {
           window.sessionStorage.removeItem("aplite_onboarding_session_v2"); // clear onboarding draft/progress
@@ -136,6 +156,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         token,
         profile,
+        emailConfirmed,
+        userEmail,
         loading: isBootstrapping,
         isBootstrapping,
         isRefreshing,

@@ -10,6 +10,7 @@ import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import { OnboardingShell } from "../../components/onboarding/OnboardingShell";
 import { useAuth } from "../../utils/auth";
 import { normalizeRouting, useOnboardingWizard } from "../../utils/onboardingWizard";
+import { onboardingSaveDraft } from "../../utils/api";
 import { LoadingScreen } from "../../components/LoadingScreen";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -30,6 +31,16 @@ export default function OnboardStep4() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (step4.swift) {
+      setRailType("SWIFT");
+    } else if (step4.wire_routing) {
+      setRailType("WIRE_DOM");
+    } else {
+      setRailType("ACH");
+    }
+  }, [step4.swift, step4.wire_routing]);
 
   useEffect(() => {
     touchStep(4);
@@ -54,6 +65,17 @@ export default function OnboardStep4() {
     e.preventDefault();
     setSaving(true);
     try {
+      await onboardingSaveDraft({
+        step: 4,
+        completed: true,
+        data: {
+          bank_name: step4.bank_name,
+          account_number: step4.account_number,
+          ach_routing: railType === "ACH" ? step4.ach_routing || undefined : undefined,
+          wire_routing: railType === "WIRE_DOM" ? step4.wire_routing || undefined : undefined,
+          swift: railType === "SWIFT" ? step4.swift || undefined : undefined,
+        },
+      });
       toast.success("Saved");
       markStepComplete(4);
       router.push("/onboard/step-5");

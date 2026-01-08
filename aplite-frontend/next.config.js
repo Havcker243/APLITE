@@ -1,4 +1,5 @@
 /** @type {import('next').NextConfig} */
+const { withSentryConfig } = require("@sentry/nextjs");
 const apiOriginRaw = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 const apiOrigin = apiOriginRaw.trim().replace(/\/+$/, "");
 const isProd = process.env.NODE_ENV === "production";
@@ -11,7 +12,7 @@ const csp = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  "connect-src 'self' https://app.cal.com https://cal.com https://api.cal.com https://dkmiberadlbashogpdrp.supabase.co https://*.supabase.co https://aplite-2.onrender.com " + apiOrigin,
+  "connect-src 'self' https://app.cal.com https://cal.com https://api.cal.com https://dkmiberadlbashogpdrp.supabase.co https://*.supabase.co https://aplite-2.onrender.com https://*.sentry.io https://*.ingest.sentry.io " + apiOrigin,
   "frame-ancestors 'none'",
   "frame-src 'self' https://cal.com https://app.cal.com",
   "base-uri 'self'",
@@ -47,4 +48,4 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+module.exports = withSentryConfig(nextConfig, { silent: true });
