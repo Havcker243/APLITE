@@ -4,7 +4,8 @@ services:
     env: python
     region: oregon
     plan: starter
-    buildCommand: pip install -r aplite-backend/requirements-backend.txt
+    rootDir: aplite-backend
+    buildCommand: pip install -r requirements-backend.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
