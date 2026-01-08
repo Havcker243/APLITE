@@ -7,7 +7,7 @@ const useProxy = process.env.NEXT_PUBLIC_API_PROXY === "1";
 // React Refresh in dev relies on eval; loosen CSP only in development.
 const csp = [
   "default-src 'self'",
-  `script-src 'self' https://app.cal.com${isProd ? "" : " 'unsafe-eval'"}`,
+  `script-src 'self' https://app.cal.com https://vercel.live${isProd ? "" : " 'unsafe-eval'"}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
