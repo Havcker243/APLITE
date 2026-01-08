@@ -24,8 +24,6 @@ Frontend runs on `http://localhost:3000`.
 
 Create `aplite-frontend/.env.local`:
 - `NEXT_PUBLIC_API_URL` (defaults to `http://127.0.0.1:8000`)
-- `NEXT_PUBLIC_SENTRY_DSN` (optional)
-- `NEXT_PUBLIC_ENVIRONMENT` (optional)
 
 ## Onboarding notes (backend alignment)
 - Backend must be running with the `schema-final.sql` schema (not `aplite-backend/data/schema.sql`) so onboarding columns exist.

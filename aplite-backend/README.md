@@ -8,7 +8,6 @@ FastAPI service for onboarding organizations, managing payment accounts, issuing
 - Secrets: `ENCRYPTION_KEY`, `UPI_SECRET_KEY` (already in your `.env`; not modified here)
 - Sessions: `SESSION_TTL_HOURS` (optional; default `168` = 7 days)
 - Email (optional): `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL` to send OTP emails via SendGrid; otherwise emails log to stdout.
-- Error monitoring (optional): `SENTRY_DSN`, `ENVIRONMENT`, `SENTRY_TRACES_SAMPLE_RATE`
 
 ## Install (backend-only)
 ```bash

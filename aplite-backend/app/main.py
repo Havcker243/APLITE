@@ -15,9 +15,6 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import sentry_sdk
-from sentry_sdk.integrations.fastapi import FastApiIntegration
-from sentry_sdk.integrations.logging import LoggingIntegration
 
 from app.db.connection import request_connection
 from app.routes.auth import router as auth_router
@@ -30,47 +27,6 @@ from app.utils.ratelimit import RateLimit, check_rate_limit
 from app.utils.security import verify_csrf_token
 
 load_dotenv()
-
-# Sentry placeholder: re-enable when needed.
-# sentry_dsn = os.getenv("SENTRY_DSN")
-# if sentry_dsn:
-#     sentry_sdk.init(
-#         dsn=sentry_dsn,
-#         send_default_pii=True,
-#     )
-
-
-def _scrub_sensitive_data(event, _hint):
-    """Remove sensitive data before sending to Sentry."""
-    request = event.get("request")
-    if isinstance(request, dict):
-        data = request.get("data")
-        if isinstance(data, dict):
-            for key in ("password", "token", "api_key", "secret", "ssn", "ein"):
-                if key in data:
-                    data[key] = "[REDACTED]"
-        headers = request.get("headers")
-        if isinstance(headers, dict):
-            for key in ("Authorization", "X-Admin-Key", "X-Admin-Session", "Cookie"):
-                if key in headers:
-                    headers[key] = "[REDACTED]"
-    return event
-
-
-_sentry_dsn = os.getenv("SENTRY_DSN", "").strip()
-if _sentry_dsn:
-    sentry_sdk.init(
-        dsn=_sentry_dsn,
-        environment=os.getenv("ENVIRONMENT", "production"),
-        traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
-        profiles_sample_rate=float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.0")),
-        integrations=[
-            FastApiIntegration(transaction_style="endpoint"),
-            LoggingIntegration(level=logging.INFO, event_level=logging.ERROR),
-        ],
-        send_default_pii=False,
-        before_send=_scrub_sensitive_data,
-    )
 
 app = FastAPI()
 default_origins = [
@@ -180,5 +136,3 @@ async def db_connection_middleware(request: Request, call_next):
 def health_check():
     return {"status": "ok"}
 
-
-# Sentry debug endpoint placeholder (kept for future use).
