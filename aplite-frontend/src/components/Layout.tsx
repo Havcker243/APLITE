@@ -40,7 +40,37 @@ export function Layout({ children }: PropsWithChildren) {
       <footer className="border-t border-border bg-background">
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-6 text-sm text-muted-foreground">
           <span>Aplite</span>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <Link href="/about" className="hover:text-foreground">
+              About
+            </Link>
+            <Link href="/payment-identity" className="hover:text-foreground">
+              Payment Identity
+            </Link>
+            <Link href="/verification" className="hover:text-foreground">
+              Verification
+            </Link>
+            <Link href="/security" className="hover:text-foreground">
+              Security
+            </Link>
+            <Link href="/compliance" className="hover:text-foreground">
+              Compliance
+            </Link>
+            <Link href="/sla" className="hover:text-foreground">
+              SLA
+            </Link>
+            <Link href="/trust" className="hover:text-foreground">
+              Trust
+            </Link>
+            <Link href="/faq" className="hover:text-foreground">
+              FAQ
+            </Link>
+            <Link href="/status" className="hover:text-foreground">
+              Status
+            </Link>
+            <Link href="/contact" className="hover:text-foreground">
+              Contact
+            </Link>
             <Link href="/terms-of-service" className="hover:text-foreground">
               Terms
             </Link>
