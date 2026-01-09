@@ -13,7 +13,7 @@ const csp = [
   "font-src 'self' data:",
   "connect-src 'self' https://app.cal.com https://cal.com https://api.cal.com https://dkmiberadlbashogpdrp.supabase.co https://*.supabase.co https://aplite-2.onrender.com " + apiOrigin,
   "frame-ancestors 'none'",
-  "frame-src 'self' https://cal.com https://app.cal.com",
+  `frame-src 'self' https://cal.com https://app.cal.com${isProd ? "" : " https://vercel.live"}`,
   "base-uri 'self'",
   `form-action 'self' ${apiOrigin} https://cal.com https://app.cal.com`,
 ].join("; ");
