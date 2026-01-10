@@ -15,6 +15,7 @@ import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { toast } from "sonner";
+import { toastApiError } from "../utils/notifications";
 
 const initialState = {
   first_name: "",
@@ -43,12 +44,14 @@ export default function SignupPage() {
   if (!loading && token) return null;
 
   function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
+    /** Update form state on input changes. */
     const target = event.target;
     const { name, value } = target;
     setForm((prev) => ({ ...prev, [name]: value }));
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    /** Create a Supabase user and route to onboarding. */
     event.preventDefault();
     setSubmitting(true);
     try {
@@ -96,13 +99,14 @@ export default function SignupPage() {
         router.push(`/confirm-email?email=${encodeURIComponent(email)}`);
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to create account");
+      toastApiError(err, "Unable to create account");
     } finally {
       setSubmitting(false);
     }
   }
 
   async function handleOAuth(provider: "google" | "apple") {
+    /** Start OAuth sign-up with Supabase. */
     const supabase = getSupabaseClient();
     if (!supabase) {
       toast.error("Supabase is not configured.");

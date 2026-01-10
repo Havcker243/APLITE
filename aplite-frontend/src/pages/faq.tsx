@@ -56,6 +56,7 @@ const FAQS = [
 ];
 
 export default function FaqPage() {
+  /** Render the faq page content. */
   const { token } = useAuth();
   const backHref = token ? "/dashboard" : "/";
   const backLabel = token ? "Back to dashboard" : "Back to Aplite";

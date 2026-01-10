@@ -61,6 +61,7 @@ export default function OnboardPendingPage() {
     let active = true;
 
     async function poll() {
+      /** Poll profile status until verification completes or rejects. */
       // Poll the profile snapshot to see if admin has verified or rejected.
       setChecking(true);
       try {
@@ -94,6 +95,7 @@ export default function OnboardPendingPage() {
   }, [token, refreshProfile, router]);
 
   async function handleRestart() {
+    /** Reset onboarding and return to step 1 after rejection. */
     try {
       await onboardingReset();
       await refreshProfile();

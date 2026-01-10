@@ -13,14 +13,17 @@ let authToken: string | null = null;
 let csrfToken: string | null = null;
 
 export function setAuthToken(token: string | null) {
+  /** Store the bearer token for API requests (in-memory only). */
   authToken = token;
 }
 
 export function setCsrfToken(token: string | null) {
+  /** Store the CSRF token used for cookie-based writes. */
   csrfToken = token;
 }
 
 export async function fetchCsrfToken(): Promise<string | null> {
+  /** Fetch and cache a CSRF token for state-changing requests. */
   try {
     const headers: Record<string, string> = { ...NGROK_SKIP_HEADER };
     if (authToken) headers.Authorization = `Bearer ${authToken}`;
@@ -256,6 +259,7 @@ export type MasterUpiLookupResult = {
 const defaultInit: RequestInit = { credentials: "include" };
 
 function withAuth(init?: RequestInit): RequestInit {
+  /** Merge auth headers + CSRF into a request init block. */
   // Attach Authorization when available; cookies remain the primary auth mechanism.
   const headers: Record<string, string> = { ...NGROK_SKIP_HEADER };
   if (init?.headers) {
@@ -286,6 +290,7 @@ function withAuth(init?: RequestInit): RequestInit {
 }
 
 async function authedFetch(input: RequestInfo | URL, init?: RequestInit) {
+  /** Wrapper around fetch that ensures CSRF token is present when needed. */
   const method = (init?.method || "GET").toUpperCase();
   const hasBearer = Boolean(authToken);
   // CSRF token is required for cookie-based writes; skip when using Bearer auth.
@@ -296,16 +301,30 @@ async function authedFetch(input: RequestInfo | URL, init?: RequestInit) {
 }
 
 async function parseError(res: Response, fallback: string) {
+  /** Parse error responses into a readable message. */
+  const status = res.status;
   try {
     const body = await res.json();
-    return body?.detail || body?.message || fallback;
+    const detail = body?.detail || body?.message;
+    if (detail) return detail;
   } catch {
     try {
-      return (await res.text()) || fallback;
+      const text = await res.text();
+      if (text) return text;
     } catch {
-      return fallback;
+      // ignore parse errors
     }
   }
+
+  if (status === 401) return "Please log in again.";
+  if (status === 403) return "You do not have access to this resource.";
+  if (status === 404) return "We could not find what you requested.";
+  if (status === 409) return "This action is already completed.";
+  if (status === 422) return "Please check the highlighted fields and try again.";
+  if (status === 429) return "Too many requests. Please try again shortly.";
+  if (status >= 500) return "We are having trouble right now. Please try again soon.";
+
+  return fallback;
 }
 
 export async function signup(data: {

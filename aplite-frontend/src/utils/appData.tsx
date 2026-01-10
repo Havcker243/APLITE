@@ -44,6 +44,7 @@ const AppDataContext = createContext<AppDataContextType>({
 });
 
 export function AppDataProvider({ children }: { children: React.ReactNode }) {
+  /** App-wide cache provider for accounts, UPIs, and public clients. */
   const { token } = useAuth();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [upis, setUpis] = useState<ChildUpi[]>([]);
@@ -70,6 +71,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, [token]);
 
   const refreshAccounts = useCallback(async (options?: { force?: boolean }) => {
+    /** Refresh payment accounts with a simple freshness check. */
     if (!token) return [];
     if (!options?.force && lastFetched.accounts && accounts.length) return accounts;
     if (!options?.force && loading.accounts) return accounts;
@@ -85,6 +87,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, [accounts, lastFetched.accounts, loading.accounts, token]);
 
   const refreshUpis = useCallback(async (options?: { force?: boolean }) => {
+    /** Refresh child UPIs with a simple freshness check. */
     if (!token) return [];
     if (!options?.force && lastFetched.upis && upis.length) return upis;
     if (!options?.force && loading.upis) return upis;
@@ -100,6 +103,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, [lastFetched.upis, loading.upis, token, upis]);
 
   const refreshClients = useCallback(async (options?: { force?: boolean }) => {
+    /** Refresh the public clients directory. */
     if (!options?.force && lastFetched.clients && clients.length) return clients;
     if (!options?.force && loading.clients) return clients;
     setLoading((prev) => ({ ...prev, clients: true }));
@@ -114,6 +118,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, [clients, lastFetched.clients, loading.clients]);
 
   const clearCache = useCallback(() => {
+    /** Clear all cached app data. */
     setAccounts([]);
     setUpis([]);
     setClients([]);
@@ -139,5 +144,6 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function useAppData() {
+  /** Hook to access cached app data + refresh helpers. */
   return useContext(AppDataContext);
 }

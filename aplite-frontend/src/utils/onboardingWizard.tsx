@@ -42,7 +42,7 @@ export type OnboardingStep3Draft = { full_name: string; title: string; phone: st
 
 export type OnboardingStep4Draft = { bank_name: string; account_number: string; ach_routing: string; wire_routing: string; swift: string };
 
-// Session-only persistence; drafts are not synced to server until final submit.
+// Session-only persistence as a fallback; server drafts are the source of truth.
 const STORAGE_KEY = "aplite_onboarding_session_v2";
 
 type OnboardingContextValue = {
@@ -68,12 +68,14 @@ type OnboardingContextValue = {
 const OnboardingContext = createContext<OnboardingContextValue | null>(null);
 
 export function normalizeEIN(raw: string) {
+  /** Normalize EIN to NN-NNNNNNN format as the user types. */
   const digits = raw.replace(/\D/g, "").slice(0, 9);
   if (digits.length <= 2) return digits;
   return `${digits.slice(0, 2)}-${digits.slice(2)}`;
 }
 
 export function normalizeRouting(raw: string, max = 34) {
+  /** Strip non-digits and enforce a max length for routing/account fields. */
   return raw.replace(/\D/g, "").slice(0, max);
 }
 
@@ -101,6 +103,7 @@ const INITIAL_STEP3: OnboardingStep3Draft = { full_name: "", title: "", phone: "
 const INITIAL_STEP4: OnboardingStep4Draft = { bank_name: "", account_number: "", ach_routing: "", wire_routing: "", swift: "" };
 
 export function OnboardingProvider({ children }: { children: React.ReactNode }) {
+  /** Context provider that hydrates drafts from server + sessionStorage. */
   const { token, loading } = useAuth();
 
   const [session, setSession] = useState<any | null>(null);
@@ -113,7 +116,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   const [step3, setStep3] = useState<OnboardingStep3Draft>(INITIAL_STEP3);
   const [step4, setStep4] = useState<OnboardingStep4Draft>(INITIAL_STEP4);
 
-  // Local drafts live in sessionStorage; server state is only checked for VERIFIED.
+  // Local drafts live in sessionStorage as a fallback; server drafts are preferred.
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
@@ -302,6 +305,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
 }
 
 export function useOnboardingWizard() {
+  /** Hook to access onboarding draft state + helpers. */
   const ctx = useContext(OnboardingContext);
   if (!ctx) throw new Error("useOnboardingWizard must be used within OnboardingProvider");
   return ctx;

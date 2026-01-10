@@ -9,7 +9,7 @@ import { Building2, CheckCircle2, ChevronDown, ChevronUp, Search } from "lucide-
 import { useAppData } from "../utils/appData";
 import DashboardLayout from "../components/DashboardLayout";
 import { Input } from "../components/ui/input";
-import { toast } from "sonner";
+import { toastApiError } from "../utils/notifications";
 
 type Client = {
   id: number | string;
@@ -34,11 +34,12 @@ export default function Clients() {
 
   useEffect(() => {
     refreshClients().catch((err) => {
-      toast.error(err instanceof Error ? err.message : "Unable to load clients");
+      toastApiError(err, "Unable to load clients");
     });
   }, [refreshClients]);
 
   const normalized = useMemo(() => {
+    /** Normalize client data into UI-friendly fields. */
     return clients.map((client) => {
       const name = client.company_name || client.legal_name || "Unnamed client";
       const country = client.country || "";
@@ -51,6 +52,7 @@ export default function Clients() {
   }, [clients]);
 
   const filtered = useMemo(() => {
+    /** Apply a simple name/industry search filter. */
     const query = search.trim().toLowerCase();
     if (!query) return normalized;
     return normalized.filter((o) =>

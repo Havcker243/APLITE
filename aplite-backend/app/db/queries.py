@@ -170,6 +170,7 @@ def _next_payment_index_for_org(org_id: str, *, conn: psycopg2.extensions.connec
 
 
 def _decrypt_payment_account(row: Optional[PaymentAccountRecord]) -> Optional[PaymentAccountRecord]:
+    """Decrypt sensitive rail fields stored in the enc blob."""
     if not row:
         return row
     if "enc" not in row or not isinstance(row.get("enc"), dict):
@@ -265,6 +266,7 @@ def update_payment_account_details(
     bank_country: str | None = None,
     bank_city: str | None = None,
 ) -> Optional[PaymentAccountRecord]:
+    """Update editable payment account fields and re-encrypt sensitive data."""
     # Only updates provided fields; sensitive values are re-encrypted into `enc`.
     updates: list[str] = []
     params: list[Any] = []
@@ -382,6 +384,7 @@ def list_public_clients(*, search: Optional[str], limit: int) -> List[Dict[str, 
 def get_payment_account(
     *, business_id: int, payment_index: int, rail: str
 ) -> Optional[PaymentAccountRecord]:
+    """Fetch a payment account by legacy business_id + index + rail."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -430,6 +433,7 @@ def list_payment_accounts_for_org(org_id: str) -> List[PaymentAccountRecord]:
 
 
 def payment_account_has_child_upis(account_id: int) -> bool:
+    """Return True if a payment account has any child UPIs."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -459,6 +463,7 @@ def payment_account_used_for_org_upi(account: dict) -> bool:
 
 
 def get_payment_account_by_id(account_id: int) -> Optional[PaymentAccountRecord]:
+    """Fetch a payment account by ID."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("select * from payment_accounts where id = %s", (account_id,))
@@ -467,6 +472,7 @@ def get_payment_account_by_id(account_id: int) -> Optional[PaymentAccountRecord]
 
 
 def get_payment_account_by_org_and_index(org_id: str, payment_index: int, rail: str) -> Optional[PaymentAccountRecord]:
+    """Fetch an active payment account by org, index, and rail."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -485,6 +491,7 @@ def create_child_upi(
     label: str | None = None,
     status: str = "active",
 ) -> str:
+    """Create a child UPI record and return its ID."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -501,6 +508,7 @@ def create_child_upi(
 
 
 def get_child_upi_by_value(upi: str) -> Optional[ChildUpiRecord]:
+    """Lookup a child UPI by its UPI string."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -511,6 +519,7 @@ def get_child_upi_by_value(upi: str) -> Optional[ChildUpiRecord]:
 
 
 def get_child_upi_by_id(child_upi_id: str) -> Optional[ChildUpiRecord]:
+    """Lookup a child UPI by its ID."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -526,6 +535,7 @@ def list_child_upis_for_org(
     limit: int | None = None,
     before: datetime | None = None,
 ) -> List[Dict[str, Any]]:
+    """List child UPIs for an org with cursor-style pagination."""
     # Cursor-based pagination using created_at; caller controls `limit` + `before`.
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -560,6 +570,7 @@ def list_child_upis_for_org(
 
 
 def _set_child_upi_status(child_upi_id: str, *, status: str) -> Optional[ChildUpiRecord]:
+    """Set child UPI status and update disabled_at timestamp."""
     disable_now = status == "disabled"
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -579,14 +590,17 @@ def _set_child_upi_status(child_upi_id: str, *, status: str) -> Optional[ChildUp
 
 
 def disable_child_upi(child_upi_id: str) -> Optional[ChildUpiRecord]:
+    """Disable a child UPI."""
     return _set_child_upi_status(child_upi_id, status="disabled")
 
 
 def reactivate_child_upi(child_upi_id: str) -> Optional[ChildUpiRecord]:
+    """Reactivate a disabled child UPI."""
     return _set_child_upi_status(child_upi_id, status="active")
 
 
 def update_payment_account(account_id: int, *, conn: psycopg2.extensions.connection | None = None, commit: bool = True, **fields: Any) -> Optional[PaymentAccountRecord]:
+    """Update payment account fields with an optional transaction scope."""
     # simplistic partial update for business_id
     set_fields = []
     params: List[Any] = []
@@ -652,6 +666,7 @@ def create_user(**payload: Any) -> int:
 
 
 def update_user_master_upi(user_id: int, master_upi: str) -> Optional[UserRecord]:
+    """Persist a master UPI for the user."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("update users set master_upi = %s where id = %s returning *", (master_upi, user_id))
@@ -660,6 +675,7 @@ def update_user_master_upi(user_id: int, master_upi: str) -> Optional[UserRecord
 
 
 def get_user_by_email(email: str) -> Optional[UserRecord]:
+    """Fetch a user by email (case-insensitive in DB)."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("select * from users where email = %s", (email,))
@@ -667,6 +683,7 @@ def get_user_by_email(email: str) -> Optional[UserRecord]:
 
 
 def get_user_by_id(user_id: int) -> Optional[UserRecord]:
+    """Fetch a user by ID."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("select * from users where id = %s", (user_id,))
@@ -674,6 +691,7 @@ def get_user_by_id(user_id: int) -> Optional[UserRecord]:
 
 
 def get_user_by_master_upi(upi: str) -> Optional[UserRecord]:
+    """Fetch a user by master UPI."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("select * from users where master_upi = %s", (upi,))
@@ -681,6 +699,7 @@ def get_user_by_master_upi(upi: str) -> Optional[UserRecord]:
 
 
 def update_user_profile(user_id: int, **fields: Any) -> Optional[UserRecord]:
+    """Update editable profile fields for a user."""
     assignments = []
     params: List[Any] = []
     for key in ["company_name", "summary", "established_year", "state", "country"]:
@@ -762,6 +781,7 @@ def create_otp(record_id: str, user_id: int, code: str, expires_at: datetime) ->
 
 
 def get_otp(record_id: str) -> Optional[OtpRecord]:
+    """Fetch an OTP record by id."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("select * from otps where id = %s", (record_id,))
@@ -769,6 +789,7 @@ def get_otp(record_id: str) -> Optional[OtpRecord]:
 
 
 def consume_otp(record_id: str) -> None:
+    """Mark an OTP record as consumed."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("update otps set consumed = true where id = %s", (record_id,))
@@ -776,6 +797,7 @@ def consume_otp(record_id: str) -> None:
 
 
 def get_active_onboarding_session(user_id: int) -> Optional[OnboardingSessionRecord]:
+    """Return the latest in-progress onboarding session for a user."""
     if not _table_exists("onboarding_sessions"):
         return None
     with get_connection() as conn:
@@ -940,6 +962,7 @@ def update_organization_profile(
 
 
 def get_onboarding_session_by_id(session_id: uuid.UUID) -> Optional[OnboardingSessionRecord]:
+    """Fetch an onboarding session by ID."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("select * from onboarding_sessions where id = %s", (str(session_id),))
@@ -947,6 +970,7 @@ def get_onboarding_session_by_id(session_id: uuid.UUID) -> Optional[OnboardingSe
 
 
 def touch_onboarding_session(session_id: uuid.UUID) -> None:
+    """Update last_saved_at for an onboarding session."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("update onboarding_sessions set last_saved_at = now() where id = %s", (str(session_id),))
@@ -970,6 +994,7 @@ def create_organization_step1(
     conn: psycopg2.extensions.connection | None = None,
     commit: bool = True,
 ) -> None:
+    """Insert a new organization from Step 1 onboarding data."""
     def _insert(target_conn: psycopg2.extensions.connection) -> None:
         with target_conn.cursor() as cur:
             cur.execute(
@@ -1022,6 +1047,7 @@ def update_organization_step1(
     conn: psycopg2.extensions.connection | None = None,
     commit: bool = True,
 ) -> None:
+    """Update organization fields from Step 1 onboarding data."""
     def _update(target_conn: psycopg2.extensions.connection) -> None:
         with target_conn.cursor() as cur:
             cur.execute(
@@ -1059,6 +1085,7 @@ def update_organization_step1(
 
 
 def get_organization(org_id: str, user_id: int) -> Optional[OrganizationRecord]:
+    """Fetch an organization by id scoped to a user."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("select * from organizations where id = %s and user_id = %s", (str(org_id), user_id))
@@ -1066,6 +1093,7 @@ def get_organization(org_id: str, user_id: int) -> Optional[OrganizationRecord]:
 
 
 def get_organization_by_id(org_id: str) -> Optional[OrganizationRecord]:
+    """Fetch an organization by id."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("select * from organizations where id = %s", (str(org_id),))
@@ -1073,6 +1101,7 @@ def get_organization_by_id(org_id: str) -> Optional[OrganizationRecord]:
 
 
 def list_organizations_for_user(user_id: int) -> List[OrganizationRecord]:
+    """List organizations owned by a user."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("select * from organizations where user_id = %s order by created_at desc", (user_id,))
@@ -1080,6 +1109,7 @@ def list_organizations_for_user(user_id: int) -> List[OrganizationRecord]:
 
 
 def get_organization_by_upi(upi: str) -> Optional[OrganizationRecord]:
+    """Fetch an organization by its UPI."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("select * from organizations where upi = %s", (upi,))
@@ -1096,6 +1126,7 @@ def set_organization_upi(
     conn: psycopg2.extensions.connection | None = None,
     commit: bool = True,
 ) -> None:
+    """Set an org UPI and mark the linked payment account active."""
     def _update(target_conn: psycopg2.extensions.connection) -> None:
         with target_conn.cursor() as cur:
             cur.execute(
@@ -1123,6 +1154,7 @@ def set_organization_verification_status(
     conn: psycopg2.extensions.connection | None = None,
     commit: bool = True,
 ) -> None:
+    """Update verification status (and optionally org status)."""
     assignments = ["verification_status=%s", "updated_at=now()"]
     params: list = [verification_status]
     if status is not None:
@@ -1152,6 +1184,7 @@ def set_onboarding_payment_account(
     conn: psycopg2.extensions.connection | None = None,
     commit: bool = True,
 ) -> None:
+    """Persist the onboarding payment account id to step_statuses."""
     def _update(target_conn: psycopg2.extensions.connection) -> None:
         with target_conn.cursor() as cur:
             cur.execute(
@@ -1171,6 +1204,7 @@ def set_onboarding_payment_account(
 
 
 def get_onboarding_payment_account(session_id: uuid.UUID) -> Optional[int]:
+    """Fetch the payment account id stored on an onboarding session."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("select (step_statuses->>'payment_account_id')::int as account_id from onboarding_sessions where id = %s", (str(session_id),))
@@ -1191,6 +1225,7 @@ def create_onboarding_session(
     conn: psycopg2.extensions.connection | None = None,
     commit: bool = True,
 ) -> None:
+    """Create a new onboarding session record."""
     def _insert(target_conn: psycopg2.extensions.connection) -> None:
         with target_conn.cursor() as cur:
             cur.execute(
@@ -1221,6 +1256,7 @@ def advance_onboarding_session(
     conn: psycopg2.extensions.connection | None = None,
     commit: bool = True,
 ) -> None:
+    """Advance onboarding state and current step."""
     def _update(target_conn: psycopg2.extensions.connection) -> None:
         with target_conn.cursor() as cur:
             cur.execute(
@@ -1249,6 +1285,7 @@ def update_onboarding_session(
     conn: psycopg2.extensions.connection | None = None,
     commit: bool = True,
 ) -> Optional[OnboardingSessionRecord]:
+    """Update onboarding session fields and return the updated row."""
     assignments: list[str] = ["last_saved_at=now()"]
     params: list[Any] = []
     if state is not None:
@@ -1294,6 +1331,7 @@ def complete_onboarding_session(
     conn: psycopg2.extensions.connection | None = None,
     commit: bool = True,
 ) -> None:
+    """Mark onboarding completed and set final state."""
     def _update(target_conn: psycopg2.extensions.connection) -> None:
         with target_conn.cursor() as cur:
             cur.execute(
@@ -1321,6 +1359,7 @@ def update_onboarding_role(
     conn: psycopg2.extensions.connection | None = None,
     commit: bool = True,
 ) -> None:
+    """Persist role and risk level into the onboarding session."""
     def _update(target_conn: psycopg2.extensions.connection) -> None:
         with target_conn.cursor() as cur:
             cur.execute(
@@ -1363,10 +1402,12 @@ def store_onboarding_file(*, file_id: str, filename: str, content_type: str, dat
 
 
 def onboarding_upload_base_dir() -> str:
+    """Return the base directory for local onboarding uploads."""
     return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "uploads"))
 
 
 def _is_valid_onboarding_file_id(file_id: str, *, allowed_prefixes: tuple[str, ...]) -> bool:
+    """Validate that a file_id matches the allowed prefixes."""
     if not allowed_prefixes:
         return False
     prefix_group = "|".join(re.escape(prefix) for prefix in allowed_prefixes)
@@ -1616,6 +1657,7 @@ def create_identity_verification(
     conn: psycopg2.extensions.connection | None = None,
     commit: bool = True,
 ) -> None:
+    """Insert an identity verification record for onboarding."""
     def _insert(target_conn: psycopg2.extensions.connection) -> None:
         with target_conn.cursor() as cur:
             cur.execute(
@@ -1694,6 +1736,7 @@ def create_verification_attempt(
     destination: Optional[str],
     otp_id: str,
 ) -> None:
+    """Insert a verification attempt row for OTP-based verification."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -1708,6 +1751,7 @@ def create_verification_attempt(
 
 
 def get_latest_verification_attempt(user_id: int, session_id: uuid.UUID) -> Optional[VerificationAttemptRecord]:
+    """Fetch the most recent verification attempt for a user/session."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -1723,6 +1767,7 @@ def get_latest_verification_attempt(user_id: int, session_id: uuid.UUID) -> Opti
 
 
 def bump_verification_attempt(attempt_id: uuid.UUID) -> None:
+    """Increment the attempt count for a verification attempt."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("update verification_attempts set attempts = attempts + 1 where id = %s", (str(attempt_id),))
@@ -1730,6 +1775,7 @@ def bump_verification_attempt(attempt_id: uuid.UUID) -> None:
 
 
 def bump_verification_resend(attempt_id: uuid.UUID) -> None:
+    """Increment the resend count for a verification attempt."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("update verification_attempts set resend_count = resend_count + 1 where id = %s", (str(attempt_id),))
@@ -1737,6 +1783,7 @@ def bump_verification_resend(attempt_id: uuid.UUID) -> None:
 
 
 def update_verification_attempt_otp(attempt_id: uuid.UUID, *, otp_id: str) -> None:
+    """Update the OTP id and reset attempt status."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -1747,6 +1794,7 @@ def update_verification_attempt_otp(attempt_id: uuid.UUID, *, otp_id: str) -> No
 
 
 def mark_verification_attempt_verified(attempt_id: uuid.UUID) -> None:
+    """Mark a verification attempt as verified."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -1767,6 +1815,7 @@ def create_verification_review(
     reason: Optional[str],
     reviewed_by: Optional[str],
 ) -> None:
+    """Insert a verification review (approve/reject) row."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -1781,6 +1830,7 @@ def create_verification_review(
 
 
 def get_latest_verification_review(session_id: uuid.UUID) -> Optional[VerificationReviewRecord]:
+    """Fetch the latest verification review for a session."""
     if not _table_exists("verification_reviews"):
         return None
     with get_connection() as conn:
@@ -1799,6 +1849,7 @@ def get_latest_verification_review(session_id: uuid.UUID) -> Optional[Verificati
 
 
 def list_verification_reviews(session_id: uuid.UUID) -> List[VerificationReviewRecord]:
+    """List all verification reviews for a session."""
     if not _table_exists("verification_reviews"):
         return []
     with get_connection() as conn:
@@ -1816,6 +1867,7 @@ def list_verification_reviews(session_id: uuid.UUID) -> List[VerificationReviewR
 
 
 def get_identity_verification_by_session(session_id: uuid.UUID) -> Optional[Dict[str, Any]]:
+    """Fetch the latest identity verification for a session."""
     if not _table_exists("identity_verifications"):
         return None
     with get_connection() as conn:
@@ -1834,6 +1886,7 @@ def get_identity_verification_by_session(session_id: uuid.UUID) -> Optional[Dict
 
 
 def list_pending_verification_queue() -> List[Dict[str, Any]]:
+    """List onboarding sessions awaiting admin review."""
     if not _table_exists("onboarding_sessions"):
         return []
     with get_connection() as conn:
@@ -1859,10 +1912,12 @@ def list_pending_verification_queue() -> List[Dict[str, Any]]:
 
 
 def send_verification_message_email(*, to_address: str, code: str) -> None:
+    """Send a verification code via email."""
     send_email(to_address=to_address, subject="Your Aplite verification code", body=f"Your verification code is {code}. It expires in 10 minutes.")
 
 
 def send_verification_message_sms(*, code: str) -> None:
+    """Send a verification code via SMS (MVP placeholder)."""
     # MVP: no SMS provider wired; log for development.
     print(f"[sms] verification code: {code}")
 
@@ -1875,6 +1930,7 @@ def create_verification_call(
     user_id: int,
     scheduled_at: Any,
 ) -> None:
+    """Insert a scheduled verification call row."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(

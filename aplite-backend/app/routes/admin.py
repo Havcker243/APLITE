@@ -19,6 +19,7 @@ logger = logging.getLogger("aplite")
 
 
 def _require_admin_key(x_admin_key: str | None) -> None:
+    """Validate the shared admin key header for MVP access."""
     # MVP guard: shared admin key in header (not a full auth system).
     expected_key = os.getenv("ADMIN_API_KEY") or ""
     if not expected_key:
@@ -28,6 +29,7 @@ def _require_admin_key(x_admin_key: str | None) -> None:
 
 
 def _verification_method_from_session(session: dict) -> str:
+    """Determine verification method from step_statuses or session state."""
     # Prefer stored method in step_statuses; fallback to state for older sessions.
     step_statuses = session.get("step_statuses") if isinstance(session, dict) else None
     if isinstance(step_statuses, dict):
@@ -40,6 +42,7 @@ def _verification_method_from_session(session: dict) -> str:
 
 @router.get("/api/admin/verification/queue")
 def list_verification_queue(x_admin_key: str | None = Header(default=None, alias="X-Admin-Key")):
+    """List pending onboarding sessions for manual review."""
     _require_admin_key(x_admin_key)
     # Queue is built from onboarding sessions in PENDING_* states.
     rows = queries.list_pending_verification_queue()
@@ -75,6 +78,7 @@ def get_verification_detail(
     session_id: str,
     x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
 ):
+    """Return full onboarding detail for admin review."""
     _require_admin_key(x_admin_key)
     try:
         session_uuid = uuid.UUID(session_id)
@@ -137,6 +141,7 @@ def get_verification_file(
     file_id: str,
     x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
 ):
+    """Stream a stored onboarding document (ID or formation)."""
     _require_admin_key(x_admin_key)
     # Stream file bytes from storage (S3 or local) for in-browser review.
     payload = queries.get_onboarding_file_bytes(file_id)
@@ -154,6 +159,7 @@ def approve_verification(
     session_id: str,
     x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
 ):
+    """Approve an onboarding session and issue the org UPI."""
     _require_admin_key(x_admin_key)
     try:
         session_uuid = uuid.UUID(session_id)
@@ -186,6 +192,7 @@ def reject_verification(
     payload: dict,
     x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
 ):
+    """Reject an onboarding session with a required reason."""
     _require_admin_key(x_admin_key)
     try:
         session_uuid = uuid.UUID(session_id)

@@ -11,6 +11,7 @@ import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
 import { cn } from "../../utils/cn";
 import { toast } from "sonner";
+import { toastApiError } from "../../utils/notifications";
 
 type QueueItem = {
   session_id: string;
@@ -69,6 +70,7 @@ export default function AdminVerifyPage() {
   }, [adminKey, authed]);
 
   async function refreshQueue(options?: { persistOnSuccess?: boolean; keyOverride?: string }) {
+    /** Fetch the pending verification queue with admin auth. */
     setLoadingQueue(true);
     try {
       const headerKey = (options?.keyOverride ?? adminKey).trim();
@@ -100,7 +102,7 @@ export default function AdminVerifyPage() {
         setSelectedId(data[0].session_id);
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to load queue");
+      toastApiError(err, "Unable to load queue");
     } finally {
       setLoadingQueue(false);
     }
@@ -115,6 +117,7 @@ export default function AdminVerifyPage() {
   }, [selectedId, authed]);
 
   async function loadDetail(sessionId: string) {
+    /** Fetch detailed onboarding info for the selected session. */
     setLoadingDetail(true);
     try {
       // Load the full onboarding snapshot for the selected session.
@@ -128,13 +131,14 @@ export default function AdminVerifyPage() {
       const data = (await res.json()) as VerificationDetail;
       setDetail(data);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to load session details");
+      toastApiError(err, "Unable to load session details");
     } finally {
       setLoadingDetail(false);
     }
   }
 
   async function handleApprove() {
+    /** Approve the selected verification session. */
     if (!selectedId) return;
     try {
       const res = await fetch(`/api/admin/session/${selectedId}/approve`, {
@@ -150,11 +154,12 @@ export default function AdminVerifyPage() {
       await refreshQueue();
       if (selectedId) await loadDetail(selectedId);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to approve");
+      toastApiError(err, "Unable to approve");
     }
   }
 
   async function handleReject() {
+    /** Reject the selected session with a reason. */
     if (!selectedId) return;
     if (!reason.trim()) {
       toast.error("Rejection reason is required.");
@@ -175,11 +180,12 @@ export default function AdminVerifyPage() {
       await refreshQueue();
       if (selectedId) await loadDetail(selectedId);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to reject");
+      toastApiError(err, "Unable to reject");
     }
   }
 
   async function openFile(fileId: string) {
+    /** Fetch and open an uploaded document in a new tab. */
     try {
       const res = await fetch(`/api/admin/file/${fileId}`, {
         headers: { "X-Admin-Key": adminKey.trim() },
@@ -194,11 +200,12 @@ export default function AdminVerifyPage() {
       window.open(url, "_blank", "noopener,noreferrer");
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to open file");
+      toastApiError(err, "Unable to open file");
     }
   }
 
   function handleAdminKeySubmit(event: React.FormEvent<HTMLFormElement>) {
+    /** Persist the admin key and load the queue. */
     event.preventDefault();
     const nextKey = adminKeyInput.trim();
     if (!nextKey) return;
@@ -207,6 +214,7 @@ export default function AdminVerifyPage() {
   }
 
   function handleAdminLogout() {
+    /** Clear admin session state. */
     window.sessionStorage.removeItem(ADMIN_KEY_STORAGE);
     setAdminKey("");
     setAdminKeyInput("");
@@ -492,6 +500,7 @@ export default function AdminVerifyPage() {
 }
 
 function formatAddress(address: any) {
+  /** Format address fields into a single line. */
   if (!address) return "-";
   const parts = [address.street1, address.street2, address.city, address.state, address.zip, address.country].filter(Boolean);
   return parts.join(", ") || "-";

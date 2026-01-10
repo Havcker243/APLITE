@@ -51,6 +51,7 @@ export default function OnboardStep6() {
   useEffect(() => {
     if (!calEmbedLink) return;
     (async function initCal() {
+      /** Initialize the Cal.com embed UI. */
       const cal = await getCalApi({ namespace: "30min" });
       cal("ui", { hideEventTypeDetails: false, layout: "month_view" });
     })();

@@ -78,6 +78,7 @@ export default function UpisPage() {
   }, [loading, token, router, refreshAccounts, refreshUpis]);
 
   const handleCreateUPI = async () => {
+    /** Create a new child UPI for the selected payout account. */
     if (!newUPI.payoutAccountId) {
       toast.warning("Select an account", { description: "Choose a payout account to create a UPI." });
       return;
@@ -98,6 +99,7 @@ export default function UpisPage() {
   };
 
   const handleDisableUPI = async (upiId: string) => {
+    /** Disable a child UPI after confirmation. */
     setBusy((prev) => ({ ...prev, [upiId]: true }));
     try {
       await disableChildUpi(upiId);
@@ -112,6 +114,7 @@ export default function UpisPage() {
   };
 
   const handleReactivateUPI = async (upiId: string) => {
+    /** Reactivate a disabled child UPI. */
     setBusy((prev) => ({ ...prev, [upiId]: true }));
     try {
       await reactivateChildUpi(upiId);
@@ -125,11 +128,13 @@ export default function UpisPage() {
   };
 
   const copyToClipboard = (text: string) => {
+    /** Copy a UPI to clipboard with feedback. */
     navigator.clipboard.writeText(text).catch(() => undefined);
     toast("Copied", { description: "UPI copied to clipboard." });
   };
 
   const getAccountName = (accountId: number) => {
+    /** Resolve the display name for a payout account. */
     const account = accounts.find((a) => a.id === accountId);
     if (!account) return "Unknown";
     return account.account_name || account.bank_name || account.rail || "Account";

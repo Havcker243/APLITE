@@ -85,6 +85,7 @@ export default function DashboardPage() {
   }, [upis]);
 
   const getNextAction = () => {
+    /** Determine the best next CTA based on onboarding state. */
     if (isUnverified) {
       return {
         title: "Complete onboarding",
@@ -125,6 +126,7 @@ export default function DashboardPage() {
   };
 
   const handleCreateUPI = async () => {
+    /** Create a child UPI for the selected account. */
     if (!selectedAccountId) {
       toast.error("Please select an account");
       return;
@@ -146,11 +148,13 @@ export default function DashboardPage() {
   };
 
   const handleCopy = (text: string) => {
+    /** Copy a value to clipboard with feedback. */
     navigator.clipboard.writeText(text).catch(() => undefined);
     toast.success("Copied to clipboard");
   };
 
   const handleInlineResolve = async () => {
+    /** Resolve a UPI from the dashboard input. */
     if (!resolveInput.trim()) return;
     if (!UPI_PATTERN.test(resolveInput.trim())) {
       toast.warning("Invalid UPI", { description: "UPI must be 14 alphanumeric characters." });
@@ -169,6 +173,7 @@ export default function DashboardPage() {
   };
 
   async function handleToggleChildUpi(childUpiId: string, nextStatus: "active" | "disabled") {
+    /** Toggle a child UPI's active status. */
     setChildUpiBusy((prev) => ({ ...prev, [childUpiId]: true }));
     try {
       if (nextStatus === "disabled") {
@@ -425,6 +430,7 @@ const StatCard = ({
   value: string | number;
   isStatus?: boolean;
 }) => (
+  /** Simple stat display card. */
   <div className="bg-card border border-border rounded-xl p-5 shadow-card">
     <div className="flex items-center gap-3 mb-3">
       <div className="text-muted-foreground">{icon}</div>
@@ -445,6 +451,7 @@ const QuickLink = ({
   description: string;
   onClick: () => void;
 }) => (
+  /** Small CTA button used for quick links. */
   <button
     onClick={onClick}
     className="flex items-center justify-between p-4 bg-card border border-border rounded-lg hover:bg-secondary/50 transition-colors text-left group"

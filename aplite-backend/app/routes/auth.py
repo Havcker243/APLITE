@@ -104,6 +104,7 @@ def _bearer_token_from_header(authorization: str | None) -> str | None:
 
 
 def _resolve_jwks_url() -> str:
+    """Resolve the Supabase JWKS URL from env for token verification."""
     jwks_url = os.getenv("SUPABASE_JWKS_URL", "").strip()
     if jwks_url:
         return jwks_url
@@ -114,6 +115,7 @@ def _resolve_jwks_url() -> str:
 
 
 def _decode_supabase_token(token: str) -> dict:
+    """Validate and decode a Supabase JWT using the JWKS signer."""
     jwks_url = _resolve_jwks_url()
     try:
         header = jwt.get_unverified_header(token)
@@ -128,6 +130,7 @@ def _decode_supabase_token(token: str) -> dict:
 
 
 def _get_or_create_user_from_supabase(payload: dict) -> dict:
+    """Lookup or create a local user record from Supabase claims."""
     email = (payload.get("email") or "").lower().strip()
     if not email:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
@@ -192,10 +195,12 @@ def _set_session_cookie(response: Response, token: str):
 
 
 def _clear_session_cookie(response: Response):
+    """Remove the session cookie from the response."""
     response.delete_cookie("aplite_session", path="/")
 
 
 def _sanitize_user(user: dict) -> dict:
+    """Remove sensitive fields before returning user data."""
     sanitized = dict(user)
     sanitized.pop("password_hash", None)
     return sanitized
@@ -648,6 +653,7 @@ def list_child_upis(
 
 @router.post("/api/orgs/child-upis/{child_upi_id}/disable")
 def disable_child_upi(child_upi_id: str, user=Depends(get_current_user)):
+    """Disable a child UPI owned by the current user's org."""
     latest_session = queries.get_latest_onboarding_session(user["id"])
     if not latest_session or str(latest_session.get("state")).upper() != "VERIFIED":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Complete onboarding first.")
@@ -667,6 +673,7 @@ def disable_child_upi(child_upi_id: str, user=Depends(get_current_user)):
 
 @router.post("/api/orgs/child-upis/{child_upi_id}/reactivate")
 def reactivate_child_upi(child_upi_id: str, user=Depends(get_current_user)):
+    """Reactivate a previously disabled child UPI."""
     latest_session = queries.get_latest_onboarding_session(user["id"])
     if not latest_session or str(latest_session.get("state")).upper() != "VERIFIED":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Complete onboarding first.")

@@ -37,6 +37,7 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  /** Auth provider that syncs Supabase sessions into the app state. */
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileDetailsResponse | null>(null);
@@ -47,6 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Pull the canonical profile snapshot from the server (single source of truth).
   const refreshProfile = async (options?: { silent?: boolean }) => {
+    /** Refresh profile snapshot from backend. */
     const silent = options?.silent ?? false;
     if (!silent) setIsRefreshing(true);
     try {
@@ -124,12 +126,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const handleLogin = (accessToken: string) => {
+    /** Update local auth state after login. */
     setToken(accessToken);
     setAuthToken(accessToken);
     void refreshProfile();
   };
 
   const handleLogout = () => {
+    /** Sign out and clear local auth + draft state. */
     const supabase = getSupabaseClient();
     const signOut = supabase ? supabase.auth.signOut() : Promise.resolve();
     void signOut.finally(() => {
@@ -172,5 +176,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function useAuth() {
+  /** Hook to access the auth context. */
   return useContext(AuthContext);
 }

@@ -35,6 +35,7 @@ type NavItem = {
 const THEME_STORAGE_KEY = "aplite_theme";
 
 const getNavItems = (status: string): NavItem[] => {
+  /** Return nav items based on verification status. */
   if (status === "VERIFIED") {
     return [
       { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -55,6 +56,7 @@ const getNavItems = (status: string): NavItem[] => {
 };
 
 export default function DashboardLayout({ children }: PropsWithChildren) {
+  /** Layout wrapper for authenticated dashboard routes. */
   const router = useRouter();
   const { user, logout, profile } = useAuth();
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -67,6 +69,7 @@ export default function DashboardLayout({ children }: PropsWithChildren) {
   const isVerified = onboardingStatus === "VERIFIED";
 
   useEffect(() => {
+    /** Load the saved theme preference. */
     if (typeof window === "undefined") return;
     try {
       const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
@@ -79,6 +82,7 @@ export default function DashboardLayout({ children }: PropsWithChildren) {
   }, []);
 
   useEffect(() => {
+    /** Persist theme selection and toggle the html class. */
     document.documentElement.classList.toggle("dark", theme === "dark");
     try {
       window.localStorage.setItem(THEME_STORAGE_KEY, theme);
@@ -88,16 +92,19 @@ export default function DashboardLayout({ children }: PropsWithChildren) {
   }, [theme]);
 
   useEffect(() => {
+    /** Force light mode for unverified accounts to keep UX consistent. */
     if (!isVerified && theme !== "light") {
       setTheme("light");
     }
   }, [isVerified, theme]);
   function handleLogout() {
+    /** Sign out and return to login. */
     logout();
     router.push("/login");
   }
 
   function isNavDisabled(path: string) {
+    /** Gate nav items based on onboarding state. */
     const pendingStates = new Set(["PENDING_CALL", "PENDING_REVIEW"]);
     if (path === "/onboard/pending" && !pendingStates.has(onboardingStatus)) return true;
     if (path === "/onboard" && ["VERIFIED", "PENDING_CALL", "PENDING_REVIEW"].includes(onboardingStatus)) return true;

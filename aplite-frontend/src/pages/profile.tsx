@@ -20,6 +20,7 @@ import { Textarea } from "../components/ui/textarea";
 import { cn } from "../utils/cn";
 import { toast } from "sonner";
 import { normalizeCalLink } from "../utils/cal";
+import { toastApiError } from "../utils/notifications";
 
 const initialState = {
   company_name: "",
@@ -57,19 +58,21 @@ export default function ProfilePage() {
   useEffect(() => {
     if (!calEmbedLink) return;
     (async function initCal() {
+      /** Initialize Cal.com embed for call scheduling. */
       const cal = await getCalApi({ namespace: "30min" });
       cal("ui", { hideEventTypeDetails: false, layout: "month_view" });
     })();
   }, [calEmbedLink]);
 
   async function loadProfile() {
+    /** Refresh profile data from the API. */
     try {
       const details = await refreshProfile();
       if (!details) {
         toast.error("Unable to load profile");
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to load profile");
+      toastApiError(err, "Unable to load profile");
     }
   }
 
@@ -102,11 +105,13 @@ export default function ProfilePage() {
   }, [profile]);
 
   function handleChange(event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
+    /** Update local form state on input changes. */
     const { name, value } = event.target;
     setForm((prev) => ({ ...prev, [name]: value }));
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    /** Save profile + onboarding edits. */
     event.preventDefault();
     if (!canEditProfile) {
       toast.error("Complete onboarding before editing your profile.");
@@ -139,7 +144,7 @@ export default function ProfilePage() {
       toast.success("Profile updated");
       void loadProfile();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to update profile");
+      toastApiError(err, "Unable to update profile");
     } finally {
       setSaving(false);
     }
@@ -476,6 +481,7 @@ export default function ProfilePage() {
 }
 
 function ProfileField({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  /** Render a two-column profile field. */
   return (
     <div className="flex items-start justify-between gap-4">
       <span className="text-sm text-muted-foreground">{label}</span>

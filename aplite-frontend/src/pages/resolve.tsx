@@ -29,10 +29,12 @@ import {
 } from "../utils/api";
 import { useAuth } from "../utils/auth";
 import { toast } from "sonner";
+import { toastApiError } from "../utils/notifications";
 
 const UPI_CORE_PATTERN = /^[A-Z0-9]{14}$/;
 
 function normalizeUpi(input: string) {
+  /** Normalize UPI input to uppercase alphanumeric. */
   return input.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
@@ -73,12 +75,14 @@ export default function ResolvePage() {
   if (!token) return null;
 
   function handleModeChange(nextMode: string) {
+    /** Switch between resolve/lookup/master modes. */
     if (nextMode !== "resolve" && nextMode !== "lookup" && nextMode !== "master") return;
     setMode(nextMode);
     void router.push(`/resolve?mode=${nextMode}`);
   }
 
   async function handleResolveUPI() {
+    /** Resolve a UPI into payout coordinates (verified users only). */
     if (!upiInput.trim()) return;
     setResult(null);
 
@@ -97,13 +101,14 @@ export default function ResolvePage() {
       const response = await resolveUPI({ upi: normalized, rail: "ACH" });
       setResult(response);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to resolve UPI");
+      toastApiError(err, "Unable to resolve UPI");
     } finally {
       setIsResolving(false);
     }
   }
 
   async function handleLookupOrg() {
+    /** Lookup a public organization by name. */
     if (!orgInput.trim()) return;
     setOrgResult(null);
     setOrgLoading(true);
@@ -123,13 +128,14 @@ export default function ResolvePage() {
         toast.error("No organization found.");
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to lookup organization.");
+      toastApiError(err, "Unable to lookup organization.");
     } finally {
       setOrgLoading(false);
     }
   }
 
   async function handleLookupMasterUPI() {
+    /** Lookup a master UPI and list associated orgs. */
     if (!masterUpiInput.trim()) return;
     setMasterResult(null);
     const normalized = normalizeUpi(masterUpiInput.trim());
@@ -142,7 +148,7 @@ export default function ResolvePage() {
       const response = await lookupMasterUpi(normalized);
       setMasterResult(response);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to lookup master UPI");
+      toastApiError(err, "Unable to lookup master UPI");
     } finally {
       setMasterLoading(false);
     }

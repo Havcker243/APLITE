@@ -12,6 +12,7 @@ import { AuthProvider } from "../utils/auth";
 import { OnboardingProvider } from "../utils/onboardingWizard";
 import { Toaster } from "../components/ui/sonner";
 import { AppDataProvider } from "../utils/appData";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 
 export default function App({ Component, pageProps }: AppProps) {
   return (
@@ -21,9 +22,11 @@ export default function App({ Component, pageProps }: AppProps) {
       </Head>
       <AppDataProvider>
         <OnboardingProvider>
-          <Layout>
-            <Component {...pageProps} />
-          </Layout>
+          <ErrorBoundary>
+            <Layout>
+              <Component {...pageProps} />
+            </Layout>
+          </ErrorBoundary>
           <Toaster />
         </OnboardingProvider>
       </AppDataProvider>

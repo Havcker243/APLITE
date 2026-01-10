@@ -29,6 +29,7 @@ class LookupUPIRequest(BaseModel):
 
 
 def _enforce_rate_limit(request: Request, *, key: str, limit: int, window_seconds: int) -> None:
+    """Apply IP-based rate limits to UPI lookups/resolution."""
     if limit <= 0:
         return
     ip = (request.client.host if request.client else "unknown").strip()

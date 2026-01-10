@@ -20,16 +20,19 @@ const variantStyles = {
   info: "bg-card border-border",
 };
 
-const ResultCard = ({ variant = "info", icon, title, children, className }: ResultCardProps) => (
-  <div className={cn("rounded-xl border p-6 animate-fade-in", variantStyles[variant], className)}>
-    {(icon || title) && (
-      <div className="flex items-center gap-2 mb-4">
-        {icon}
-        <span className="font-semibold text-foreground">{title}</span>
-      </div>
-    )}
-    {children}
-  </div>
-);
+const ResultCard = ({ variant = "info", icon, title, children, className }: ResultCardProps) => {
+  /** Card wrapper for result/status messaging. */
+  return (
+    <div className={cn("rounded-xl border p-6 animate-fade-in", variantStyles[variant], className)}>
+      {(icon || title) && (
+        <div className="flex items-center gap-2 mb-4">
+          {icon}
+          <span className="font-semibold text-foreground">{title}</span>
+        </div>
+      )}
+      {children}
+    </div>
+  );
+};
 
 export default ResultCard;

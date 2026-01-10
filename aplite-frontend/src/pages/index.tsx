@@ -8,6 +8,7 @@ import { Shield, ArrowRight, Lock, Zap, CheckCircle2 } from "lucide-react";
 import { Button } from "../components/ui/button";
 
 export default function LandingPage() {
+  /** Render the index page content. */
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -18,15 +19,18 @@ export default function LandingPage() {
             <span className="text-xl font-semibold text-foreground">Aplite</span>
           </div>
           <nav className="hidden md:flex items-center gap-8">
-            <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-              Features
-            </a>
-            <a href="#how-it-works" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-              How it works
-            </a>
-            <a href="#security" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <Link href="/payment-identity" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              Payment Identity
+            </Link>
+            <Link href="/verification" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              Verification
+            </Link>
+            <Link href="/security" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Security
-            </a>
+            </Link>
+            <Link href="/faq" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              FAQ
+            </Link>
           </nav>
           <div className="flex items-center gap-3">
             <Button variant="ghost" asChild>

@@ -26,7 +26,9 @@ This file documents the backend routes used by the frontend.
 
 ## Onboarding
 - `GET /onboarding/current`
-  - Active onboarding session (if any).
+  - Active onboarding session (draft or submitted).
+- `POST /onboarding/draft`
+  - Save a per-step draft and update `current_step`.
 - `POST /onboarding/reset`
   - Reset in-progress onboarding session (also removes related org payment accounts and child UPIs).
 - `POST /onboarding/upload-id`

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useAuth } from "../utils/auth";
 
 export default function PrivacyPolicyPage() {
+  /** Render the privacy policy page content. */
   const { token } = useAuth();
   const backHref = token ? "/dashboard" : "/";
   const backLabel = token ? "Back to dashboard" : "Back to Aplite";

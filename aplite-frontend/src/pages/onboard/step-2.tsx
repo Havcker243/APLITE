@@ -16,6 +16,7 @@ import { Button } from "../../components/ui/button";
 import { Label } from "../../components/ui/label";
 import { Input } from "../../components/ui/input";
 import { toast } from "sonner";
+import { toastApiError } from "../../utils/notifications";
 
 export default function OnboardStep2() {
   const router = useRouter();
@@ -39,6 +40,7 @@ export default function OnboardStep2() {
   if (loading || !token || !mounted) return <LoadingScreen />;
 
   async function handleSubmit(e: React.FormEvent) {
+    /** Persist Step 2 role data and advance the wizard. */
     e.preventDefault();
     setSaving(true);
     try {
@@ -55,7 +57,7 @@ export default function OnboardStep2() {
       markStepComplete(2);
       router.push("/onboard/step-3");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to save step");
+      toastApiError(err, "Unable to save step");
     } finally {
       setSaving(false);
     }

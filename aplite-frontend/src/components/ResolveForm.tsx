@@ -24,6 +24,7 @@ export function ResolveForm({
   disabled = false,
   buttonText = "Resolve",
 }: ResolveFormProps) {
+  /** Resolve UPI input and handle loading state. */
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 

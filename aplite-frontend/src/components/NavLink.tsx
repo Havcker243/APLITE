@@ -17,6 +17,7 @@ type NavLinkProps = LinkProps & {
 
 const NavLink = forwardRef<HTMLAnchorElement, NavLinkProps>(
   ({ className, activeClassName, pendingClassName, href, children, ...props }, ref) => {
+    /** Link wrapper that applies active/pending styles. */
     const router = useRouter();
     const path = typeof href === "string" ? href : href.pathname || "";
     const isActive = router.pathname === path;

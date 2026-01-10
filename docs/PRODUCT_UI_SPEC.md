@@ -185,13 +185,13 @@ Must have:
 - Multi-step wizard with progress indicator
 - Form validation + field formatting
 - Data persistence between steps
-- Local draft persistence (sessionStorage)
+- Server-side draft persistence with `sessionStorage` fallback
 - Role-based verification path (call for owners, ID for authorized reps)
 - Admin review queue for approval/rejection
 
 ## B1) Suggested 5-step wizard (draft)
 
-This is the high-level flow the UI should support. Current MVP uses local drafts and a single submit on Step 5.
+This is the high-level flow the UI should support. Current MVP uses server-side drafts and a single submit on Step 5.
 
 1. Establish legal entity (business info + legal address)
 2. Add business context (industry, description, website, etc.)
@@ -624,7 +624,7 @@ It intentionally slows the user slightly to build confidence.
 6. Owner call scheduling + pending screen
 
 **Requirements:**
-- Autosave drafts in sessionStorage, strict step gating
+- Autosave drafts server-side with `sessionStorage` fallback, strict step gating
 - Encrypted storage for bank account details
 
 

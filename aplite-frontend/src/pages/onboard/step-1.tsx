@@ -19,6 +19,7 @@ import { Label } from "../../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { Textarea } from "../../components/ui/textarea";
 import { toast } from "sonner";
+import { toastApiError } from "../../utils/notifications";
 
 const FORMATION_DOCS: Record<
   string,
@@ -86,6 +87,7 @@ export default function OnboardStep1() {
   if (loading || !token) return <LoadingScreen />;
 
   function updateFormationDoc(docType: FormationDocType, updates: { file?: File; file_id?: string }) {
+    /** Update a single formation document entry in Step 1 state. */
     setStep1((prev) => {
       const docs = prev.formation_documents || [];
       const idx = docs.findIndex((doc) => doc.doc_type === docType);
@@ -100,6 +102,7 @@ export default function OnboardStep1() {
   }
 
   async function handleSubmit(e: React.FormEvent) {
+    /** Validate Step 1 and persist the draft before moving forward. */
     e.preventDefault();
     setSaving(true);
     try {
@@ -188,7 +191,7 @@ export default function OnboardStep1() {
       markStepComplete(1);
       router.push("/onboard/step-2");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to save step");
+      toastApiError(err, "Unable to save step");
     } finally {
       setSaving(false);
     }

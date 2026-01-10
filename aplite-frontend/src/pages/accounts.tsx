@@ -69,6 +69,7 @@ export default function Accounts() {
   }, [loading, token, profile, router, refreshAccounts]);
 
   async function handleAddAccount() {
+    /** Validate inputs and create a new payout account. */
     if (!newAccount.bankName || !newAccount.accountNumber) {
       toast.error("Please fill in the required fields.");
       return;
@@ -106,6 +107,7 @@ export default function Accounts() {
   }
 
   async function handleSaveNickname() {
+    /** Update the account nickname/display name. */
     if (!editingAccountId) return;
     if (!editingNickname.trim()) {
       toast.error("Please enter a nickname.");

@@ -8,6 +8,7 @@ import React, { useEffect } from "react";
 import { useRouter } from "next/router";
 
 export default function NotFoundPage() {
+  /** Render the 404 page content. */
   const router = useRouter();
 
   useEffect(() => {

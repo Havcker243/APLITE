@@ -52,6 +52,7 @@ class AccountUpdateRequest(BaseModel):
 
 
 def _validate_rail_updates(rail: str, fields: dict) -> None:
+    """Validate payout rail fields for updates."""
     # Shared validation for updates; keeps update rules consistent with create flow.
     if rail == "ACH":
         if "ach_routing" in fields and fields["ach_routing"] and not fields["ach_routing"].isdigit():
@@ -78,10 +79,12 @@ def _validate_rail_updates(rail: str, fields: dict) -> None:
 
 
 def _org_upi_uses_account(account: dict) -> bool:
+    """Return True when the org-level UPI is backed by this account."""
     return queries.payment_account_used_for_org_upi(account)
 
 
 def _enforce_rate_limit(request: Request, *, key: str, limit: int, window_seconds: int, user_id: int | None = None) -> None:
+    """Apply shared IP+user rate limits to account endpoints."""
     if limit <= 0:
         return
     ip = (request.client.host if request.client else "unknown").strip()
@@ -98,6 +101,7 @@ def _enforce_rate_limit(request: Request, *, key: str, limit: int, window_second
 
 @router.get("/api/accounts")
 def list_accounts(user=Depends(get_current_user)):
+    """List payment accounts for the current user."""
     # Include a derived `rail_locked` flag so the UI can disable immutable fields.
     accounts = queries.list_payment_accounts_for_owner(user["id"])
     for acct in accounts:
@@ -108,6 +112,7 @@ def list_accounts(user=Depends(get_current_user)):
 
 @router.post("/api/accounts", status_code=status.HTTP_201_CREATED)
 def create_account(payload: AccountCreateRequest, request: Request, user=Depends(get_current_user)):
+    """Create a new payment account for the current user's org."""
     _enforce_rate_limit(
         request,
         key="accounts_create",
@@ -157,6 +162,7 @@ def create_account(payload: AccountCreateRequest, request: Request, user=Depends
 
 @router.put("/api/accounts/{account_id}")
 def update_account(account_id: int, payload: AccountUpdateRequest, user=Depends(get_current_user)):
+    """Update editable fields for a payment account."""
     # Allow cosmetic edits anytime; block rail edits once the account backs a UPI.
     account = queries.get_payment_account_by_id(int(account_id))
     if not account:

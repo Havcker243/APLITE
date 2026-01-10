@@ -14,6 +14,7 @@ import { LoadingScreen } from "../../components/LoadingScreen";
 import { onboardingComplete } from "../../utils/api";
 import { Button } from "../../components/ui/button";
 import { toast } from "sonner";
+import { toastApiError } from "../../utils/notifications";
 
 export default function OnboardStep5() {
   const router = useRouter();
@@ -66,6 +67,7 @@ export default function OnboardStep5() {
   if (loading || !token || !mounted) return <LoadingScreen />;
 
   async function handleSubmit() {
+    /** Submit the full onboarding payload and route based on backend status. */
     setSaving(true);
     try {
       const industry = step1.industry === "Other" ? step1.industry_other : step1.industry;
@@ -143,7 +145,7 @@ export default function OnboardStep5() {
       toast.success(`Verified. Issued UPI: ${res.upi}`);
       router.push("/dashboard");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to complete onboarding");
+      toastApiError(err, "Unable to complete onboarding");
     } finally {
       setSaving(false);
     }
@@ -243,6 +245,7 @@ export default function OnboardStep5() {
 }
 
 function ReviewSection({ title, children }: { title: string; children: React.ReactNode }) {
+  /** Shared wrapper for review section blocks. */
   return (
     <div className="border border-border rounded-lg overflow-hidden">
       <div className="px-4 py-3 bg-muted/50 border-b border-border">
@@ -254,6 +257,7 @@ function ReviewSection({ title, children }: { title: string; children: React.Rea
 }
 
 function ReviewItem({ label, value }: { label: string; value: string }) {
+  /** Display a label/value pair with fallbacks. */
   const displayValue = value && value.trim().length > 0 ? value : "-";
   return (
     <div className="flex justify-between text-sm">

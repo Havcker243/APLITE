@@ -224,6 +224,7 @@ class DraftPayload(BaseModel):
 
 @router.get("/onboarding/current", response_model=CurrentOnboardingResponse)
 def onboarding_current(user=Depends(get_current_user)):
+    """Return the active onboarding session for the current user."""
     session = queries.get_active_onboarding_session(user["id"])
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active onboarding session.")
@@ -263,6 +264,7 @@ def onboarding_save_draft(payload: DraftPayload, user=Depends(get_current_user))
     if session and str(session.get("state")) in ("PENDING_CALL", "PENDING_REVIEW", "VERIFIED"):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Onboarding is already submitted.")
 
+    # Enforce full validation only when completing a step or creating the first session.
     requires_full = payload.completed or (step == 1 and not session)
     step_data = None
     if step not in (1, 2, 3, 4):
@@ -342,6 +344,7 @@ def onboarding_save_draft(payload: DraftPayload, user=Depends(get_current_user))
 
     step_key = f"step{step}"
     if step_data is not None:
+        # Normalize Pydantic types (dates, UUIDs) before JSON serialization.
         step_statuses[step_key] = jsonable_encoder(step_data.model_dump())
     else:
         step_statuses[step_key] = jsonable_encoder(dict(payload.data))
@@ -384,6 +387,7 @@ def onboarding_save_draft(payload: DraftPayload, user=Depends(get_current_user))
 
 @router.post("/onboarding/upload-id")
 async def onboarding_upload_id(request: Request, file: UploadFile = File(...), user=Depends(get_current_user)):
+    """Upload a government ID document and return a file_id."""
     _enforce_rate_limit(
         request,
         key="onboarding_upload_id",
@@ -407,6 +411,7 @@ async def onboarding_upload_formation(
     file: UploadFile = File(...),
     user=Depends(get_current_user),
 ):
+    """Upload a formation document and return a file_id."""
     _enforce_rate_limit(
         request,
         key="onboarding_upload_formation",
@@ -443,6 +448,7 @@ async def _store_uploaded_file(
     doc_category: str | None = None,
     doc_type: str | None = None,
 ) -> tuple[str, str]:
+    """Upload a file to storage and persist metadata for auditability."""
     # Uploads are stored in S3-compatible storage; local fallback is disabled.
     # We always store metadata in Postgres to enforce ownership checks later.
     if not file.filename:
@@ -498,10 +504,12 @@ async def _store_uploaded_file(
 
 
 def _entity_type_key(value: str) -> str:
+    """Normalize an entity type string for matching."""
     return "".join(ch for ch in value.strip().lower() if ch.isalnum())
 
 
 def _allowed_formation_docs(entity_type: str) -> set[str]:
+    """Return the allowed formation documents for an entity type."""
     # Normalize entity type names to a small set of required formation docs.
     key = _entity_type_key(entity_type)
     if key == "llc":
@@ -516,10 +524,12 @@ def _allowed_formation_docs(entity_type: str) -> set[str]:
 
 
 def _formation_docs_required(entity_type: str) -> bool:
+    """Return True when the entity type requires formation documents."""
     return _entity_type_key(entity_type) != "soleproprietor"
 
 
 def _enforce_rate_limit(request: Request, *, key: str, limit: int, window_seconds: int, user_id: int | None = None) -> None:
+    """Apply a shared IP+user rate limit for onboarding endpoints."""
     if limit <= 0:
         return
     ip = (request.client.host if request.client else "unknown").strip()
@@ -767,6 +777,7 @@ def admin_verify_by_master_upi(
 
 
 def _verify_org(org: dict):
+    """Finalize verification for an org and issue its UPI if missing."""
     org_id = str(org.get("id"))
     if not org_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found.")

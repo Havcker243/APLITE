@@ -11,6 +11,7 @@ type LoadingScreenProps = {
 };
 
 export function LoadingScreen({ label = "Loading..." }: LoadingScreenProps) {
+  /** Fullscreen loading indicator with optional label. */
   return (
     <div className="min-h-screen bg-background flex items-center justify-center" role="status" aria-live="polite">
       <div className="text-center">

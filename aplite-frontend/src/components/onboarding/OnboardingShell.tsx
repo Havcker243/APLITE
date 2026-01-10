@@ -12,6 +12,7 @@ import { useOnboardingWizard } from "../../utils/onboardingWizard";
 import { useAuth } from "../../utils/auth";
 
 function stepPath(step: number) {
+  /** Map a step number to its route path. */
   if (step <= 1) return "/onboard/step-1";
   if (step === 2) return "/onboard/step-2";
   if (step === 3) return "/onboard/step-3";
@@ -27,6 +28,7 @@ export function OnboardingShell({
   activeStep: number;
   children: React.ReactNode;
 }) {
+  /** Layout wrapper that enforces onboarding navigation rules. */
   const router = useRouter();
   const { profile } = useAuth();
   const { completedThrough } = useOnboardingWizard();

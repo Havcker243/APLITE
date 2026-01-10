@@ -23,6 +23,7 @@ type CalEmbedProps = {
 type CalConfig = { username: string; eventSlug: string } | null;
 
 function parseCalLink(raw: string): CalConfig {
+  /** Parse a Cal.com URL into username + event slug. */
   const value = (raw || "").trim();
   if (!value) return null;
   const cleaned = value

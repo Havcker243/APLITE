@@ -24,6 +24,7 @@ export function OnboardingStepper({
   completedThrough: number;
   onStepClick?: (step: number) => void;
 }) {
+  /** Render the onboarding progress indicator. */
   return (
     <div className="flex items-center justify-between" aria-label="Onboarding progress">
       {STEPS.map((step, index) => {

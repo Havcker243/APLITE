@@ -9,6 +9,7 @@ import { Textarea } from "../components/ui/textarea";
 import { toast } from "sonner";
 
 export default function ContactPage() {
+  /** Render the contact page content. */
   const { token } = useAuth();
   const backHref = token ? "/dashboard" : "/";
   const backLabel = token ? "Back to dashboard" : "Back to Aplite";

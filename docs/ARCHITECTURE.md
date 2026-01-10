@@ -18,7 +18,7 @@ This document describes the current MVP architecture for Aplite. It is intention
 
 ## Data flow (happy path)
 1) User signs up -> master UPI issued
-2) User completes onboarding Steps 1-5 locally, final submit
+2) User completes onboarding with server-side drafts (Steps 1-4), then final submit
 3) Backend stores org, onboarding session, identity, bank rails
 4) Owners schedule verification call (out of band); reps submit ID
 5) Admin reviews queue, approves or rejects (with reason)

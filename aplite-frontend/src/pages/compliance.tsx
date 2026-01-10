@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useAuth } from "../utils/auth";
 
 export default function CompliancePage() {
+  /** Render the compliance page content. */
   const { token } = useAuth();
   const backHref = token ? "/dashboard" : "/";
   const backLabel = token ? "Back to dashboard" : "Back to Aplite";

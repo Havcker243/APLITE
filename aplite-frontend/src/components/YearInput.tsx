@@ -23,6 +23,7 @@ export function YearInput({
   minYear?: number;
   maxYear?: number;
 }) {
+  /** Numeric year input with a selectable datalist. */
   const listId = `${id}-years`;
   const years = useMemo(() => {
     const out: number[] = [];

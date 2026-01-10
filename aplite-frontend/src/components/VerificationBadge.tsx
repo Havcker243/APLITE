@@ -61,6 +61,7 @@ const STATUS_CONFIG: Record<
 };
 
 export default function VerificationBadge({ status, showDescription = true }: VerificationBadgeProps) {
+  /** Render a badge for the current verification state. */
   const normalized = (status || "UNVERIFIED").toUpperCase();
   const config = STATUS_CONFIG[normalized] || STATUS_CONFIG.UNVERIFIED;
   const Icon = config.icon;

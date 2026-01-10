@@ -25,6 +25,7 @@ type ResolutionResultProps = {
 };
 
 export function ResolutionResult({ result }: ResolutionResultProps) {
+  /** Render resolved business + payout coordinates for a UPI. */
   const { business, coordinates, profile } = result;
   return (
     <div className="mt-6 rounded-xl border border-border bg-card p-6 shadow-card">
@@ -81,6 +82,7 @@ function InfoField({
   emphasis?: boolean;
   spanFull?: boolean;
 }) {
+  /** Render a label/value pair with optional styling. */
   return (
     <div className={spanFull ? "md:col-span-2" : undefined}>
       <p className="text-xs font-medium text-muted-foreground">{label}</p>

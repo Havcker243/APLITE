@@ -17,6 +17,7 @@ import { Checkbox } from "../../components/ui/checkbox";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { toast } from "sonner";
+import { toastApiError } from "../../utils/notifications";
 
 export default function OnboardStep3() {
   const router = useRouter();
@@ -47,6 +48,7 @@ export default function OnboardStep3() {
   if (loading || !token || !mounted) return <LoadingScreen />;
 
   async function handleSubmit(e: React.FormEvent) {
+    /** Upload ID if needed, save Step 3 draft, then advance. */
     e.preventDefault();
     setSaving(true);
     try {
@@ -75,7 +77,7 @@ export default function OnboardStep3() {
       markStepComplete(3);
       router.push("/onboard/step-4");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to save step");
+      toastApiError(err, "Unable to save step");
     } finally {
       setSaving(false);
     }

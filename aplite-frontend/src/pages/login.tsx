@@ -14,6 +14,7 @@ import { Label } from "../components/ui/label";
 import { useAuth } from "../utils/auth";
 import { getSupabaseClient } from "../utils/supabase";
 import { toast } from "sonner";
+import { getErrorMessage } from "../utils/notifications";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -40,6 +41,7 @@ export default function LoginPage() {
   }, [loading, token, router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    /** Authenticate via Supabase and route based on onboarding status. */
     event.preventDefault();
     if (!email || !password) {
       toast.warning("Missing fields", { description: "Please enter your email and password." });
@@ -93,7 +95,7 @@ export default function LoginPage() {
       router.push(next);
     } catch (err) {
       toast.error("Login failed", {
-        description: err instanceof Error ? err.message : "Unable to start login.",
+        description: getErrorMessage(err, "Unable to start login."),
       });
     } finally {
       setSubmitting(false);
@@ -104,6 +106,7 @@ export default function LoginPage() {
   // async function handleVerify(event: FormEvent<HTMLFormElement>) { ... }
 
   async function handleOAuth(provider: "google" | "apple") {
+    /** Start OAuth sign-in with Supabase. */
     const supabase = getSupabaseClient(rememberMe ? "local" : "session");
     if (!supabase) {
       toast.error("Supabase is not configured.");
@@ -120,6 +123,7 @@ export default function LoginPage() {
   }
 
   async function handleForgotPassword() {
+    /** Trigger a Supabase password reset email. */
     if (!email.trim()) {
       toast.warning("Enter your email first.");
       return;

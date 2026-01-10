@@ -76,6 +76,7 @@ Frontend runs on `http://localhost:3000`.
 - All submissions move to `PENDING_REVIEW` (or `PENDING_CALL`) until admin review.
 - The UI shows a pending screen that polls until the backend flips to `VERIFIED`.
 - An admin uses the verification endpoints to approve/reject and issue the org UPI (rejections require a reason).
+ - Draft progress is saved server-side and returned by `/onboarding/current`.
 
 ## Account rail lock rules
 - Payment accounts can be edited until they are linked to a UPI.

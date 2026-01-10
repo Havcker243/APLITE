@@ -15,6 +15,7 @@ export default function AuthCallback() {
     if (!router.isReady) return;
 
     (async () => {
+      /** Exchange OAuth code for a session and redirect. */
       const errorParam = router.query.error_description || router.query.error;
       if (errorParam) {
         setMessage(typeof errorParam === "string" ? errorParam : "Authentication failed.");
