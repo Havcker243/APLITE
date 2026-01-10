@@ -24,6 +24,7 @@ import { useAuth } from "../utils/auth";
 import { useAppData } from "../utils/appData";
 import DashboardLayout from "../components/DashboardLayout";
 import { toast } from "sonner";
+import { toastApiError } from "../utils/notifications";
 import {
   Dialog,
   DialogContent,
@@ -143,7 +144,7 @@ export default function DashboardPage() {
       setUpiLabel("");
       await refreshUpis({ force: true });
     } catch (err) {
-      toast.error("UPI failed", { description: "Unable to create UPI." });
+      toastApiError(err, "UPI failed");
     }
   };
 
@@ -165,7 +166,7 @@ export default function DashboardPage() {
       const result = await resolveUPI({ upi: resolveInput.trim(), rail: "ACH" });
       toast.success(`UPI resolved: ${result.coordinates?.bank_name || "Unknown"}`);
     } catch (err) {
-      toast.error("UPI not found or not permitted");
+      toastApiError(err, "Unable to resolve UPI");
     } finally {
       setResolving(false);
       setResolveInput("");
@@ -183,7 +184,7 @@ export default function DashboardPage() {
       }
       await refreshUpis({ force: true });
     } catch (err) {
-      toast.error("Update failed", { description: "Unable to update UPI status." });
+      toastApiError(err, "Update failed");
     } finally {
       setChildUpiBusy((prev) => ({ ...prev, [childUpiId]: false }));
     }

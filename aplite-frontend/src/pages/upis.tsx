@@ -41,6 +41,7 @@ import { createChildUpi, disableChildUpi, reactivateChildUpi } from "../utils/ap
 import { useAuth } from "../utils/auth";
 import { useAppData } from "../utils/appData";
 import { toast } from "sonner";
+import { toastApiError } from "../utils/notifications";
 
 type ChildUpi = {
   child_upi_id?: string;
@@ -93,8 +94,8 @@ export default function UpisPage() {
       setNewUPI({ payoutAccountId: "", label: "" });
       setIsCreatingUPI(false);
       await refreshUpis({ force: true });
-    } catch {
-      toast.error("UPI failed", { description: "Unable to create UPI." });
+    } catch (err) {
+      toastApiError(err, "UPI failed");
     }
   };
 
@@ -106,8 +107,8 @@ export default function UpisPage() {
       toast("UPI disabled", { description: "This UPI can no longer be resolved." });
       setUpiToDisable(null);
       await refreshUpis({ force: true });
-    } catch {
-      toast.error("Update failed", { description: "Unable to disable UPI." });
+    } catch (err) {
+      toastApiError(err, "Update failed");
     } finally {
       setBusy((prev) => ({ ...prev, [upiId]: false }));
     }
@@ -120,8 +121,8 @@ export default function UpisPage() {
       await reactivateChildUpi(upiId);
       toast("UPI reactivated", { description: "This UPI can now be resolved." });
       await refreshUpis({ force: true });
-    } catch {
-      toast.error("Update failed", { description: "Unable to reactivate UPI." });
+    } catch (err) {
+      toastApiError(err, "Update failed");
     } finally {
       setBusy((prev) => ({ ...prev, [upiId]: false }));
     }

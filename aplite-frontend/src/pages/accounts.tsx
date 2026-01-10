@@ -37,6 +37,7 @@ import { useAppData } from "../utils/appData";
 import { toast } from "sonner";
 import { createAccount, updateAccount } from "../utils/api";
 import { requireVerifiedOrRedirect } from "../utils/requireVerified";
+import { toastApiError } from "../utils/notifications";
 
 type RailType = "ach" | "wire" | "swift";
 
@@ -102,7 +103,7 @@ export default function Accounts() {
       toast.success("Payout account added successfully.");
       await refreshAccounts({ force: true });
     } catch (err) {
-      toast.error("Please try again.");
+      toastApiError(err, "Unable to add payout account");
     }
   }
 
@@ -123,7 +124,7 @@ export default function Accounts() {
       setEditingNickname("");
       await refreshAccounts({ force: true });
     } catch (err) {
-      toast.error("Please try again.");
+      toastApiError(err, "Unable to update nickname");
     } finally {
       setIsSavingNickname(false);
     }
