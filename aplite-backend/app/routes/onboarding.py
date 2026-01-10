@@ -342,13 +342,13 @@ def onboarding_save_draft(payload: DraftPayload, user=Depends(get_current_user))
 
     step_key = f"step{step}"
     if step_data is not None:
-        step_statuses[step_key] = step_data.model_dump()
+        step_statuses[step_key] = jsonable_encoder(step_data.model_dump())
     else:
-        step_statuses[step_key] = dict(payload.data)
+        step_statuses[step_key] = jsonable_encoder(dict(payload.data))
 
     if step == 1 and step_data is not None:
         formation_docs = step_data.formation_documents or []
-        step_statuses["formation_documents"] = [doc.model_dump() for doc in formation_docs]
+        step_statuses["formation_documents"] = [jsonable_encoder(doc.model_dump()) for doc in formation_docs]
     if step == 2 and step_data is not None:
         step_statuses["role"] = {"role": step_data.role, "title": step_data.title}
 
