@@ -27,7 +27,7 @@ Create `aplite-frontend/.env.local`:
 
 ## Onboarding notes (backend alignment)
 - Backend must be running with the `schema-final.sql` schema (not `aplite-backend/data/schema.sql`) so onboarding columns exist.
-- Onboarding drafts are saved server-side on step completion via `/onboarding/draft`.
+- Onboarding drafts are saved server-side on step completion via `/onboarding/draft` and hydrated from `/onboarding/current`.
 - Role-based flow (current): owners go through call verification; authorized reps upload ID.
 - Submissions move to `PENDING_CALL` or `PENDING_REVIEW` until admin approval/rejection.
 

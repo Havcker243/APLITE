@@ -11,8 +11,9 @@
 - `AuthProvider` fetches `/api/profile/details` as the source of truth.
 
 ## Onboarding flow
-- Wizard state lives in `sessionStorage` via `onboardingWizard.tsx`.
-- Steps 1-4 are local drafts only.
+- Wizard state lives in `onboardingWizard.tsx` and hydrates from `/onboarding/current`.
+- Steps 1-4 save server-side drafts via `POST /onboarding/draft`.
+- `sessionStorage` is a fallback only (fast local UX).
 - Step 5 submits the full payload to `/onboarding/complete`.
 - Step 6 is for owners to schedule/confirm a verification call.
 - After submit (or call confirmation), users are routed to the pending screen.
@@ -20,6 +21,8 @@
 ## Key pages
 - `index.tsx`: landing
 - `signup.tsx`, `login.tsx`
+- Public info pages: `about.tsx`, `faq.tsx`, `payment-identity.tsx`, `verification.tsx`, `security.tsx`, `compliance.tsx`, `sla.tsx`, `trust.tsx`
+- Public utility pages: `status.tsx`, `contact.tsx`, `terms-of-service.tsx`, `privacy-policy.tsx`
 - `onboard/step-1..6.tsx`: onboarding wizard
 - `onboard/pending.tsx`: verification pending screen
 - `dashboard.tsx`: issue child UPIs + resolve

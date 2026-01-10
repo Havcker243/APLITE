@@ -19,7 +19,7 @@ from psycopg2.errors import UniqueViolation
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status, Form, Header, Request
 from fastapi.encoders import jsonable_encoder
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from app.db import queries
 from app.routes.auth import get_current_user
@@ -263,17 +263,22 @@ def onboarding_save_draft(payload: DraftPayload, user=Depends(get_current_user))
     if session and str(session.get("state")) in ("PENDING_CALL", "PENDING_REVIEW", "VERIFIED"):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Onboarding is already submitted.")
 
+    requires_full = payload.completed or (step == 1 and not session)
     step_data = None
-    if step == 1:
-        step_data = Step1Payload(**payload.data)
-    elif step == 2:
-        step_data = Step2Payload(**payload.data)
-    elif step == 3:
-        step_data = Step3Payload(**payload.data)
-    elif step == 4:
-        step_data = Step4Payload(**payload.data)
-    else:
+    if step not in (1, 2, 3, 4):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid step.")
+    if requires_full:
+        try:
+            if step == 1:
+                step_data = Step1Payload(**payload.data)
+            elif step == 2:
+                step_data = Step2Payload(**payload.data)
+            elif step == 3:
+                step_data = Step3Payload(**payload.data)
+            elif step == 4:
+                step_data = Step4Payload(**payload.data)
+        except ValidationError as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.errors()) from exc
 
     session_id: uuid.UUID
     org_id: uuid.UUID
@@ -281,21 +286,27 @@ def onboarding_save_draft(payload: DraftPayload, user=Depends(get_current_user))
         if session and session.get("org_id"):
             org_id = uuid.UUID(str(session["org_id"]))
             session_id = uuid.UUID(str(session["id"]))
-            queries.update_organization_step1(
-                org_id=org_id,
-                user_id=user["id"],
-                legal_name=step_data.legal_name.strip(),
-                dba=(step_data.dba or "").strip() or None,
-                ein=step_data.ein,
-                formation_date=step_data.formation_date,
-                formation_state=step_data.formation_state.strip(),
-                entity_type=step_data.entity_type.strip(),
-                address=step_data.address.model_dump(),
-                industry=step_data.industry.strip(),
-                website=step_data.website,
-                description=(step_data.description or "").strip() or None,
-            )
+            if step_data is not None:
+                queries.update_organization_step1(
+                    org_id=org_id,
+                    user_id=user["id"],
+                    legal_name=step_data.legal_name.strip(),
+                    dba=(step_data.dba or "").strip() or None,
+                    ein=step_data.ein,
+                    formation_date=step_data.formation_date,
+                    formation_state=step_data.formation_state.strip(),
+                    entity_type=step_data.entity_type.strip(),
+                    address=step_data.address.model_dump(),
+                    industry=step_data.industry.strip(),
+                    website=step_data.website,
+                    description=(step_data.description or "").strip() or None,
+                )
         else:
+            if step_data is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Complete required fields for Step 1 before saving a draft.",
+                )
             org_id = uuid.uuid4()
             session_id = uuid.uuid4()
             queries.create_organization_step1(
@@ -330,12 +341,15 @@ def onboarding_save_draft(payload: DraftPayload, user=Depends(get_current_user))
     step_statuses = dict(existing_statuses) if isinstance(existing_statuses, dict) else {}
 
     step_key = f"step{step}"
-    step_statuses[step_key] = step_data.model_dump()
+    if step_data is not None:
+        step_statuses[step_key] = step_data.model_dump()
+    else:
+        step_statuses[step_key] = dict(payload.data)
 
-    if step == 1:
+    if step == 1 and step_data is not None:
         formation_docs = step_data.formation_documents or []
         step_statuses["formation_documents"] = [doc.model_dump() for doc in formation_docs]
-    if step == 2:
+    if step == 2 and step_data is not None:
         step_statuses["role"] = {"role": step_data.role, "title": step_data.title}
 
     completed_steps = step_statuses.get("completed_steps")

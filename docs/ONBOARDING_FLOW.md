@@ -5,18 +5,18 @@
 - **Authorized Representative**: higher risk. Title required (exec-level). ID upload required.
 
 ## Backend routes (current)
-- `GET /onboarding/current`: returns session (only after final submit).
+- `GET /onboarding/current`: returns the active onboarding session (draft or submitted).
+- `POST /onboarding/draft`: saves per-step drafts and updates `current_step`.
 - `POST /onboarding/upload-id`: ID uploads (jpg/png/pdf).
 - `POST /onboarding/upload-formation`: formation document uploads.
 - `POST /onboarding/complete`: single-submit onboarding payload.
-- No per-step save/resume endpoints.
 
 ## Frontend UX (current)
 - Step 2: role toggle; exec title required for reps.
 - Step 3: owners see call-based copy; reps must upload ID.
 - Step 5: review + submit only (no OTP UI).
 - Step 6: owners schedule/confirm a verification call.
-- Drafts are stored locally (sessionStorage) until final submit.
+- Drafts are saved server-side on step completion; `sessionStorage` is a fallback.
 - Final submit happens only on Step 5.
 
 ## Verification status

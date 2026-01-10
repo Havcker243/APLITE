@@ -62,7 +62,7 @@ Frontend runs on `http://localhost:3000`.
 ## Key routes (backend)
 - Auth: `POST /api/auth/signup`, `POST /api/auth/login/start`, `POST /api/auth/login/verify`, `POST /api/auth/logout`
 - Profile: `GET /api/profile`, `PUT /api/profile`
-- Onboarding: `GET /onboarding/current`, `POST /onboarding/complete`, `POST /onboarding/upload-id`, `POST /onboarding/upload-formation`
+- Onboarding: `GET /onboarding/current`, `POST /onboarding/draft`, `POST /onboarding/complete`, `POST /onboarding/upload-id`, `POST /onboarding/upload-formation`
 - Onboarding (utility): `POST /onboarding/reset`, `GET /api/profile/details`, `PUT /api/profile/onboarding`
 - Payment accounts: `GET /api/accounts`, `POST /api/accounts`, `PUT /api/accounts/{id}` (rail fields lock once linked to a UPI)
 - Child UPIs: `POST /api/orgs/child-upi`, `GET /api/orgs/child-upis` (supports `limit` + `before`), `POST /api/orgs/child-upis/{id}/disable`, `POST /api/orgs/child-upis/{id}/reactivate`

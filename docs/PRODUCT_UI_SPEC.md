@@ -7,8 +7,8 @@ It is written to be **implementation-ready** for the current repo:
 - Styling: `aplite-frontend/src/styles/globals.css` + shared shell `aplite-frontend/src/components/Layout.tsx`
 
 ## Current implementation notes (MVP)
-- Onboarding is a single-submit flow (`/onboarding/complete`) with local drafts stored in sessionStorage.
-- There are no per-step save/resume endpoints; `/onboarding/current` only reflects finalized sessions.
+- Onboarding is a single-submit flow (`/onboarding/complete`) with server-side drafts saved per step.
+- `/onboarding/current` returns the active onboarding session (including drafts).
 - Role flow: owners go through call verification; authorized reps upload ID (admin completes verification).
 - Step 5 is review + submit; Step 6 lets owners schedule/confirm a verification call.
 - Child UPIs exist and can be created from existing or new payment accounts.
@@ -294,7 +294,7 @@ Possible states:
 
 Rules (current):
 - Client enforces step gating locally.
-- Server stores only the final submission and marks the session `PENDING_REVIEW` or `PENDING_CALL`.
+- Server stores drafts per step and marks the session `PENDING_REVIEW` or `PENDING_CALL` on final submit.
 
 ---
 
@@ -354,11 +354,12 @@ Purpose:
 - Final submit references the `file_id` in the step 1 payload
 
 ### Backend behavior (current)
-- Local drafts only (sessionStorage); server receives all data on final submit.
+- Server drafts saved via `POST /onboarding/draft`; client `sessionStorage` is fallback only.
 - Address becomes locked after final submission.
 
 ### Backend API (current)
 - `POST /onboarding/upload-formation` for formation documents (returns `file_id`).
+- `POST /onboarding/draft` for per-step draft saves.
 - `POST /onboarding/complete` for the full onboarding payload (all steps).
 
 ---
@@ -558,12 +559,13 @@ Payload:
 - Back is always available unless verification started
 
 ## F2) Autosave (current)
-- Drafts are stored in sessionStorage on every step
+- Drafts are saved server-side on step completion
+- `sessionStorage` is a fallback for offline UX
 - Show a "Saved" indicator
 - Drafts are cleared on logout
 
 ## F3) Resume onboarding (current)
-- Drafts can be resumed in the same browser session only
+- Drafts can be resumed across devices via `/onboarding/current`
 
 ## F4) Error messages
 - Always show:
