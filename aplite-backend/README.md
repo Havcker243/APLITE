@@ -5,6 +5,8 @@ FastAPI service for onboarding organizations, managing payment accounts, issuing
 ## Environment
 - Python 3.11+ (system or venv)
 - Postgres: set `DATABASE_URL` (Supabase URL works)
+- Supabase: set `SUPABASE_URL` (JWT issuer + JWKS resolution)
+- Optional overrides: `SUPABASE_JWKS_URL`, `SUPABASE_ISSUER`, `SUPABASE_JWT_AUDIENCE`
 - Secrets: `ENCRYPTION_KEY`, `UPI_SECRET_KEY` (already in your `.env`; not modified here)
 - Sessions: `SESSION_TTL_HOURS` (optional; default `168` = 7 days)
 - Email (optional): `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL` to send OTP emails via SendGrid; otherwise emails log to stdout.
@@ -29,7 +31,7 @@ uvicorn app.main:app --reload
 Run from `aplite-backend/` so `.env` is loaded correctly (or export env vars yourself).
 
 ## Key routes
-- Auth: `/api/auth/signup`, `/api/auth/login/start`, `/api/auth/login/verify`, `/api/auth/logout`
+- Auth: Supabase JWT required (no local auth endpoints)
 - Profile: `GET/PUT /api/profile`
 - Profile (extended): `GET /api/profile/details`, `PUT /api/profile/onboarding`
 - Onboarding: `/onboarding/current`, `/onboarding/draft`, `/onboarding/complete`, `/onboarding/upload-id`, `/onboarding/upload-formation`, `/onboarding/reset`

@@ -40,14 +40,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
-import {
-  createChildUpi,
-  disableChildUpi,
-  reactivateChildUpi,
-  resolveUPI,
-} from "../utils/api";
-
-const UPI_PATTERN = /^[A-Z0-9]{14}$/;
+import { createChildUpi, disableChildUpi, reactivateChildUpi } from "../utils/api";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -60,8 +53,6 @@ export default function DashboardPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [upiLabel, setUpiLabel] = useState("");
-  const [resolveInput, setResolveInput] = useState("");
-  const [resolving, setResolving] = useState(false);
 
   const onboardingStatus = String(profile?.onboarding_status || "UNVERIFIED").toUpperCase();
   const isVerified = onboardingStatus === "VERIFIED";
@@ -154,24 +145,6 @@ export default function DashboardPage() {
     toast.success("Copied to clipboard");
   };
 
-  const handleInlineResolve = async () => {
-    /** Resolve a UPI from the dashboard input. */
-    if (!resolveInput.trim()) return;
-    if (!UPI_PATTERN.test(resolveInput.trim())) {
-      toast.warning("Invalid UPI", { description: "UPI must be 14 alphanumeric characters." });
-      return;
-    }
-    setResolving(true);
-    try {
-      const result = await resolveUPI({ upi: resolveInput.trim(), rail: "ACH" });
-      toast.success(`UPI resolved: ${result.coordinates?.bank_name || "Unknown"}`);
-    } catch (err) {
-      toastApiError(err, "Unable to resolve UPI");
-    } finally {
-      setResolving(false);
-      setResolveInput("");
-    }
-  };
 
   async function handleToggleChildUpi(childUpiId: string, nextStatus: "active" | "disabled") {
     /** Toggle a child UPI's active status. */
@@ -272,7 +245,7 @@ export default function DashboardPage() {
           {/* Verified dashboard content */}
           {isVerified && (
             <>
-              {/* Create UPI + Inline resolve */}
+              {/* Create UPI */}
               <div className="flex flex-wrap gap-4 mb-8">
                 <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                   <DialogTrigger asChild>
@@ -318,19 +291,6 @@ export default function DashboardPage() {
                     </div>
                   </DialogContent>
                 </Dialog>
-
-                {/* Inline resolve */}
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="14-character UPI"
-                    value={resolveInput}
-                    onChange={(e) => setResolveInput(e.target.value.toUpperCase())}
-                    className="w-40 font-mono"
-                  />
-                  <Button variant="outline" onClick={handleInlineResolve} disabled={resolving}>
-                    Resolve
-                  </Button>
-                </div>
               </div>
 
               {/* UPI list */}
@@ -402,7 +362,7 @@ export default function DashboardPage() {
               <h3 className="text-sm font-medium text-muted-foreground mb-3">Quick links</h3>
               <div className="grid md:grid-cols-2 gap-3">
                 <QuickLink
-                  title="View clients"
+                  title="View community"
                   description="Browse verified organizations"
                   onClick={() => router.push("/clients")}
                 />

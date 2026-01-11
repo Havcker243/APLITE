@@ -9,7 +9,7 @@ import uuid
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException, Response, status
+from fastapi import APIRouter, Header, HTTPException, Request, Response, status
 
 from app.db import queries
 from app.db.connection import get_connection
@@ -114,7 +114,7 @@ def get_verification_detail(
 
     identity_doc = None
     id_file_id = identity.get("id_document_id") if isinstance(identity, dict) else None
-    if isinstance(id_file_id, str):
+    if isinstance(id_file_id, str) and id_file_id.startswith("id_"):
         identity_doc = _doc_meta(id_file_id, doc_type="id_document")
 
     formation_files = []
@@ -157,7 +157,9 @@ def get_verification_file(
 @router.post("/api/admin/verification/{session_id}/approve")
 def approve_verification(
     session_id: str,
+    request: Request,
     x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
+    x_admin_user: str | None = Header(default=None, alias="X-Admin-User"),
 ):
     """Approve an onboarding session and issue the org UPI."""
     _require_admin_key(x_admin_key)
@@ -173,6 +175,7 @@ def approve_verification(
     # Approval is the source of truth: finalize onboarding, mark VERIFIED, and issue org UPI.
     upi = queries.complete_onboarding_and_issue_identifier(session_uuid)
     method = _verification_method_from_session(session)
+    reviewer = (x_admin_user or "").strip() or (request.client.host if request.client else "unknown")
     queries.create_verification_review(
         review_id=uuid.uuid4(),
         session_id=session_uuid,
@@ -181,8 +184,9 @@ def approve_verification(
         method=method,
         status="approved",
         reason=None,
-        reviewed_by=None,
+        reviewed_by=reviewer,
     )
+    logger.info("verification approved", extra={"session_id": session_id, "reviewed_by": reviewer})
     return {"status": "VERIFIED", "upi": upi}
 
 
@@ -190,7 +194,9 @@ def approve_verification(
 def reject_verification(
     session_id: str,
     payload: dict,
+    request: Request,
     x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
+    x_admin_user: str | None = Header(default=None, alias="X-Admin-User"),
 ):
     """Reject an onboarding session with a required reason."""
     _require_admin_key(x_admin_key)
@@ -220,6 +226,7 @@ def reject_verification(
             conn.commit()
 
     method = _verification_method_from_session(session)
+    reviewer = (x_admin_user or "").strip() or (request.client.host if request.client else "unknown")
     queries.create_verification_review(
         review_id=uuid.uuid4(),
         session_id=session_uuid,
@@ -228,6 +235,7 @@ def reject_verification(
         method=method,
         status="rejected",
         reason=reason_value,
-        reviewed_by=None,
+        reviewed_by=reviewer,
     )
+    logger.info("verification rejected", extra={"session_id": session_id, "reviewed_by": reviewer})
     return {"status": "REJECTED"}

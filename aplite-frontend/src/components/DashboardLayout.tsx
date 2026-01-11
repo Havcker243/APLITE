@@ -41,7 +41,7 @@ const getNavItems = (status: string): NavItem[] => {
       { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { path: "/accounts", label: "Accounts", icon: CreditCard },
       { path: "/upis", label: "UPIs", icon: Key },
-      { path: "/clients", label: "Clients", icon: Building2 },
+      { path: "/clients", label: "Community", icon: Building2 },
       { path: "/resolve", label: "Resolve / Lookup", icon: Search },
       { path: "/profile", label: "Profile", icon: User },
     ];
@@ -51,7 +51,7 @@ const getNavItems = (status: string): NavItem[] => {
     { path: "/onboard", label: "Onboard", icon: FileText },
     { path: "/onboard/pending", label: "Pending", icon: Clock },
     { path: "/profile", label: "Profile", icon: User },
-    { path: "/clients", label: "Clients", icon: Building2 },
+    { path: "/clients", label: "Community", icon: Building2 },
   ];
 };
 

@@ -1,57 +1,28 @@
 """Authentication and profile-related routes.
 
-Handles signup/login, session creation, CSRF token issuance, and profile
-updates tied to the onboarding flow. Session validation is enforced here
-so downstream routes can trust the active user context.
+Handles Supabase JWT validation and profile updates tied to the onboarding
+flow. Auth validation is enforced here so downstream routes can trust the
+active user context.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 import uuid
-import hashlib
-import hmac
 import os
-import secrets
 import logging
 
 import jwt
 from jwt import PyJWTError, PyJWKClient
 from psycopg2.errors import UniqueViolation
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Header, Request, Response, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Header, Request, status, Query
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, EmailStr, Field
 
 from app.db import queries
-from app.utils.email import send_email
 from app.utils.ratelimit import RateLimit, check_rate_limit
-from app.utils.security import generate_csrf_token, generate_session_token, hash_password, verify_password
 from app.utils.upi import generate_core_entity_id, generate_upi
 
 router = APIRouter()
 logger = logging.getLogger("aplite")
-
-
-class SignupRequest(BaseModel):
-    first_name: str
-    last_name: str
-    email: EmailStr
-    password: str = Field(min_length=8)
-    confirm_password: str = Field(min_length=8)
-    accept_terms: bool
-
-
-class LoginStartRequest(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class LoginVerifyRequest(BaseModel):
-    login_id: str
-    code: str
-
-
-class AuthResponse(BaseModel):
-    token: str
-    user: dict
 
 
 class ProfileUpdateRequest(BaseModel):
@@ -79,23 +50,6 @@ class OnboardingProfileUpdateRequest(BaseModel):
     description: str | None = None
 
 
-def _coerce_utc_datetime(value: object) -> datetime | None:
-    """Parse a DB timestamp into a timezone-aware UTC datetime."""
-    if isinstance(value, datetime):
-        parsed = value
-    elif isinstance(value, str):
-        try:
-            parsed = datetime.fromisoformat(value)
-        except Exception:
-            return None
-    else:
-        return None
-
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
-
-
 def _bearer_token_from_header(authorization: str | None) -> str | None:
     """Extract a bearer token from an Authorization header."""
     if not authorization or not authorization.startswith("Bearer "):
@@ -114,9 +68,22 @@ def _resolve_jwks_url() -> str:
     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Supabase JWKS URL not configured")
 
 
+def _resolve_issuer() -> str | None:
+    """Resolve expected JWT issuer for Supabase tokens."""
+    issuer = os.getenv("SUPABASE_ISSUER", "").strip()
+    if issuer:
+        return issuer
+    supabase_url = os.getenv("SUPABASE_URL", "").strip()
+    if supabase_url:
+        return f"{supabase_url.rstrip('/')}/auth/v1"
+    return None
+
+
 def _decode_supabase_token(token: str) -> dict:
     """Validate and decode a Supabase JWT using the JWKS signer."""
     jwks_url = _resolve_jwks_url()
+    issuer = _resolve_issuer()
+    audience = os.getenv("SUPABASE_JWT_AUDIENCE", "authenticated").strip() or None
     try:
         header = jwt.get_unverified_header(token)
         alg = header.get("alg")
@@ -124,7 +91,13 @@ def _decode_supabase_token(token: str) -> dict:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unsupported token algorithm")
         jwk_client = PyJWKClient(jwks_url)
         signing_key = jwk_client.get_signing_key_from_jwt(token).key
-        return jwt.decode(token, signing_key, algorithms=[alg], options={"verify_aud": False})
+        return jwt.decode(
+            token,
+            signing_key,
+            algorithms=[alg],
+            audience=audience,
+            issuer=issuer,
+        )
     except PyJWTError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
 
@@ -166,39 +139,6 @@ def _get_or_create_user_from_supabase(payload: dict) -> dict:
     return queries.get_user_by_id(user_id) or {}
 
 
-def _issue_session(user_id: int) -> str:
-    """Create and persist a new session token for the user."""
-    token = generate_session_token()
-    queries.create_session(token, user_id)
-    return token
-
-
-def _set_session_cookie(response: Response, token: str):
-    """Set an HttpOnly session cookie alongside the token response."""
-    samesite = os.getenv("SESSION_COOKIE_SAMESITE", "lax").lower()
-    if samesite not in ("lax", "strict", "none"):
-        samesite = "lax"
-    secure_cookie = os.getenv("SESSION_COOKIE_SECURE", "0") not in ("0", "false", "False")
-    if samesite == "none":
-        # Browsers require Secure when SameSite=None.
-        secure_cookie = True
-    # Cookie auth is the default for the frontend; keep it HttpOnly to avoid JS access.
-    response.set_cookie(
-        key="aplite_session",
-        value=token,
-        httponly=True,
-        secure=secure_cookie,
-        samesite=samesite,
-        max_age=int(os.getenv("SESSION_TTL_HOURS", "168")) * 3600,
-        path="/",
-    )
-
-
-def _clear_session_cookie(response: Response):
-    """Remove the session cookie from the response."""
-    response.delete_cookie("aplite_session", path="/")
-
-
 def _sanitize_user(user: dict) -> dict:
     """Remove sensitive fields before returning user data."""
     sanitized = dict(user)
@@ -207,193 +147,12 @@ def _sanitize_user(user: dict) -> dict:
 
 
 def get_current_user(request: Request, authorization: str | None = Header(default=None)):
-    """FastAPI dependency: authenticate the request and return the current user row.
-
-    MVP notes:
-    - Session expiry is enforced at request time, not via a background cleanup.
-    - Expired sessions are deleted lazily when encountered.
-    """
+    """FastAPI dependency: authenticate the request and return the current user row."""
     token = _bearer_token_from_header(authorization)
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing or invalid token")
     payload = _decode_supabase_token(token)
     return _get_or_create_user_from_supabase(payload)
-
-    # Legacy session-based auth (kept for reference):
-    # token = _bearer_token_from_header(authorization) or request.cookies.get("aplite_session")
-    # if not token:
-    #     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing or invalid token")
-    # session = queries.get_session(token)
-    # if not session:
-    #     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
-    # created_at = _coerce_utc_datetime(session.get("created_at"))
-    # if created_at is None:
-    #     queries.delete_session(token)
-    #     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
-    # ttl_hours = int(os.getenv("SESSION_TTL_HOURS", "168"))
-    # if datetime.now(timezone.utc) > created_at + timedelta(hours=ttl_hours):
-    #     queries.delete_session(token)
-    #     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
-    # user = queries.get_user_by_id(session["user_id"])
-    # if not user:
-    #     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    # return user
-
-
-@router.post("/api/auth/signup", response_model=AuthResponse)
-def signup(payload: SignupRequest, response: Response):
-    """Create a new user and return a session token + sanitized user profile."""
-    # MVP: signup immediately creates an active session. If email verification is added,
-    # enforce it here or in `login_start`.
-    if not payload.accept_terms:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Please accept the terms to continue")
-
-    if payload.password != payload.confirm_password:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Passwords do not match")
-
-    existing = queries.get_user_by_email(payload.email)
-    if existing:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account already exists for this email")
-
-    core_id = generate_core_entity_id()
-    password_hash = hash_password(payload.password)
-
-    # Create the user first, then generate a master UPI once we have the user_id for namespacing.
-    user_id = queries.create_user(
-        first_name=payload.first_name.strip(),
-        last_name=payload.last_name.strip(),
-        email=payload.email.lower(),
-        company="",
-        company_name="",
-        summary="",
-        established_year=None,
-        state=None,
-        country=None,
-        password_hash=password_hash,
-        master_upi="",
-    )
-    master_upi = generate_upi(core_id, payment_index=0, user_id=user_id)
-    queries.update_user_master_upi(user_id, master_upi)
-    token = _issue_session(user_id)
-    _set_session_cookie(response, token)
-    user = queries.get_user_by_id(user_id) or {}
-    return {"token": token, "user": _sanitize_user(user)}
-
-
-@router.post("/api/auth/login/start")
-def login_start(payload: LoginStartRequest, background_tasks: BackgroundTasks, request: Request):
-    """Start login: verify password and send a 6-digit OTP (email in MVP)."""
-    ip = (request.client.host if request.client else "unknown").strip()
-    email = payload.email.lower().strip()
-
-    # Rate limit both by IP and email to slow brute-force attempts without leaking account existence.
-    ip_rule = RateLimit(limit=int(os.getenv("RL_LOGIN_IP_LIMIT", "30")), window_seconds=int(os.getenv("RL_LOGIN_IP_WINDOW_SECONDS", "600")))
-    email_rule = RateLimit(limit=int(os.getenv("RL_LOGIN_EMAIL_LIMIT", "10")), window_seconds=int(os.getenv("RL_LOGIN_EMAIL_WINDOW_SECONDS", "600")))
-    ok, retry = check_rate_limit(f"login_start:ip:{ip}", ip_rule)
-    if not ok:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many login attempts. Try again soon.", headers={"Retry-After": str(retry)})
-    ok, retry = check_rate_limit(f"login_start:email:{email}", email_rule)
-    if not ok:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many login attempts for this email. Try again soon.", headers={"Retry-After": str(retry)})
-
-    user = queries.get_user_by_email(email)
-    if not user:
-        # Avoid leaking account existence.
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    if not verify_password(payload.password, user.get("password_hash", "")):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-
-    # The OTP itself is never stored in plaintext; we keep only a salted HMAC digest.
-    login_id = secrets.token_urlsafe(16)
-    code = f"{secrets.randbelow(999999):06d}"
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
-    queries.create_otp(login_id, user_id=user["id"], code=code, expires_at=expires_at)
-
-    background_tasks.add_task(
-        send_email,
-        to_address=user["email"],
-        subject="Your Aplite login code",
-        body=f"Your verification code is {code}. It expires in 10 minutes.",
-    )
-    return {"login_id": login_id, "detail": "Verification code sent"}
-
-
-@router.post("/api/auth/login/verify", response_model=AuthResponse)
-def login_verify(payload: LoginVerifyRequest, response: Response):
-    """Complete login: verify OTP and return a new session token."""
-    attempts_rule = RateLimit(
-        limit=int(os.getenv("RL_LOGIN_OTP_ATTEMPTS", "5")),
-        window_seconds=int(os.getenv("RL_LOGIN_OTP_WINDOW_SECONDS", "600")),
-    )
-    ok, retry_after = check_rate_limit(f"login_verify:{payload.login_id}", attempts_rule)
-    if not ok:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many verification attempts. Request a new code.",
-            headers={"Retry-After": str(retry_after)},
-        )
-
-    record = queries.get_otp(payload.login_id)
-    if not record:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired login request")
-
-    if record.get("consumed"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Code already used")
-
-    expires_at_raw = record.get("expires_at")
-    expires_at: datetime | None = None
-    if isinstance(expires_at_raw, datetime):
-        expires_at = expires_at_raw
-    elif isinstance(expires_at_raw, str):
-        try:
-            expires_at = datetime.fromisoformat(expires_at_raw)
-        except Exception:
-            expires_at = None
-    if expires_at is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired login request")
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    else:
-        expires_at = expires_at.astimezone(timezone.utc)
-    if datetime.now(timezone.utc) > expires_at:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Code expired")
-
-    # Recompute the OTP digest and compare in constant time.
-    expected = hmac.new(record.get("salt", "").encode("utf-8"), payload.code.encode("utf-8"), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(expected, record.get("digest", "")):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid code")
-
-    queries.consume_otp(payload.login_id)
-    user = queries.get_user_by_id(record["user_id"])
-    if not user:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User not found")
-
-    token = _issue_session(record["user_id"])
-    _set_session_cookie(response, token)
-    # Determine if user has completed onboarding.
-    latest_session = queries.get_latest_onboarding_session(record["user_id"]) if record else None
-    return {"token": token, "user": _sanitize_user(user)}
-
-
-@router.post("/api/auth/logout")
-def logout(request: Request, response: Response, user=Depends(get_current_user), authorization: str | None = Header(default=None)):
-    """Invalidate the current session token (best-effort)."""
-    token = _bearer_token_from_header(authorization) or request.cookies.get("aplite_session") or ""
-    if token:
-        queries.delete_session(token)
-    _clear_session_cookie(response)
-    return {"detail": "Logged out"}
-
-
-@router.get("/api/auth/csrf")
-def get_csrf_token(request: Request, user=Depends(get_current_user), authorization: str | None = Header(default=None)):
-    """Return a CSRF token for the active session."""
-    # CSRF tokens are derived from the session token and sent via X-CSRF-Token on state-changing requests.
-    # Prefer bearer tokens when present, otherwise fall back to the session cookie.
-    token = _bearer_token_from_header(authorization) or request.cookies.get("aplite_session")
-    if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing or invalid token")
-    return {"csrf_token": generate_csrf_token(token)}
 
 
 @router.get("/api/profile")

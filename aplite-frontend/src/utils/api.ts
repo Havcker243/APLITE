@@ -8,37 +8,12 @@ const API_BASE_URL = USE_PROXY ? "" : (process.env.NEXT_PUBLIC_API_URL || "http:
 const NGROK_SKIP_HEADER: Record<string, string> = API_BASE_URL.includes("ngrok-free.dev")
   ? { "ngrok-skip-browser-warning": "true" }
   : {};
-// In-memory tokens only; cookies remain the primary auth mechanism.
+// In-memory token only; Supabase remains the primary auth mechanism.
 let authToken: string | null = null;
-let csrfToken: string | null = null;
 
 export function setAuthToken(token: string | null) {
   /** Store the bearer token for API requests (in-memory only). */
   authToken = token;
-}
-
-export function setCsrfToken(token: string | null) {
-  /** Store the CSRF token used for cookie-based writes. */
-  csrfToken = token;
-}
-
-export async function fetchCsrfToken(): Promise<string | null> {
-  /** Fetch and cache a CSRF token for state-changing requests. */
-  try {
-    const headers: Record<string, string> = { ...NGROK_SKIP_HEADER };
-    if (authToken) headers.Authorization = `Bearer ${authToken}`;
-    const res = await fetch(`${API_BASE_URL}/api/auth/csrf`, {
-      credentials: "include",
-      headers,
-    });
-    if (!res.ok) return null;
-    const body = await res.json();
-    const token = typeof body?.csrf_token === "string" ? body.csrf_token : null;
-    setCsrfToken(token);
-    return token;
-  } catch {
-    return null;
-  }
 }
 export type OnboardingStep1Payload = {
   legal_name: string;
@@ -177,16 +152,6 @@ export type User = {
   created_at?: string;
 };
 
-export type AuthResponse = {
-  token: string;
-  user: User;
-};
-
-export type LoginStartResponse = {
-  login_id: string;
-  detail: string;
-};
-
 export type ResolveResult = {
   upi: string;
   rail: string;
@@ -278,10 +243,6 @@ function withAuth(init?: RequestInit): RequestInit {
   if (authToken) {
     headers["Authorization"] = `Bearer ${authToken}`;
   }
-  const method = (init?.method || "GET").toUpperCase();
-  if (csrfToken && !["GET", "HEAD", "OPTIONS"].includes(method)) {
-    headers["X-CSRF-Token"] = csrfToken;
-  }
   return {
     ...defaultInit,
     ...init,
@@ -290,13 +251,7 @@ function withAuth(init?: RequestInit): RequestInit {
 }
 
 async function authedFetch(input: RequestInfo | URL, init?: RequestInit) {
-  /** Wrapper around fetch that ensures CSRF token is present when needed. */
-  const method = (init?.method || "GET").toUpperCase();
-  const hasBearer = Boolean(authToken);
-  // CSRF token is required for cookie-based writes; skip when using Bearer auth.
-  if (!hasBearer && !["GET", "HEAD", "OPTIONS"].includes(method) && !csrfToken) {
-    await fetchCsrfToken();
-  }
+  /** Wrapper around fetch that ensures auth headers are applied. */
   return fetch(input, withAuth(init));
 }
 
@@ -326,99 +281,6 @@ async function parseError(res: Response, fallback: string) {
 
   return fallback;
 }
-
-export async function signup(data: {
-  /** Create a new user and immediately receive a session token. */
-  first_name: string;
-  last_name: string;
-  email: string;
-  password: string;
-  confirm_password: string;
-  accept_terms: boolean;
-}): Promise<AuthResponse> {
-  const res = await authedFetch(`${API_BASE_URL}/api/auth/signup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-
-  if (!res.ok) {
-    const message = await res.text();
-    throw new Error(message || "Failed to create account");
-  }
-
-  const payload = await res.json();
-  if (payload?.token) setAuthToken(payload.token);
-  return payload;
-}
-
-export async function login(data: { email: string; password: string }): Promise<AuthResponse> {
-  /** Legacy helper kept for compatibility; use `loginStart` + `loginVerify`. */
-  throw new Error("Two-factor login now requires loginStart and loginVerify");
-}
-
-export async function loginStart(data: { email: string; password: string }): Promise<LoginStartResponse> {
-  /** Start login: password + email OTP delivery (MVP). */
-  const res = await authedFetch(`${API_BASE_URL}/api/auth/login/start`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) {
-    let message = "Failed to start login";
-    try {
-      const body = await res.json();
-      message = body?.detail || message;
-    } catch {
-      try {
-        message = await res.text();
-      } catch {
-        /* ignore */
-      }
-    }
-    throw new Error(message);
-  }
-  return res.json();
-}
-
-export async function loginVerify(data: { login_id: string; code: string }): Promise<AuthResponse> {
-  /** Complete login by verifying the OTP; returns a session token + user. */
-  const res = await authedFetch(`${API_BASE_URL}/api/auth/login/verify`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) {
-    let message = "Invalid code";
-    try {
-      const body = await res.json();
-      message = body?.detail || message;
-    } catch {
-      try {
-        message = await res.text();
-      } catch {
-        /* ignore */
-      }
-    }
-    throw new Error(message);
-  }
-  const payload = await res.json();
-  if (payload?.token) setAuthToken(payload.token);
-  return payload;
-}
-
-export async function logout(): Promise<void> {
-  /** Best-effort logout: invalidates the server session token for the current user. */
-  try {
-    await authedFetch(`${API_BASE_URL}/api/auth/logout`, {
-      method: "POST",
-    });
-  } catch {
-    // ignore network errors during logout
-  }
-  setAuthToken(null);
-}
-
 
 export async function resolveUPI(data: ResolvePayload) {
   /** Resolve an owned UPI to payout coordinates for a specific rail. */
@@ -536,16 +398,17 @@ export async function listChildUpis(options?: { limit?: number; before?: string 
     throw new Error(await parseError(res, "Unable to load child UPIs"));
   }
   return res.json() as Promise<
-    Array<{
-      child_upi_id?: string;
-      upi: string;
-      payment_account_id: number;
-      rail: string;
-      bank_name?: string;
-      status?: string;
-      created_at?: string;
-      disabled_at?: string;
-    }>
+      Array<{
+        child_upi_id?: string;
+        upi: string;
+        payment_account_id: number;
+        rail: string;
+        bank_name?: string;
+        label?: string | null;
+        status?: string;
+        created_at?: string;
+        disabled_at?: string;
+      }>
   >;
 }
 

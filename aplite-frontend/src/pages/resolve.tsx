@@ -19,6 +19,7 @@ import DashboardLayout from "../components/DashboardLayout";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import {
   fetchPublicClients,
@@ -47,6 +48,7 @@ export default function ResolvePage() {
   const [upiInput, setUpiInput] = useState("");
   const [isResolving, setIsResolving] = useState(false);
   const [result, setResult] = useState<ResolveResult | null>(null);
+  const [resolveRail, setResolveRail] = useState<"ACH" | "WIRE_DOM" | "SWIFT">("ACH");
 
   const [orgInput, setOrgInput] = useState("");
   const [orgResult, setOrgResult] = useState<any | null>(null);
@@ -98,7 +100,7 @@ export default function ResolvePage() {
 
     setIsResolving(true);
     try {
-      const response = await resolveUPI({ upi: normalized, rail: "ACH" });
+      const response = await resolveUPI({ upi: normalized, rail: resolveRail });
       setResult(response);
     } catch (err) {
       toastApiError(err, "Unable to resolve UPI");
@@ -240,6 +242,19 @@ export default function ResolvePage() {
                         )}
                       </Button>
                     </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Rail</Label>
+                    <Select value={resolveRail} onValueChange={(value) => setResolveRail(value as "ACH" | "WIRE_DOM" | "SWIFT")}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select rail" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ACH">ACH</SelectItem>
+                        <SelectItem value="WIRE_DOM">Wire (Domestic)</SelectItem>
+                        <SelectItem value="SWIFT">SWIFT</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </div>

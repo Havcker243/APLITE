@@ -38,6 +38,10 @@ Frontend runs on `http://localhost:3000`.
 
 ### Backend (`aplite-backend/.env`)
 - `DATABASE_URL` (Postgres connection string; Supabase works)
+- `SUPABASE_URL` (Supabase project URL; used to derive JWKS + issuer)
+- Optional: `SUPABASE_JWKS_URL` (override JWKS URL)
+- Optional: `SUPABASE_ISSUER` (override JWT issuer)
+- Optional: `SUPABASE_JWT_AUDIENCE` (default `authenticated`)
 - `ENCRYPTION_KEY` (16/24/32 bytes; used for encrypting payment coordinates at rest)
 - `UPI_SECRET_KEY` (HMAC secret for UPI namespace/signature)
 - `SESSION_TTL_HOURS` (optional; default `168` = 7 days)
@@ -60,7 +64,7 @@ Frontend runs on `http://localhost:3000`.
 - `NEXT_PUBLIC_API_URL` (defaults to `http://127.0.0.1:8000`)
 
 ## Key routes (backend)
-- Auth: `POST /api/auth/signup`, `POST /api/auth/login/start`, `POST /api/auth/login/verify`, `POST /api/auth/logout`
+- Auth: Supabase JWT required (no local auth endpoints)
 - Profile: `GET /api/profile`, `PUT /api/profile`
 - Onboarding: `GET /onboarding/current`, `POST /onboarding/draft`, `POST /onboarding/complete`, `POST /onboarding/upload-id`, `POST /onboarding/upload-formation`
 - Onboarding (utility): `POST /onboarding/reset`, `GET /api/profile/details`, `PUT /api/profile/onboarding`

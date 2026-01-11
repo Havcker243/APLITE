@@ -5,7 +5,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { User, fetchProfileDetails, ProfileDetailsResponse } from "./api";
-import { setAuthToken, setCsrfToken } from "./api";
+import { setAuthToken } from "./api";
 import { getSupabaseClient } from "./supabase";
 
 type AuthContextType = {
@@ -62,7 +62,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       setProfile(null);
       setToken(null);
-      setCsrfToken(null);
       return null;
     } finally {
       if (!silent) setIsRefreshing(false);
@@ -114,7 +113,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setProfile(null);
         setToken(null);
         setAuthToken(null);
-        setCsrfToken(null);
         setEmailConfirmed(true);
         setUserEmail(null);
       }
@@ -141,7 +139,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setToken(null);
       setProfile(null);
       setAuthToken(null);
-      setCsrfToken(null);
       setEmailConfirmed(true);
       setUserEmail(null);
       if (typeof window !== "undefined") {

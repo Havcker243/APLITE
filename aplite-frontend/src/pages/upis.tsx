@@ -49,8 +49,10 @@ type ChildUpi = {
   payment_account_id: number;
   rail: string;
   bank_name?: string;
+  label?: string | null;
   status?: string;
   created_at?: string;
+  disabled_at?: string;
 };
 
 export default function UpisPage() {
@@ -287,8 +289,8 @@ export default function UpisPage() {
                           <p className="text-sm text-muted-foreground mt-1">
                             {(() => {
                               const accountName = getAccountName(upi.payment_account_id);
-                              const label = (upi as any).label || (upi as any).name || "No label";
-                              return `${accountName} • ${label}`;
+                              const label = upi.label || "No label";
+                              return `${accountName} - ${label}`;
                             })()}
                           </p>
                           <div className="flex items-center gap-2 mt-2">
@@ -307,6 +309,11 @@ export default function UpisPage() {
                             {upi.created_at && (
                               <span className="text-xs text-muted-foreground">
                                 Created {new Date(upi.created_at).toLocaleDateString()}
+                              </span>
+                            )}
+                            {upi.disabled_at && !isActive && (
+                              <span className="text-xs text-muted-foreground">
+                                Disabled {new Date(upi.disabled_at).toLocaleDateString()}
                               </span>
                             )}
                           </div>

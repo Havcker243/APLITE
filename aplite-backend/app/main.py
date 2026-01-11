@@ -1,7 +1,7 @@
 """FastAPI application setup for the Aplite backend.
 
 Defines middleware, routers, and cross-cutting concerns like timeouts,
-rate limiting, CSRF enforcement, and DB connection handling.
+rate limiting, and DB connection handling.
 """
 
 import asyncio
@@ -24,7 +24,6 @@ from app.routes.public import router as public_router
 from app.routes.onboarding import router as onboarding_router
 from app.routes.admin import router as admin_router
 from app.utils.ratelimit import RateLimit, check_rate_limit
-from app.utils.security import verify_csrf_token
 
 load_dotenv()
 
@@ -36,8 +35,7 @@ default_origins = [
 env_origins = os.getenv("FRONTEND_ORIGINS", "")
 extra_origins = [origin.strip() for origin in env_origins.split(",") if origin.strip()]
 allow_origins = list(dict.fromkeys(default_origins + extra_origins))
-# Loosened CORS for demo/testing; override with FRONTEND_ORIGIN_REGEX when tightening.
-allow_origin_regex = os.getenv("FRONTEND_ORIGIN_REGEX") or r"^https?://.*$"
+allow_origin_regex = os.getenv("FRONTEND_ORIGIN_REGEX") or None
 
 app.add_middleware(
     CORSMiddleware,
@@ -102,27 +100,6 @@ async def global_rate_limit_middleware(request: Request, call_next):
 
 
 @app.middleware("http")
-async def csrf_middleware(request: Request, call_next):
-    method = request.method.upper()
-    if method in ("GET", "HEAD", "OPTIONS"):
-        return await call_next(request)
-
-    path = request.url.path
-    if path.startswith("/api/auth/"):
-        # Auth endpoints may be hit before a session exists; skip CSRF here.
-        return await call_next(request)
-
-    session_token = request.cookies.get("aplite_session")
-    if session_token:
-        # For cookie-based sessions, require a CSRF token on all state-changing requests.
-        submitted = request.headers.get("X-CSRF-Token")
-        if not verify_csrf_token(session_token, submitted):
-            return JSONResponse(status_code=403, content={"detail": "Invalid CSRF token"})
-
-    return await call_next(request)
-
-
-@app.middleware("http")
 async def db_connection_middleware(request: Request, call_next):
     # Skip DB checkout for health checks and preflight requests.
     if request.method == "OPTIONS" or request.url.path == "/health":
@@ -135,4 +112,3 @@ async def db_connection_middleware(request: Request, call_next):
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
-

@@ -78,6 +78,31 @@ def _validate_rail_updates(rail: str, fields: dict) -> None:
             fields["iban"] = str(fields["iban"]).replace(" ", "").upper()
 
 
+def _validate_rail_create(payload: AccountCreateRequest) -> dict:
+    """Validate required rail fields on create and return normalized fields."""
+    rail = payload.rail
+    if rail == "ACH":
+        if not payload.ach_routing or not payload.ach_account:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="ACH routing and account numbers are required.")
+    elif rail == "WIRE_DOM":
+        if not payload.wire_routing or not payload.wire_account:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Wire routing and account numbers are required.")
+    elif rail == "SWIFT":
+        if not payload.swift_bic or not payload.iban:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="SWIFT BIC and IBAN are required.")
+
+    fields = {
+        "ach_routing": payload.ach_routing,
+        "ach_account": payload.ach_account,
+        "wire_routing": payload.wire_routing,
+        "wire_account": payload.wire_account,
+        "swift_bic": payload.swift_bic,
+        "iban": payload.iban,
+    }
+    _validate_rail_updates(rail, fields)
+    return fields
+
+
 def _org_upi_uses_account(account: dict) -> bool:
     """Return True when the org-level UPI is backed by this account."""
     return queries.payment_account_used_for_org_upi(account)
@@ -133,6 +158,7 @@ def create_account(payload: AccountCreateRequest, request: Request, user=Depends
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No organization found for this user.")
     org = orgs[0]
 
+    rail_fields = _validate_rail_create(payload)
     try:
         account_id = queries.create_payment_account(
             user_id=user["id"],
@@ -140,13 +166,13 @@ def create_account(payload: AccountCreateRequest, request: Request, user=Depends
             rail=payload.rail,
             bank_name=payload.bank_name,
             account_name=payload.account_name or f"{payload.bank_name} account",
-            ach_routing=payload.ach_routing,
-            ach_account=payload.ach_account,
-            wire_routing=payload.wire_routing,
-            wire_account=payload.wire_account,
+            ach_routing=rail_fields.get("ach_routing"),
+            ach_account=rail_fields.get("ach_account"),
+            wire_routing=rail_fields.get("wire_routing"),
+            wire_account=rail_fields.get("wire_account"),
             bank_address=payload.bank_address,
-            swift_bic=payload.swift_bic,
-            iban=payload.iban,
+            swift_bic=rail_fields.get("swift_bic"),
+            iban=rail_fields.get("iban"),
             bank_country=payload.bank_country,
             bank_city=payload.bank_city,
             status="active",

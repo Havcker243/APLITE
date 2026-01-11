@@ -1,5 +1,5 @@
 /**
- * Public directory view for verified clients.
+ * Public directory view for verified community members.
  * Supports search and browsing of public organization profiles.
  */
 
@@ -34,7 +34,7 @@ export default function Clients() {
 
   useEffect(() => {
     refreshClients().catch((err) => {
-      toastApiError(err, "Unable to load clients");
+      toastApiError(err, "Unable to load community");
     });
   }, [refreshClients]);
 
@@ -65,8 +65,10 @@ export default function Clients() {
       <div className="p-8">
         <div className="max-w-3xl">
           <div className="mb-8">
-            <h1 className="text-2xl font-semibold text-foreground mb-2">Clients Directory</h1>
-            <p className="text-muted-foreground">Browse verified organizations on Aplite.</p>
+            <h1 className="text-2xl font-semibold text-foreground mb-2">Community</h1>
+            <p className="text-muted-foreground">
+              These are the companies that trust us with their information.
+            </p>
           </div>
 
           <div className="relative mb-6">
