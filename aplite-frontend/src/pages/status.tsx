@@ -1,24 +1,20 @@
 import Head from "next/head";
-import Link from "next/link";
 import { useAuth } from "../utils/auth";
+import { PublicPageNav } from "../components/PublicPageNav";
 
 export default function StatusPage() {
   /** Render the status page content. */
   const { token } = useAuth();
   const backHref = token ? "/dashboard" : "/";
-  const backLabel = token ? "Back to dashboard" : "Back to Aplite";
-
   return (
-    <div className="min-h-screen bg-gradient-subtle">
+    <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
       <Head>
         <title>Status · Aplite</title>
       </Head>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-12">
         <div className="mb-10 rounded-2xl border border-border bg-background/80 p-8 shadow-card backdrop-blur">
-          <Link href={backHref} className="text-sm text-muted-foreground hover:text-foreground">
-            {backLabel}
-          </Link>
+          <PublicPageNav backHref={backHref} />
           <h1 className="mt-4 text-3xl font-semibold text-foreground">System status</h1>
           <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
             Current availability and recent incidents. During MVP, updates are posted here manually.

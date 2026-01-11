@@ -2,6 +2,7 @@ import { useState } from "react";
 import Head from "next/head";
 import Link from "next/link";
 import { useAuth } from "../utils/auth";
+import { PublicPageNav } from "../components/PublicPageNav";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -12,8 +13,6 @@ export default function ContactPage() {
   /** Render the contact page content. */
   const { token } = useAuth();
   const backHref = token ? "/dashboard" : "/";
-  const backLabel = token ? "Back to dashboard" : "Back to Aplite";
-
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
@@ -30,16 +29,14 @@ export default function ContactPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-subtle">
+    <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
       <Head>
         <title>Contact · Aplite</title>
       </Head>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-12">
         <div className="mb-10 rounded-2xl border border-border bg-background/80 p-8 shadow-card backdrop-blur">
-          <Link href={backHref} className="text-sm text-muted-foreground hover:text-foreground">
-            {backLabel}
-          </Link>
+          <PublicPageNav backHref={backHref} />
           <h1 className="mt-4 text-3xl font-semibold text-foreground">Contact support</h1>
           <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
             Reach out for onboarding help, verification questions, or account support.
