@@ -13,6 +13,7 @@ import { LoadingScreen } from "../../components/LoadingScreen";
 import { onboardingReset } from "../../utils/api";
 import { useAuth } from "../../utils/auth";
 import { Button } from "../../components/ui/button";
+import { normalizeCalLink } from "../../utils/cal";
 
 const POLL_INTERVAL_MS = 8000;
 
@@ -24,6 +25,8 @@ export default function OnboardPendingPage() {
   const [status, setStatus] = useState<string | null>(null);
   const [reviewReason, setReviewReason] = useState<string>("");
   const calLink = process.env.NEXT_PUBLIC_CAL_LINK || "";
+  const calEmbedLink = normalizeCalLink(calLink);
+  const userId = profile?.user?.id;
 
   // Use local poll result if present; otherwise fall back to auth profile snapshot.
   const onboardingStatus = useMemo(() => String(status || profile?.onboarding_status || "NOT_STARTED"), [status, profile]);
@@ -48,13 +51,24 @@ export default function OnboardPendingPage() {
   }, [loading, token, onboardingStatus, router]);
 
   useEffect(() => {
-    if (!calLink) return;
+    if (!calEmbedLink) return;
     // Initialize Cal embed only when the link is configured.
     (async function initCal() {
       const cal = await getCalApi({ namespace: "30min" });
       cal("ui", { hideEventTypeDetails: false, layout: "month_view" });
+      cal("on", {
+        action: "bookingSuccessful",
+        callback: () => {
+          if (!userId) return;
+          try {
+            window.localStorage.setItem(`aplite_call_scheduled:${userId}`, "1");
+          } catch {
+            // ignore storage errors
+          }
+        },
+      });
     })();
-  }, [calLink]);
+  }, [calEmbedLink, userId]);
 
   useEffect(() => {
     let timer: number | undefined;
@@ -131,12 +145,12 @@ export default function OnboardPendingPage() {
           <div className="space-y-3">
             {onboardingStatus === "PENDING_CALL" && (
               <>
-                {calLink ? (
+                {calEmbedLink ? (
                   <Button
                     variant="outline"
                     className="w-full"
                     data-cal-namespace="30min"
-                    data-cal-link={calLink}
+                    data-cal-link={calEmbedLink}
                     data-cal-config='{"layout":"month_view"}'
                   >
                     <Calendar className="h-4 w-4 mr-2" />

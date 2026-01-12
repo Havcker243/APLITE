@@ -54,6 +54,12 @@ export default function OnboardStep6() {
       /** Initialize the Cal.com embed UI. */
       const cal = await getCalApi({ namespace: "30min" });
       cal("ui", { hideEventTypeDetails: false, layout: "month_view" });
+      cal("on", {
+        action: "bookingSuccessful",
+        callback: () => {
+          setCallScheduled(true);
+        },
+      });
     })();
   }, [calEmbedLink]);
 
@@ -178,7 +184,7 @@ export default function OnboardStep6() {
           </Label>
         </div>
         <p className="text-xs text-muted-foreground">
-          Check the box after you finish scheduling to continue.
+          We auto-detect completed bookings. Use the checkbox only if your booking didn't register.
         </p>
       </div>
     </OnboardingShell>
