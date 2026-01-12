@@ -1,6 +1,6 @@
 /**
- * Admin API proxy to reject a verification session.
- * Passes rejection requests through to the backend.
+ * Admin API proxy for rejecting onboarding sessions.
+ * Forwards reject actions to the backend with admin credentials.
  */
 
 import type { NextApiRequest, NextApiResponse } from "next";
@@ -34,11 +34,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const response = await fetch(`${API_BASE_URL}/api/admin/verification/${encodeURIComponent(id)}/reject`, {
       method: "POST",
       headers,
-      body: JSON.stringify(req.body || {}),
+      body: JSON.stringify(req.body ?? {}),
     });
     const text = await response.text();
     res.status(response.status).send(text);
   } catch {
-    res.status(500).json({ detail: "Unable to reject verification" });
+    res.status(500).json({ detail: "Unable to reject session" });
   }
 }

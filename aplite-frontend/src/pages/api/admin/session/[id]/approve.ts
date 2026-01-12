@@ -1,6 +1,6 @@
 /**
- * Admin API proxy to approve a verification session.
- * Passes approval requests through to the backend.
+ * Admin API proxy for approving onboarding sessions.
+ * Forwards approve actions to the backend with admin credentials.
  */
 
 import type { NextApiRequest, NextApiResponse } from "next";
@@ -37,6 +37,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const text = await response.text();
     res.status(response.status).send(text);
   } catch {
-    res.status(500).json({ detail: "Unable to approve verification" });
+    res.status(500).json({ detail: "Unable to approve session" });
   }
 }

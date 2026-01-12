@@ -1,35 +1,37 @@
-# Aplite Frontend (MVP)
+# Aplite Frontend
 
-Next.js (pages router) UI for signing up/logging in, onboarding, creating businesses/UPIs, and resolving payout coordinates.
+Next.js (Pages Router) UI for signup/login, onboarding, UPI management, and
+resolving payout coordinates.
 
 ## Requirements
 - Node.js 18+
 
 ## Install
 From `aplite-frontend/`:
-
 ```bash
 npm install
 ```
 
 ## Run (dev)
-
 ```bash
 npm run dev
 ```
 
 Frontend runs on `http://localhost:3000`.
 
-## Environment variables
-
+## Environment
 Create `aplite-frontend/.env.local`:
 - `NEXT_PUBLIC_API_URL` (defaults to `http://127.0.0.1:8000`)
 
-## Onboarding notes (backend alignment)
-- Backend must be running with the `schema-final.sql` schema (not `aplite-backend/data/schema.sql`) so onboarding columns exist.
-- Onboarding drafts are saved server-side on step completion via `/onboarding/draft` and hydrated from `/onboarding/current`.
-- Role-based flow (current): owners go through call verification; authorized reps upload ID.
-- Submissions move to `PENDING_CALL` or `PENDING_REVIEW` until admin approval/rejection.
+## Key behavior
+- Auth uses HttpOnly cookies and in-memory state (no localStorage tokens).
+- Onboarding drafts save on step completion via `/onboarding/draft`.
+- Current onboarding state is loaded from `/onboarding/current`.
+- Role-based flow:
+  - Owners go to call verification.
+  - Authorized reps upload an ID document.
 
-## Notes
-- Auth uses HttpOnly cookies with in-memory state; no localStorage token persistence.
+## Backend alignment notes
+- Use `schema-final.sql` (not `aplite-backend/data/schema.sql`) so onboarding
+  columns exist.
+- Submissions move to `PENDING_CALL` or `PENDING_REVIEW` until admin action.
