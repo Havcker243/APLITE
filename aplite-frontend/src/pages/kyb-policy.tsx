@@ -147,7 +147,7 @@ export default function KybPolicyPage() {
 
             <div>
               <h2 className="text-2xl font-semibold text-foreground mb-6">Verification Checklist</h2>
-              <div className="bg-card border border-border rounded-xl p-6">
+              <div className="bg-card border border-border rounded-lg p-6">
                 <p className="text-muted-foreground mb-6">
                   Our verification team reviews the following items before approving a business:
                 </p>
@@ -196,7 +196,7 @@ export default function KybPolicyPage() {
 
             <div>
               <h2 className="text-2xl font-semibold text-foreground mb-6">Common Rejection Reasons</h2>
-              <div className="bg-destructive/5 border border-destructive/20 rounded-xl p-6">
+              <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-6">
                 <p className="text-muted-foreground mb-4">
                   Applications may be rejected for the following reasons:
                 </p>
@@ -258,7 +258,7 @@ export default function KybPolicyPage() {
               </div>
             </div>
 
-            <div className="bg-primary rounded-2xl p-8 text-center">
+            <div className="bg-primary rounded-lg p-8 text-center">
               <h3 className="text-xl font-semibold text-primary-foreground mb-3">
                 Ready to get verified?
               </h3>
@@ -296,7 +296,7 @@ interface RequirementCardProps {
 }
 
 const RequirementCard = ({ icon, title, description, details }: RequirementCardProps) => (
-  <div className="p-6 rounded-xl bg-card border border-border">
+  <div className="p-6 rounded-lg bg-card border border-border">
     <div className="flex items-center gap-3 mb-3">
       <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center text-foreground">
         {icon}
@@ -348,3 +348,4 @@ const TimelineItem = ({ step, title, time, description }: TimelineItemProps) => 
     </div>
   </div>
 );
+

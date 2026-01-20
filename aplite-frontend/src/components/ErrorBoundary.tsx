@@ -33,7 +33,7 @@ export class ErrorBoundary extends React.Component<React.PropsWithChildren, Erro
     return (
       <div className="min-h-screen bg-gradient-subtle">
         <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center justify-center px-6 py-16 text-center">
-          <div className="rounded-2xl border border-border bg-background/90 p-8 shadow-card backdrop-blur">
+          <div className="rounded-lg border border-border bg-background/90 p-8 shadow-card backdrop-blur">
             <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground">Aplite</p>
             <h1 className="mt-4 text-2xl font-semibold text-foreground">Something went wrong</h1>
             <p className="mt-3 text-sm text-muted-foreground">
@@ -52,3 +52,4 @@ export class ErrorBoundary extends React.Component<React.PropsWithChildren, Erro
     );
   }
 }
+

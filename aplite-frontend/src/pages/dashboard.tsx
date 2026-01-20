@@ -185,7 +185,7 @@ export default function DashboardPage() {
 
           {/* Next action card */}
           {nextAction && (
-            <div className="bg-card border border-border rounded-xl p-6 mb-8 shadow-card animate-fade-in">
+            <div className="bg-card border border-border rounded-lg p-6 mb-8 shadow-card animate-fade-in">
               <div className="flex items-start gap-4">
                 <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
                   <nextAction.icon className="h-5 w-5 text-accent" />
@@ -208,7 +208,7 @@ export default function DashboardPage() {
 
           {/* Org UPI (verified only) */}
           {isVerified && orgUpi && (
-            <div className="bg-card border border-border rounded-xl p-6 mb-8 shadow-card">
+            <div className="bg-card border border-border rounded-lg p-6 mb-8 shadow-card">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Organization UPI</p>
@@ -295,7 +295,7 @@ export default function DashboardPage() {
 
               {/* UPI list */}
               {childUpis.length > 0 && (
-                <div className="bg-card border border-border rounded-xl overflow-hidden shadow-card">
+                <div className="bg-card border border-border rounded-lg overflow-hidden shadow-card">
                   <div className="px-6 py-4 border-b border-border bg-muted/30">
                     <h3 className="font-semibold text-foreground">Your UPIs</h3>
                   </div>
@@ -392,7 +392,7 @@ const StatCard = ({
   isStatus?: boolean;
 }) => (
   /** Simple stat display card. */
-  <div className="bg-card border border-border rounded-xl p-5 shadow-card">
+  <div className="bg-card border border-border rounded-lg p-5 shadow-card">
     <div className="flex items-center gap-3 mb-3">
       <div className="text-muted-foreground">{icon}</div>
       <span className="text-sm text-muted-foreground">{label}</span>
@@ -424,3 +424,4 @@ const QuickLink = ({
     <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
   </button>
 );
+

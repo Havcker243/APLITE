@@ -184,7 +184,7 @@ export default function ProfilePage() {
 
           <div
             className={cn(
-              "rounded-xl border p-6 mb-6",
+              "rounded-lg border p-6 mb-6",
               isVerified && "bg-success/5 border-success/20",
               isPending && "bg-warning/5 border-warning/20",
               isRejected && "bg-destructive/5 border-destructive/20",
@@ -269,7 +269,7 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <div className="bg-card border border-border rounded-xl overflow-hidden shadow-card mb-6">
+          <div className="bg-card border border-border rounded-lg overflow-hidden shadow-card mb-6">
             <div className="px-6 py-4 border-b border-border bg-muted/30 flex items-center gap-3">
               <Building2 className="h-5 w-5 text-muted-foreground" />
               <h3 className="font-semibold text-foreground">Business Information</h3>
@@ -285,7 +285,7 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <div className="bg-card border border-border rounded-xl overflow-hidden shadow-card mb-6">
+          <div className="bg-card border border-border rounded-lg overflow-hidden shadow-card mb-6">
             <div className="px-6 py-4 border-b border-border bg-muted/30">
               <h3 className="font-semibold text-foreground">Organization UPI</h3>
             </div>
@@ -297,7 +297,7 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <div className="bg-card border border-border rounded-xl overflow-hidden shadow-card mb-6">
+          <div className="bg-card border border-border rounded-lg overflow-hidden shadow-card mb-6">
             <div className="px-6 py-4 border-b border-border bg-muted/30 flex items-center gap-3">
               <UserIcon className="h-5 w-5 text-muted-foreground" />
               <h3 className="font-semibold text-foreground">Account Holder</h3>
@@ -308,7 +308,7 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <div className="bg-card border border-border rounded-xl overflow-hidden shadow-card">
+          <div className="bg-card border border-border rounded-lg overflow-hidden shadow-card">
             <div className="px-6 py-4 border-b border-border bg-muted/30">
               <h3 className="font-semibold text-foreground">Edit profile</h3>
               <p className="text-sm text-muted-foreground mt-1">
@@ -489,3 +489,4 @@ function ProfileField({ label, value, mono }: { label: string; value: string; mo
     </div>
   );
 }
+

@@ -9,11 +9,11 @@ export default function CompliancePage() {
   return (
     <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
       <Head>
-        <title>Compliance and Risk · Aplite</title>
+        <title>Compliance and Risk - Aplite</title>
       </Head>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-12">
-        <div className="mb-10 rounded-2xl border border-border bg-background/80 p-8 shadow-card backdrop-blur">
+        <div className="mb-10 rounded-lg border border-border bg-background/80 p-8 shadow-card backdrop-blur">
           <PublicPageNav backHref={backHref} />
           <h1 className="mt-4 text-3xl font-semibold text-foreground">Compliance and risk management</h1>
           <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
@@ -24,14 +24,14 @@ export default function CompliancePage() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
-          <section className="rounded-xl border border-border bg-card p-6 shadow-card">
+          <section className="rounded-lg border border-border bg-card p-6 shadow-card">
             <h2 className="text-base font-semibold text-foreground">Proof of authorization</h2>
             <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
               Every onboarding flow includes explicit attestation and role documentation, creating a clear chain of
               authority for payment changes.
             </p>
           </section>
-          <section className="rounded-xl border border-border bg-card p-6 shadow-card">
+          <section className="rounded-lg border border-border bg-card p-6 shadow-card">
             <h2 className="text-base font-semibold text-foreground">Documented verification</h2>
             <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
               Verification events are recorded with method, timestamps, and reviewer context so teams can audit and
@@ -67,3 +67,6 @@ export default function CompliancePage() {
     </div>
   );
 }
+
+
+

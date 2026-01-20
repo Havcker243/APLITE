@@ -28,7 +28,7 @@ export function ResolutionResult({ result }: ResolutionResultProps) {
   /** Render resolved business + payout coordinates for a UPI. */
   const { business, coordinates, profile } = result;
   return (
-    <div className="mt-6 rounded-xl border border-border bg-card p-6 shadow-card">
+    <div className="mt-6 rounded-lg border border-border bg-card p-6 shadow-card">
       <div className="inline-flex items-center rounded-full bg-success/10 px-3 py-1 text-xs font-medium text-success">
         Resolution Complete
       </div>
@@ -92,3 +92,4 @@ function InfoField({
     </div>
   );
 }
+

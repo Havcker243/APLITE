@@ -288,7 +288,7 @@ export default function LandingPage() {
           </div>
 
           <Accordion type="single" collapsible className="space-y-4">
-            <AccordionItem value="item-1" className="bg-card border border-border rounded-xl px-6">
+            <AccordionItem value="item-1" className="bg-card border border-border rounded-lg px-6">
               <AccordionTrigger className="text-left font-medium text-foreground hover:no-underline">
                 What is a UPI and how does it work?
               </AccordionTrigger>
@@ -297,7 +297,7 @@ export default function LandingPage() {
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="item-2" className="bg-card border border-border rounded-xl px-6">
+            <AccordionItem value="item-2" className="bg-card border border-border rounded-lg px-6">
               <AccordionTrigger className="text-left font-medium text-foreground hover:no-underline">
                 How long does verification take?
               </AccordionTrigger>
@@ -306,7 +306,7 @@ export default function LandingPage() {
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="item-3" className="bg-card border border-border rounded-xl px-6">
+            <AccordionItem value="item-3" className="bg-card border border-border rounded-lg px-6">
               <AccordionTrigger className="text-left font-medium text-foreground hover:no-underline">
                 What documents do I need for verification?
               </AccordionTrigger>
@@ -315,7 +315,7 @@ export default function LandingPage() {
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="item-4" className="bg-card border border-border rounded-xl px-6">
+            <AccordionItem value="item-4" className="bg-card border border-border rounded-lg px-6">
               <AccordionTrigger className="text-left font-medium text-foreground hover:no-underline">
                 Is my banking information secure?
               </AccordionTrigger>
@@ -324,7 +324,7 @@ export default function LandingPage() {
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="item-5" className="bg-card border border-border rounded-xl px-6">
+            <AccordionItem value="item-5" className="bg-card border border-border rounded-lg px-6">
               <AccordionTrigger className="text-left font-medium text-foreground hover:no-underline">
                 What payment rails do you support?
               </AccordionTrigger>
@@ -348,7 +348,7 @@ export default function LandingPage() {
       {/* Security section */}
       <section id="security" className="py-24 px-6">
         <div className="container mx-auto max-w-4xl">
-          <div className="bg-primary rounded-2xl p-12 text-primary-foreground text-center">
+          <div className="bg-primary rounded-lg p-12 text-primary-foreground text-center">
             <Lock className="h-12 w-12 mx-auto mb-6 opacity-80" />
             <h2 className="text-3xl font-semibold mb-4">
               Security is not optional
@@ -403,7 +403,7 @@ export default function LandingPage() {
 }
 
 const FeatureCard = ({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) => (
-  <div className="p-6 rounded-xl bg-card border border-border shadow-card">
+  <div className="p-6 rounded-lg bg-card border border-border shadow-card">
     <div className="w-12 h-12 rounded-lg bg-secondary flex items-center justify-center text-foreground mb-4">
       {icon}
     </div>
@@ -441,7 +441,7 @@ interface PricingCardProps {
 }
 
 const PricingCard = ({ name, price, period, description, features, cta, ctaLink, highlighted }: PricingCardProps) => (
-  <div className={`relative p-6 rounded-xl border ${highlighted ? "border-primary bg-primary/5 shadow-elevated" : "border-border bg-card shadow-card"}`}>
+  <div className={`relative p-6 rounded-lg border ${highlighted ? "border-primary bg-primary/5 shadow-elevated" : "border-border bg-card shadow-card"}`}>
     {highlighted && (
       <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-primary text-primary-foreground text-xs font-medium rounded-full">
         Most popular
@@ -478,3 +478,4 @@ const PricingCard = ({ name, price, period, description, features, cta, ctaLink,
     </Button>
   </div>
 );
+

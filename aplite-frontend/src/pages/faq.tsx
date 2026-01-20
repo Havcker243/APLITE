@@ -67,7 +67,7 @@ export default function FaqPage() {
       </Head>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-12">
-        <div className="mb-10 rounded-2xl border border-border bg-background/80 p-8 shadow-card backdrop-blur">
+        <div className="mb-10 rounded-lg border border-border bg-background/80 p-8 shadow-card backdrop-blur">
           <PublicPageNav backHref={backHref} />
           <h1 className="mt-4 text-3xl font-semibold text-foreground">Frequently asked questions</h1>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -77,7 +77,7 @@ export default function FaqPage() {
 
         <div className="grid gap-6 md:grid-cols-2">
           {FAQS.map((faq) => (
-            <section key={faq.question} className="rounded-xl border border-border bg-card p-6 shadow-card">
+            <section key={faq.question} className="rounded-lg border border-border bg-card p-6 shadow-card">
               <h2 className="text-base font-semibold text-foreground">{faq.question}</h2>
               <p className="mt-3 text-sm text-muted-foreground leading-relaxed">{faq.answer}</p>
             </section>
@@ -87,3 +87,4 @@ export default function FaqPage() {
     </div>
   );
 }
+

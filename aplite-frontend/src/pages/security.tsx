@@ -9,11 +9,11 @@ export default function SecurityPage() {
   return (
     <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
       <Head>
-        <title>Security · Aplite</title>
+        <title>Security - Aplite</title>
       </Head>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-12">
-        <div className="mb-10 rounded-2xl border border-border bg-background/80 p-8 shadow-card backdrop-blur">
+        <div className="mb-10 rounded-lg border border-border bg-background/80 p-8 shadow-card backdrop-blur">
           <PublicPageNav backHref={backHref} />
           <h1 className="mt-4 text-3xl font-semibold text-foreground">Security posture</h1>
           <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
@@ -24,7 +24,7 @@ export default function SecurityPage() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
-          <section className="rounded-xl border border-border bg-card p-6 shadow-card">
+          <section className="rounded-lg border border-border bg-card p-6 shadow-card">
             <h2 className="text-base font-semibold text-foreground">Current safeguards</h2>
             <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
               <li>Encrypted storage for sensitive payment fields.</li>
@@ -34,7 +34,7 @@ export default function SecurityPage() {
               <li>Verification records retained for audit review.</li>
             </ul>
           </section>
-          <section className="rounded-xl border border-border bg-card p-6 shadow-card">
+          <section className="rounded-lg border border-border bg-card p-6 shadow-card">
             <h2 className="text-base font-semibold text-foreground">Roadmap enhancements</h2>
             <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
               <li>Role-based access controls for internal reviewers.</li>
@@ -58,3 +58,6 @@ export default function SecurityPage() {
     </div>
   );
 }
+
+
+

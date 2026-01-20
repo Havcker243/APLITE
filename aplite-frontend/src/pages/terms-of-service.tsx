@@ -13,7 +13,7 @@ export default function TermsOfServicePage() {
       </Head>
 
       <main className="mx-auto w-full max-w-4xl px-6 py-12">
-        <div className="mb-10 rounded-2xl border border-border bg-background/80 p-8 shadow-card backdrop-blur">
+        <div className="mb-10 rounded-lg border border-border bg-background/80 p-8 shadow-card backdrop-blur">
           <PublicPageNav backHref={backHref} />
           <h1 className="mt-4 text-3xl font-semibold text-foreground">Terms of Service</h1>
           <p className="mt-2 text-sm text-muted-foreground">Last updated: 2026-01-08</p>
@@ -30,7 +30,7 @@ export default function TermsOfServicePage() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
-          <section className="rounded-xl border border-border bg-card p-6 shadow-card">
+          <section className="rounded-lg border border-border bg-card p-6 shadow-card">
             <h2 className="text-base font-semibold text-foreground">What we provide</h2>
             <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
               We provide secure onboarding, verified business profiles, and payment identifiers that resolve to payout
@@ -38,7 +38,7 @@ export default function TermsOfServicePage() {
               predictable resolution behavior across internal teams and external partners.
             </p>
           </section>
-          <section className="rounded-xl border border-border bg-card p-6 shadow-card">
+          <section className="rounded-lg border border-border bg-card p-6 shadow-card">
             <h2 className="text-base font-semibold text-foreground">What you agree to</h2>
             <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
               You agree to provide accurate information, keep credentials secure, and use the platform only for lawful
@@ -156,3 +156,4 @@ export default function TermsOfServicePage() {
     </div>
   );
 }
+

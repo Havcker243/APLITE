@@ -194,7 +194,7 @@ export default function ResolvePage() {
 
           {/* Verification warning */}
           {!isVerified && (
-            <div className="bg-warning/10 border border-warning/20 rounded-xl p-4 mb-8 flex items-start gap-3">
+            <div className="bg-warning/10 border border-warning/20 rounded-lg p-4 mb-8 flex items-start gap-3">
               <AlertCircle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
               <div>
                 <p className="font-medium text-foreground">Verification required</p>
@@ -214,7 +214,7 @@ export default function ResolvePage() {
 
             {/* Resolve UPI Tab */}
             <TabsContent value="resolve">
-              <div className="bg-card border border-border rounded-xl p-6 shadow-card">
+              <div className="bg-card border border-border rounded-lg p-6 shadow-card">
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="upi-input">Enter UPI</Label>
@@ -261,7 +261,7 @@ export default function ResolvePage() {
 
               {/* UPI Result */}
               {result && (
-                <div className="mt-6 rounded-xl border p-6 animate-fade-in bg-success/5 border-success/20">
+                <div className="mt-6 rounded-lg border p-6 animate-fade-in bg-success/5 border-success/20">
                   <div>
                     <div className="flex items-center gap-2 mb-4">
                       <CheckCircle2 className="h-5 w-5 text-success" />
@@ -359,7 +359,7 @@ export default function ResolvePage() {
 
             {/* Lookup Org Tab */}
             <TabsContent value="lookup">
-              <div className="bg-card border border-border rounded-xl p-6 shadow-card">
+              <div className="bg-card border border-border rounded-lg p-6 shadow-card">
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label>Organization name</Label>
@@ -379,7 +379,7 @@ export default function ResolvePage() {
               </div>
 
               {orgResult && (
-                <div className="mt-6 bg-card border border-border rounded-xl p-6 animate-fade-in">
+                <div className="mt-6 bg-card border border-border rounded-lg p-6 animate-fade-in">
                   <div className="flex items-center gap-2 mb-4">
                     <CheckCircle2 className="h-5 w-5 text-success" />
                     <span className="font-semibold text-foreground">{orgResult.name}</span>
@@ -413,7 +413,7 @@ export default function ResolvePage() {
 
             {/* Master UPI Tab */}
             <TabsContent value="master">
-              <div className="bg-card border border-border rounded-xl p-6 shadow-card">
+              <div className="bg-card border border-border rounded-lg p-6 shadow-card">
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label>Master UPI</Label>
@@ -434,7 +434,7 @@ export default function ResolvePage() {
               </div>
 
               {masterResult && (
-                <div className="mt-6 bg-card border border-border rounded-xl p-6 animate-fade-in">
+                <div className="mt-6 bg-card border border-border rounded-lg p-6 animate-fade-in">
                   <div className="flex items-center gap-2 mb-4">
                     <CheckCircle2 className="h-5 w-5 text-success" />
                     <span className="font-semibold text-foreground">
@@ -470,3 +470,4 @@ export default function ResolvePage() {
     </DashboardLayout>
   );
 }
+

@@ -5,12 +5,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
-import { CheckCircle2, Copy, Key, MoreHorizontal, Plus, XCircle } from "lucide-react";
+import { CheckCircle2, Copy, Key, Loader2, MoreHorizontal, Plus, XCircle } from "lucide-react";
 
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Skeleton } from "../components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -58,8 +59,9 @@ type ChildUpi = {
 export default function UpisPage() {
   const router = useRouter();
   const { token, loading, profile } = useAuth();
-  const { accounts, upis, refreshAccounts, refreshUpis } = useAppData();
+  const { accounts, upis, refreshAccounts, refreshUpis, loading: dataLoading } = useAppData();
   const [isCreatingUPI, setIsCreatingUPI] = useState(false);
+  const [isSubmittingUPI, setIsSubmittingUPI] = useState(false);
   const [upiToDisable, setUpiToDisable] = useState<string | null>(null);
   const [newUPI, setNewUPI] = useState({ payoutAccountId: "", label: "" });
   const [busy, setBusy] = useState<Record<string, boolean>>({});
@@ -86,6 +88,7 @@ export default function UpisPage() {
       toast.warning("Select an account", { description: "Choose a payout account to create a UPI." });
       return;
     }
+    setIsSubmittingUPI(true);
     try {
       const response = await createChildUpi({
         account_id: Number(newUPI.payoutAccountId),
@@ -98,6 +101,8 @@ export default function UpisPage() {
       await refreshUpis({ force: true });
     } catch (err) {
       toastApiError(err, "UPI failed");
+    } finally {
+      setIsSubmittingUPI(false);
     }
   };
 
@@ -223,7 +228,12 @@ export default function UpisPage() {
                   <Button variant="outline" onClick={() => setIsCreatingUPI(false)}>
                     Cancel
                   </Button>
-                  <Button variant="hero" onClick={handleCreateUPI}>
+                  <Button
+                    variant="hero"
+                    onClick={handleCreateUPI}
+                    isLoading={isSubmittingUPI}
+                    loadingText="Creating UPI"
+                  >
                     Create UPI
                   </Button>
                 </DialogFooter>
@@ -232,8 +242,23 @@ export default function UpisPage() {
           </div>
 
           {/* UPIs list */}
-          {upis.length === 0 ? (
-            <div className="bg-card border border-border rounded-xl p-12 text-center">
+          {dataLoading.upis && upis.length === 0 ? (
+            <div className="space-y-3">
+              {Array.from({ length: 4 }).map((_, idx) => (
+                <div key={`upi-skeleton-${idx}`} className="bg-card border border-border rounded-lg p-5 shadow-card">
+                  <div className="flex items-start gap-4">
+                    <Skeleton className="h-10 w-10 rounded-lg" />
+                    <div className="flex-1 space-y-3">
+                      <Skeleton className="h-4 w-48" />
+                      <Skeleton className="h-3 w-40" />
+                      <Skeleton className="h-3 w-24" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : upis.length === 0 ? (
+            <div className="bg-card border border-border rounded-lg p-12 text-center">
               <Key className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold text-foreground mb-2">
                 No UPIs created
@@ -261,7 +286,7 @@ export default function UpisPage() {
                 return (
                   <div
                     key={upi.child_upi_id || upi.upi}
-                    className="bg-card border border-border rounded-xl p-5 shadow-card"
+                    className="bg-card border border-border rounded-lg p-5 shadow-card"
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex items-start gap-4">
@@ -377,3 +402,4 @@ export default function UpisPage() {
     </DashboardLayout>
   );
 }
+

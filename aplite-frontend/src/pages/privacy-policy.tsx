@@ -13,7 +13,7 @@ export default function PrivacyPolicyPage() {
       </Head>
 
       <main className="mx-auto w-full max-w-4xl px-6 py-12">
-        <div className="mb-10 rounded-2xl border border-border bg-background/80 p-8 shadow-card backdrop-blur">
+        <div className="mb-10 rounded-lg border border-border bg-background/80 p-8 shadow-card backdrop-blur">
           <PublicPageNav backHref={backHref} />
           <h1 className="mt-4 text-3xl font-semibold text-foreground">Privacy Policy</h1>
           <p className="mt-2 text-sm text-muted-foreground">Last updated: 2026-01-08</p>
@@ -29,14 +29,14 @@ export default function PrivacyPolicyPage() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
-          <section className="rounded-xl border border-border bg-card p-6 shadow-card">
+          <section className="rounded-lg border border-border bg-card p-6 shadow-card">
             <h2 className="text-base font-semibold text-foreground">Transparency by design</h2>
             <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
               We avoid unnecessary tracking and use data only to verify businesses, secure payment operations, and
               satisfy compliance requirements. We do not sell your personal information.
             </p>
           </section>
-          <section className="rounded-xl border border-border bg-card p-6 shadow-card">
+          <section className="rounded-lg border border-border bg-card p-6 shadow-card">
             <h2 className="text-base font-semibold text-foreground">Security first</h2>
             <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
               Sensitive fields are encrypted at rest, access is restricted, and we monitor for suspicious activity.
@@ -134,3 +134,4 @@ export default function PrivacyPolicyPage() {
     </div>
   );
 }
+

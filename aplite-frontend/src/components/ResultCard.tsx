@@ -23,7 +23,7 @@ const variantStyles = {
 const ResultCard = ({ variant = "info", icon, title, children, className }: ResultCardProps) => {
   /** Card wrapper for result/status messaging. */
   return (
-    <div className={cn("rounded-xl border p-6 animate-fade-in", variantStyles[variant], className)}>
+    <div className={cn("rounded-lg border p-6 animate-fade-in", variantStyles[variant], className)}>
       {(icon || title) && (
         <div className="flex items-center gap-2 mb-4">
           {icon}
@@ -36,3 +36,4 @@ const ResultCard = ({ variant = "info", icon, title, children, className }: Resu
 };
 
 export default ResultCard;
+

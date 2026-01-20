@@ -9,11 +9,11 @@ export default function PaymentIdentityPage() {
   return (
     <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
       <Head>
-        <title>Why Payment Identity Matters · Aplite</title>
+        <title>Why Payment Identity Matters - Aplite</title>
       </Head>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-12">
-        <div className="mb-10 rounded-2xl border border-border bg-background/80 p-8 shadow-card backdrop-blur">
+        <div className="mb-10 rounded-lg border border-border bg-background/80 p-8 shadow-card backdrop-blur">
           <PublicPageNav backHref={backHref} />
           <h1 className="mt-4 text-3xl font-semibold text-foreground">Why payment identity matters</h1>
           <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
@@ -24,14 +24,14 @@ export default function PaymentIdentityPage() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
-          <section className="rounded-xl border border-border bg-card p-6 shadow-card">
+          <section className="rounded-lg border border-border bg-card p-6 shadow-card">
             <h2 className="text-base font-semibold text-foreground">The real source of fraud</h2>
             <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
               Most AP fraud is not a sophisticated hack. It is a believable request that arrives during a busy week,
               paired with a payment change that is hard to validate quickly. Ambiguity is the threat surface.
             </p>
           </section>
-          <section className="rounded-xl border border-border bg-card p-6 shadow-card">
+          <section className="rounded-lg border border-border bg-card p-6 shadow-card">
             <h2 className="text-base font-semibold text-foreground">The core problem</h2>
             <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
               Payment instructions live in inboxes, spreadsheets, and ticketing tools. When details are treated as
@@ -58,3 +58,6 @@ export default function PaymentIdentityPage() {
     </div>
   );
 }
+
+
+

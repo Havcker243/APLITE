@@ -1,4 +1,4 @@
-import Head from "next/head";
+﻿import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { PublicPageNav } from "../components/PublicPageNav";
@@ -15,11 +15,11 @@ export default function ConfirmEmailPage() {
   return (
     <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
       <Head>
-        <title>Confirm your email Aú Aplite</title>
+        <title>Confirm your email - Aplite</title>
       </Head>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-12">
-        <div className="mb-10 rounded-2xl border border-border bg-background/80 p-8 shadow-card backdrop-blur">
+        <div className="mb-10 rounded-lg border border-border bg-background/80 p-8 shadow-card backdrop-blur">
           <PublicPageNav backHref={backHref} />
           <h1 className="mt-4 text-3xl font-semibold text-foreground">Confirm your email</h1>
           <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
@@ -33,7 +33,7 @@ export default function ConfirmEmailPage() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
-          <section className="rounded-xl border border-border bg-card p-6 shadow-card">
+          <section className="rounded-lg border border-border bg-card p-6 shadow-card">
             <h2 className="text-base font-semibold text-foreground">Next steps</h2>
             <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
               <li>Check your inbox and spam folder.</li>
@@ -46,7 +46,7 @@ export default function ConfirmEmailPage() {
               </Link>
             </div>
           </section>
-          <section className="rounded-xl border border-border bg-card p-6 shadow-card">
+          <section className="rounded-lg border border-border bg-card p-6 shadow-card">
             <h2 className="text-base font-semibold text-foreground">Did not receive it?</h2>
             <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
               Double-check your email address and try signing up again if needed. If the issue continues, contact
@@ -63,3 +63,5 @@ export default function ConfirmEmailPage() {
     </div>
   );
 }
+
+

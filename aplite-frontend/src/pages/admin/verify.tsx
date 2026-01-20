@@ -239,7 +239,7 @@ export default function AdminVerifyPage() {
           </div>
         </div>
         <div className="flex-1 flex items-center justify-center p-8">
-          <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-card">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-card">
           <div className="flex items-start gap-3 mb-6">
             <Button
               type="button"
@@ -300,7 +300,7 @@ export default function AdminVerifyPage() {
         </div>
 
       <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
-        <div className="rounded-xl border border-border bg-card p-4 h-[70vh] overflow-y-auto">
+        <div className="rounded-lg border border-border bg-card p-4 h-[70vh] overflow-y-auto">
           <div className="flex items-center justify-between mb-3">
             <div className="text-xs uppercase text-muted-foreground">Pending</div>
             <div className="text-xs text-muted-foreground">{queue.length} total</div>
@@ -345,7 +345,7 @@ export default function AdminVerifyPage() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-6 h-[70vh] overflow-y-auto">
+        <div className="rounded-lg border border-border bg-card p-6 h-[70vh] overflow-y-auto">
           {!selectedItem && <div className="text-sm text-muted-foreground">Select a verification request.</div>}
           {selectedItem && (
             <>
@@ -505,3 +505,4 @@ function formatAddress(address: any) {
   const parts = [address.street1, address.street2, address.city, address.state, address.zip, address.country].filter(Boolean);
   return parts.join(", ") || "-";
 }
+

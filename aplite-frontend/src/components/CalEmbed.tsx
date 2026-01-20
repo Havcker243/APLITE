@@ -62,7 +62,7 @@ export function CalEmbed({
   if (variant === "card") {
     if (scheduled) {
       return (
-        <div className="bg-success/5 border border-success/20 rounded-xl p-6 text-center">
+        <div className="bg-success/5 border border-success/20 rounded-lg p-6 text-center">
           <Calendar className="h-12 w-12 mx-auto text-success mb-4" />
           <h3 className="text-lg font-semibold text-foreground mb-2">Call Scheduled</h3>
           <p className="text-muted-foreground mb-4">We&apos;ll send you a calendar invite with the meeting details.</p>
@@ -76,7 +76,7 @@ export function CalEmbed({
     }
 
     return (
-      <div className="bg-card border border-border rounded-xl p-6 text-center">
+      <div className="bg-card border border-border rounded-lg p-6 text-center">
         <Calendar className="h-12 w-12 mx-auto text-accent mb-4" />
         <h3 className="text-lg font-semibold text-foreground mb-2">Schedule Verification Call</h3>
         <p className="text-muted-foreground mb-6">Complete your verification with a brief call with our team.</p>
@@ -134,3 +134,4 @@ export function CalEmbed({
     </div>
   );
 }
+

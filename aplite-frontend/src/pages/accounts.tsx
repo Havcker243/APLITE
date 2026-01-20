@@ -16,6 +16,7 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Skeleton } from "../components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -44,8 +45,9 @@ type RailType = "ach" | "wire" | "swift";
 export default function Accounts() {
   const router = useRouter();
   const { token, loading, profile } = useAuth();
-  const { accounts, refreshAccounts } = useAppData();
+  const { accounts, refreshAccounts, loading: dataLoading } = useAppData();
   const [isAddingAccount, setIsAddingAccount] = useState(false);
+  const [isCreatingAccount, setIsCreatingAccount] = useState(false);
   const [isEditingNickname, setIsEditingNickname] = useState(false);
   const [editingAccountId, setEditingAccountId] = useState<number | null>(null);
   const [editingNickname, setEditingNickname] = useState("");
@@ -78,6 +80,7 @@ export default function Accounts() {
 
     const rail = newAccount.railType === "ach" ? "ACH" : newAccount.railType === "wire" ? "WIRE_DOM" : "SWIFT";
 
+    setIsCreatingAccount(true);
     try {
       await createAccount({
         rail,
@@ -104,6 +107,8 @@ export default function Accounts() {
       await refreshAccounts({ force: true });
     } catch (err) {
       toastApiError(err, "Unable to add payout account");
+    } finally {
+      setIsCreatingAccount(false);
     }
   }
 
@@ -239,7 +244,12 @@ export default function Accounts() {
                   <Button variant="outline" onClick={() => setIsAddingAccount(false)}>
                     Cancel
                   </Button>
-                  <Button variant="hero" onClick={handleAddAccount}>
+                  <Button
+                    variant="hero"
+                    onClick={handleAddAccount}
+                    isLoading={isCreatingAccount}
+                    loadingText="Adding account"
+                  >
                     Add account
                   </Button>
                 </DialogFooter>
@@ -248,8 +258,23 @@ export default function Accounts() {
           </div>
 
           {/* Accounts list */}
-          {accounts.length === 0 ? (
-            <div className="bg-card border border-border rounded-xl p-12 text-center">
+          {dataLoading.accounts && accounts.length === 0 ? (
+            <div className="space-y-3">
+              {Array.from({ length: 3 }).map((_, idx) => (
+                <div key={`account-skeleton-${idx}`} className="bg-card border border-border rounded-lg p-5 shadow-card">
+                  <div className="flex items-start gap-4">
+                    <Skeleton className="h-10 w-10 rounded-lg" />
+                    <div className="flex-1 space-y-3">
+                      <Skeleton className="h-4 w-40" />
+                      <Skeleton className="h-3 w-24" />
+                      <Skeleton className="h-3 w-16" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : accounts.length === 0 ? (
+            <div className="bg-card border border-border rounded-lg p-12 text-center">
               <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold text-foreground mb-2">
                 No payout accounts
@@ -271,7 +296,7 @@ export default function Accounts() {
                 return (
                   <div
                     key={account.id}
-                    className="bg-card border border-border rounded-xl p-5 shadow-card"
+                    className="bg-card border border-border rounded-lg p-5 shadow-card"
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex items-start gap-4">
@@ -289,11 +314,11 @@ export default function Accounts() {
                             )}
                           </div>
                           <p className="text-sm text-muted-foreground mt-0.5">
-                            {account.bank_name} • {railLabel}
+                            {account.bank_name} - {railLabel}
                           </p>
                           {accountNumber && (
                             <p className="text-sm text-muted-foreground">
-                              ••••{accountNumber.slice(-4)}
+                              ****{accountNumber.slice(-4)}
                             </p>
                           )}
                         </div>
@@ -353,7 +378,12 @@ export default function Accounts() {
             <Button variant="outline" onClick={() => setIsEditingNickname(false)}>
               Cancel
             </Button>
-            <Button variant="hero" onClick={handleSaveNickname} disabled={isSavingNickname}>
+            <Button
+              variant="hero"
+              onClick={handleSaveNickname}
+              isLoading={isSavingNickname}
+              loadingText="Saving"
+            >
               Save
             </Button>
           </DialogFooter>
@@ -362,3 +392,5 @@ export default function Accounts() {
     </DashboardLayout>
   );
 }
+
+

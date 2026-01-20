@@ -83,7 +83,7 @@ export default function Clients() {
 
           <div className="space-y-3">
             {filtered.map((org) => (
-              <div key={String(org.id)} className="bg-card border border-border rounded-xl overflow-hidden shadow-card">
+              <div key={String(org.id)} className="bg-card border border-border rounded-lg overflow-hidden shadow-card">
                 <button
                   type="button"
                   className="w-full px-6 py-4 flex items-center justify-between text-left"
@@ -137,3 +137,4 @@ export default function Clients() {
     </DashboardLayout>
   );
 }
+

@@ -9,11 +9,11 @@ export default function VerificationPage() {
   return (
     <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
       <Head>
-        <title>Verification Process · Aplite</title>
+        <title>Verification Process - Aplite</title>
       </Head>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-12">
-        <div className="mb-10 rounded-2xl border border-border bg-background/80 p-8 shadow-card backdrop-blur">
+        <div className="mb-10 rounded-lg border border-border bg-background/80 p-8 shadow-card backdrop-blur">
           <PublicPageNav backHref={backHref} />
           <h1 className="mt-4 text-3xl font-semibold text-foreground">Verification process</h1>
           <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
@@ -23,28 +23,28 @@ export default function VerificationPage() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
-          <section className="rounded-xl border border-border bg-card p-6 shadow-card">
+          <section className="rounded-lg border border-border bg-card p-6 shadow-card">
             <h2 className="text-base font-semibold text-foreground">Step 1: Organization details</h2>
             <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
               Submit legal business name, EIN, formation state, and primary address. We use this information to anchor
               the verified business identity.
             </p>
           </section>
-          <section className="rounded-xl border border-border bg-card p-6 shadow-card">
+          <section className="rounded-lg border border-border bg-card p-6 shadow-card">
             <h2 className="text-base font-semibold text-foreground">Step 2: Submitter role</h2>
             <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
               Identify whether the submitter is the business owner or an authorized representative. This determines the
               verification path and risk tier.
             </p>
           </section>
-          <section className="rounded-xl border border-border bg-card p-6 shadow-card">
+          <section className="rounded-lg border border-border bg-card p-6 shadow-card">
             <h2 className="text-base font-semibold text-foreground">Step 3: Identity evidence</h2>
             <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
               Provide identity documentation and attest authorization to act on behalf of the organization. Owners may
               complete a verification call where appropriate.
             </p>
           </section>
-          <section className="rounded-xl border border-border bg-card p-6 shadow-card">
+          <section className="rounded-lg border border-border bg-card p-6 shadow-card">
             <h2 className="text-base font-semibold text-foreground">Step 4: Payment rails</h2>
             <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
               Configure payout rails such as ACH, domestic wire, or SWIFT. Sensitive fields are encrypted before
@@ -73,3 +73,6 @@ export default function VerificationPage() {
     </div>
   );
 }
+
+
+

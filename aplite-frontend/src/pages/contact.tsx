@@ -31,11 +31,11 @@ export default function ContactPage() {
   return (
     <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
       <Head>
-        <title>Contact · Aplite</title>
+        <title>Contact - Aplite</title>
       </Head>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-12">
-        <div className="mb-10 rounded-2xl border border-border bg-background/80 p-8 shadow-card backdrop-blur">
+        <div className="mb-10 rounded-lg border border-border bg-background/80 p-8 shadow-card backdrop-blur">
           <PublicPageNav backHref={backHref} />
           <h1 className="mt-4 text-3xl font-semibold text-foreground">Contact support</h1>
           <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
@@ -44,7 +44,7 @@ export default function ContactPage() {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-          <form className="rounded-xl border border-border bg-card p-6 shadow-card space-y-4" onSubmit={handleSubmit}>
+          <form className="rounded-lg border border-border bg-card p-6 shadow-card space-y-4" onSubmit={handleSubmit}>
             <div className="space-y-2">
               <Label htmlFor="name">Name</Label>
               <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" />
@@ -69,7 +69,7 @@ export default function ContactPage() {
             </Button>
           </form>
 
-          <div className="rounded-xl border border-border bg-card p-6 shadow-card space-y-4 text-sm text-muted-foreground">
+          <div className="rounded-lg border border-border bg-card p-6 shadow-card space-y-4 text-sm text-muted-foreground">
             <div>
               <h2 className="text-base font-semibold text-foreground">Support</h2>
               <p className="mt-2">Email us at support@aplite.io.</p>
@@ -101,3 +101,6 @@ export default function ContactPage() {
     </div>
   );
 }
+
+
+

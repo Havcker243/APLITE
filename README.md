@@ -1,71 +1,52 @@
 # APLITE
 
-Aplite is a full-stack MVP for sharing payout details safely. Businesses share a short
-identifier (UPI) instead of raw bank details. Verified users can resolve a UPI into
-payout coordinates only when needed.
+Aplite is a payout identity company. We help businesses share where money should go
+without exposing sensitive bank details at every step.
 
-## What this product does
-- Replaces direct bank detail sharing with short payment identifiers.
-- Guides businesses through onboarding and verification.
-- Lets verified users create and resolve UPIs for payouts.
+## What we saw
+Teams were exchanging bank details over email, chat, and spreadsheets. That creates
+friction, mistakes, and risk every time a payout needs to happen. One wrong copy
+or a leaked file can cause delays, chargebacks, or worse.
 
-## Core flow (high level)
-1) Business signs up.
-2) Onboarding collects business, identity, and payout details.
-3) Admin manually reviews submissions.
-4) Approved businesses receive a UPI.
-5) Verified users resolve UPIs to see payout coordinates.
+## The problem we are solving
+Businesses need a simple way to share payout information that is accurate, secure,
+and easy for partners to use without handling raw bank data.
 
-## Roles
-- Business user: completes onboarding and manages UPIs.
-- Admin reviewer: approves or rejects onboarding submissions.
+## How we solve it
+Aplite replaces bank detail sharing with a short payout identifier (UPI). The UPI
+is safe to share, while the actual payout coordinates are protected and only shown
+to verified users when it is time to pay.
 
-## Data protection (summary)
-- Bank details are encrypted at rest.
-- UPIs do not expose bank details by default.
-- Only verified users can resolve UPIs.
+## How it works (plain language)
+1) A business signs up and completes onboarding.
+2) Aplite verifies the business and payout details.
+3) The business receives a UPI that can be shared anywhere.
+4) Verified partners resolve the UPI to send payouts confidently.
 
-## Repository layout
-- `aplite-backend/`: FastAPI + Postgres API
-- `aplite-frontend/`: Next.js (Pages Router) web UI
-- `docs/`: product and technical documentation
+## What the platform includes
+- Business onboarding and verification.
+- UPI creation and management.
+- Secure resolution for verified partners.
+- Admin review for trust and quality.
 
-## Documentation
-- `docs/README.md`: doc index and reading order
-- `docs/PRODUCT_UI_SPEC.md`: UX spec
-- `docs/ARCHITECTURE.md`: system overview
+## Screenshots
+**Homepage**
+![Homepage](pics/Hompage.png)
 
-## Developer quick start
+**Dashboard**
+![Dashboard](pics/Dashboard.png)
 
-Backend (from `aplite-backend/`):
-```bash
-pip install -r requirements-backend.txt
-psql "$DATABASE_URL" -f ../schema-final.sql
-uvicorn app.main:app --reload
-```
+**Accounts**
+![Accounts](pics/Accounts.png)
 
-Frontend (from `aplite-frontend/`):
-```bash
-npm install
-npm run dev
-```
+**UPIs**
+![UPIs](pics/UPIS.png)
 
-## Production configuration (summary)
-Required:
-- `DATABASE_URL`
-- `SUPABASE_URL`
-- `ENCRYPTION_KEY`
-- `UPI_SECRET_KEY`
-- `ADMIN_API_KEY`
-- Storage: `DATABASE_BUCKET_NAME`, `DATABASE_BUCKET_S3_ACCESS_KEY_ID`,
-  `DATABASE_BUCKET_S3_SECRET_ACCESS_KEY`, `DATABASE_BUCKET_S3_REGION`,
-  `DATABASE_BUCKET_S3_ENDPOINT`
+**Search**
+![Search](pics/search.png)
 
-Recommended:
-- `CSRF_SECRET_KEY`
-- `SUPABASE_JWKS_URL`, `SUPABASE_ISSUER`, `SUPABASE_JWT_AUDIENCE`
-- `SESSION_TTL_HOURS`
-- `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`
-- `NEXT_PUBLIC_CAL_LINK`
-
-For full backend configuration and operational notes, see `aplite-backend/README.md`.
+## Product and technical docs
+If you are looking for build or implementation details, start here:
+- `docs/README.md`
+- `aplite-backend/README.md`
+- `aplite-frontend/README.md`

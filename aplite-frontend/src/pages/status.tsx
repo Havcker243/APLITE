@@ -9,11 +9,11 @@ export default function StatusPage() {
   return (
     <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
       <Head>
-        <title>Status · Aplite</title>
+        <title>Status - Aplite</title>
       </Head>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-12">
-        <div className="mb-10 rounded-2xl border border-border bg-background/80 p-8 shadow-card backdrop-blur">
+        <div className="mb-10 rounded-lg border border-border bg-background/80 p-8 shadow-card backdrop-blur">
           <PublicPageNav backHref={backHref} />
           <h1 className="mt-4 text-3xl font-semibold text-foreground">System status</h1>
           <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
@@ -22,7 +22,7 @@ export default function StatusPage() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
-          <section className="rounded-xl border border-border bg-card p-6 shadow-card">
+          <section className="rounded-lg border border-border bg-card p-6 shadow-card">
             <div className="flex items-center gap-3">
               <span className="h-2.5 w-2.5 rounded-full bg-verified" />
               <h2 className="text-base font-semibold text-foreground">All systems operational</h2>
@@ -31,7 +31,7 @@ export default function StatusPage() {
               API, onboarding, and resolution services are available.
             </p>
           </section>
-          <section className="rounded-xl border border-border bg-card p-6 shadow-card">
+          <section className="rounded-lg border border-border bg-card p-6 shadow-card">
             <h2 className="text-base font-semibold text-foreground">Last incident</h2>
             <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
               No incidents reported in the last 30 days.
@@ -40,13 +40,13 @@ export default function StatusPage() {
         </div>
 
         <div className="mt-10 grid gap-6 md:grid-cols-2">
-          <section className="rounded-xl border border-border bg-card p-6 shadow-card">
+          <section className="rounded-lg border border-border bg-card p-6 shadow-card">
             <h2 className="text-base font-semibold text-foreground">Scheduled maintenance</h2>
             <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
               No maintenance scheduled.
             </p>
           </section>
-          <section className="rounded-xl border border-border bg-card p-6 shadow-card">
+          <section className="rounded-lg border border-border bg-card p-6 shadow-card">
             <h2 className="text-base font-semibold text-foreground">Support</h2>
             <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
               For urgent issues, email{" "}
@@ -61,3 +61,6 @@ export default function StatusPage() {
     </div>
   );
 }
+
+
+

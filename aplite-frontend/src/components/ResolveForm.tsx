@@ -3,7 +3,7 @@
  * Collects lookup input and triggers resolve requests.
  */
 
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { Loader2, Search } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -39,7 +39,7 @@ export function ResolveForm({
   };
 
   return (
-    <div className="bg-card border border-border rounded-xl p-6 shadow-card">
+    <div className="bg-card border border-border rounded-lg p-6 shadow-card">
       <div className="space-y-4">
         <div className="space-y-2">
           <Label>{label}</Label>
@@ -68,3 +68,5 @@ export function ResolveForm({
     </div>
   );
 }
+
+

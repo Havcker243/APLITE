@@ -21,6 +21,18 @@ export default {
       fontFamily: {
         sans: ["DM Sans", "system-ui", "sans-serif"],
       },
+      fontSize: {
+        xs: ["0.75rem", { lineHeight: "1.4" }],
+        sm: ["0.875rem", { lineHeight: "1.5" }],
+        base: ["1rem", { lineHeight: "1.6" }],
+        lg: ["1.125rem", { lineHeight: "1.6" }],
+        xl: ["1.25rem", { lineHeight: "1.5" }],
+        "2xl": ["1.5rem", { lineHeight: "1.3" }],
+        "3xl": ["1.875rem", { lineHeight: "1.25" }],
+        "4xl": ["2.25rem", { lineHeight: "1.2" }],
+        "5xl": ["3rem", { lineHeight: "1.15" }],
+        "6xl": ["3.75rem", { lineHeight: "1.1" }],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -110,10 +122,10 @@ export default {
         },
       },
       animation: {
-        "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
-        "fade-in": "fade-in 0.3s ease-out",
-        "slide-in": "slide-in 0.3s ease-out",
+        "accordion-down": "accordion-down 0.2s cubic-bezier(0.22, 1, 0.36, 1)",
+        "accordion-up": "accordion-up 0.2s cubic-bezier(0.22, 1, 0.36, 1)",
+        "fade-in": "fade-in 0.4s cubic-bezier(0.22, 1, 0.36, 1)",
+        "slide-in": "slide-in 0.4s cubic-bezier(0.22, 1, 0.36, 1)",
       },
     },
   },
