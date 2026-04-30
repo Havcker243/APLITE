@@ -25,6 +25,7 @@ export default function OnboardStep5() {
   const [mounted, setMounted] = useState(false);
   const [pendingCall, setPendingCall] = useState(false);
   const [pendingReview, setPendingReview] = useState(false);
+  const [tosAccepted, setTosAccepted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -76,6 +77,7 @@ export default function OnboardStep5() {
       }
       if (!step2.role) throw new Error("Select your role on Step 2.");
       if (!step3.attestation) throw new Error("Attestation required on Step 3.");
+      if (!tosAccepted) throw new Error("Please accept the Terms of Service before submitting.");
       if (!step4.bank_name || !step4.account_number) throw new Error("Bank details are required on Step 4.");
 
       // Build payload from local drafts; backend receives full snapshot in one request.
@@ -229,12 +231,32 @@ export default function OnboardStep5() {
           </ReviewSection>
         </div>
 
+        <label className="flex items-start gap-3 text-sm text-muted-foreground cursor-pointer select-none">
+          <input
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 accent-current shrink-0"
+            checked={tosAccepted}
+            onChange={(e) => setTosAccepted(e.target.checked)}
+          />
+          <span>
+            I agree to the{" "}
+            <a href="/terms-of-service" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+              Terms of Service
+            </a>{" "}
+            and{" "}
+            <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+              Privacy Policy
+            </a>
+            . I confirm the information provided is accurate and complete.
+          </span>
+        </label>
+
         <div className="flex items-center justify-between mt-8 pt-6 border-t border-border">
           <Button type="button" variant="outline" onClick={() => router.push("/onboard/step-4")}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back
           </Button>
-          <Button type="button" variant="success" onClick={handleSubmit} disabled={saving || pendingCall || pendingReview}>
+          <Button type="button" variant="success" onClick={handleSubmit} disabled={saving || pendingCall || pendingReview || !tosAccepted}>
             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {pendingCall || pendingReview ? "Pending verification" : "Submit for verification"}
           </Button>

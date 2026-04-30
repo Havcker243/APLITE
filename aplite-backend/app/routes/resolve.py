@@ -1,14 +1,17 @@
 """UPI resolution routes.
 
 Handles lookup of organizations and payment account details by UPI, with
-rate limiting and validation to prevent abuse.
+rate limiting and validation to prevent abuse. Accepts both JWT (dashboard
+users) and API key (partner integrations) for the resolve endpoint.
 """
 
-from typing import Literal
+from __future__ import annotations
 
+from typing import Literal, Optional
+import hashlib
 import os
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel
 
 from app.db import queries
@@ -17,6 +20,38 @@ from app.utils.upi import parse_upi, validate_upi_format, verify_upi
 from app.utils.ratelimit import RateLimit, check_rate_limit
 
 router = APIRouter()
+
+
+def _user_from_api_key(authorization: str | None) -> Optional[dict]:
+    """Try to authenticate via 'ApiKey <key>' header. Returns user-like dict or None."""
+    if not authorization or not authorization.startswith("ApiKey "):
+        return None
+    raw_key = authorization.removeprefix("ApiKey ").strip()
+    if not raw_key:
+        return None
+    key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+    record = queries.get_api_key_by_hash(key_hash)
+    if not record:
+        return None
+    if record.get("revoked_at"):
+        return None
+    scopes = record.get("scopes") or []
+    if "resolve" not in scopes:
+        return None
+    queries.touch_api_key(str(record["key_id"]))
+    return {
+        "id": record.get("user_id"),
+        "email": record.get("email"),
+        "first_name": record.get("first_name"),
+        "last_name": record.get("last_name"),
+        "master_upi": record.get("master_upi"),
+        "company_name": record.get("company_name"),
+        "company": record.get("company"),
+        "summary": record.get("summary"),
+        "state": record.get("state"),
+        "country": record.get("country"),
+        "_api_key_id": str(record["key_id"]),
+    }
 
 
 class ResolveUPIRequest(BaseModel):
@@ -149,9 +184,21 @@ def lookup_upi(payload: LookupUPIRequest, request: Request, user=Depends(get_cur
 
 
 @router.post("/api/resolve")
-def resolve_upi(payload: ResolveUPIRequest, request: Request, user=Depends(get_current_user)):
-    """Resolve a UPI (owned by the caller) into payout coordinates for the requested rail."""
-    # Resolve returns payout coordinates only for verified, active UPIs.
+def resolve_upi(
+    payload: ResolveUPIRequest,
+    request: Request,
+    authorization: str | None = Header(default=None),
+    user=Depends(get_current_user),
+):
+    """Resolve a UPI into payout coordinates for the requested rail.
+
+    Accepts JWT auth (dashboard) or 'ApiKey <key>' header (partner integration).
+    """
+    # API key takes precedence when present; fall back to the JWT user.
+    api_user = _user_from_api_key(authorization)
+    if api_user:
+        user = api_user
+
     upi_value = payload.upi.upper()
 
     _enforce_rate_limit(
@@ -221,6 +268,14 @@ def resolve_upi(payload: ResolveUPIRequest, request: Request, user=Depends(get_c
             "website": org.get("website") or "",
         }
 
+        queries.log_resolution(
+            upi=upi_value,
+            rail=payload.rail,
+            requester_user_id=int(user.get("id") or 0) or None,
+            api_key_id=user.get("_api_key_id"),
+            requester_ip=(request.client.host if request.client else "unknown"),
+        )
+
         return {
             "upi": upi_value,
             "rail": payload.rail,
@@ -289,6 +344,14 @@ def resolve_upi(payload: ResolveUPIRequest, request: Request, user=Depends(get_c
         "country": address.get("country") or owner.get("country") or "",
         "website": org.get("website") or "",
     }
+
+    queries.log_resolution(
+        upi=upi_value,
+        rail=payload.rail,
+        requester_user_id=int(user.get("id") or 0) or None,
+        api_key_id=user.get("_api_key_id"),
+        requester_ip=(request.client.host if request.client else "unknown"),
+    )
 
     return {
         "upi": upi_value,

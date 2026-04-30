@@ -2191,3 +2191,199 @@ def is_user_verified(user_id: int) -> bool:
                 (user_id,),
             )
             return cur.fetchone() is not None
+
+
+# =============================================================================
+# API KEYS
+# =============================================================================
+
+def create_api_key(*, user_id: int, name: str, key_hash: str, key_prefix: str, scopes: list) -> dict:
+    """Create an API key record and return the stored row (without the raw key)."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                insert into api_keys (user_id, name, key_hash, key_prefix, scopes)
+                values (%s, %s, %s, %s, %s::jsonb)
+                returning id, name, key_prefix, scopes, created_at
+                """,
+                (user_id, name, key_hash, key_prefix, json.dumps(scopes)),
+            )
+            row = cur.fetchone()
+            conn.commit()
+            return dict(row) if row else {}
+
+
+def list_api_keys(user_id: int) -> list:
+    """Return all API keys for a user, newest first."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select id, name, key_prefix, scopes, last_used_at, revoked_at, created_at
+                from api_keys
+                where user_id = %s
+                order by created_at desc
+                """,
+                (user_id,),
+            )
+            return [dict(r) for r in cur.fetchall()]
+
+
+def revoke_api_key(*, key_id: str, user_id: int) -> bool:
+    """Revoke an API key. Returns True if a row was updated."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update api_keys
+                set revoked_at = now()
+                where id = %s and user_id = %s and revoked_at is null
+                """,
+                (key_id, user_id),
+            )
+            affected = cur.rowcount
+            conn.commit()
+            return affected > 0
+
+
+def get_api_key_by_hash(key_hash: str) -> Optional[dict]:
+    """Fetch an API key record joined with the owning user for auth."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select
+                    ak.id as key_id,
+                    ak.user_id,
+                    ak.scopes,
+                    ak.revoked_at,
+                    u.id,
+                    u.email,
+                    u.first_name,
+                    u.last_name,
+                    u.master_upi,
+                    u.company_name,
+                    u.company,
+                    u.summary,
+                    u.state,
+                    u.country
+                from api_keys ak
+                join users u on u.id = ak.user_id
+                where ak.key_hash = %s
+                limit 1
+                """,
+                (key_hash,),
+            )
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+
+def touch_api_key(key_id: str) -> None:
+    """Update the last_used_at timestamp for an API key (best-effort)."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "update api_keys set last_used_at = now() where id = %s",
+                    (key_id,),
+                )
+                conn.commit()
+    except Exception:
+        pass
+
+
+# =============================================================================
+# RESOLUTION AUDIT LOG
+# =============================================================================
+
+def log_resolution(
+    *,
+    upi: str,
+    rail: str,
+    requester_user_id: Optional[int],
+    api_key_id: Optional[str],
+    requester_ip: str,
+) -> None:
+    """Record a successful UPI resolution for audit purposes (best-effort)."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    insert into resolution_logs
+                        (upi, rail, requester_user_id, api_key_id, requester_ip)
+                    values (%s, %s, %s, %s, %s)
+                    """,
+                    (upi, rail, requester_user_id, api_key_id, requester_ip),
+                )
+                conn.commit()
+    except Exception:
+        pass
+
+
+# =============================================================================
+# USER DATA EXPORT / ACCOUNT DELETION
+# =============================================================================
+
+def export_user_data(user_id: int) -> dict:
+    """Return a structured export of all data belonging to a user."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select id, first_name, last_name, email, company_name, company,
+                       summary, established_year, state, country, master_upi, created_at
+                from users where id = %s
+                """,
+                (user_id,),
+            )
+            user_row = cur.fetchone()
+            user = dict(user_row) if user_row else {}
+
+            cur.execute(
+                """
+                select id, legal_name, dba, ein, formation_date, formation_state,
+                       entity_type, industry, website, description, upi,
+                       verification_status, status, created_at
+                from organizations where user_id = %s
+                """,
+                (user_id,),
+            )
+            orgs = [dict(r) for r in cur.fetchall()]
+
+            cur.execute(
+                """
+                select id, rail, bank_name, account_name, status, created_at
+                from payment_accounts where user_id = %s
+                """,
+                (user_id,),
+            )
+            accounts = [dict(r) for r in cur.fetchall()]
+
+            cur.execute(
+                """
+                select cu.id, cu.upi, cu.label, cu.status, cu.created_at, cu.disabled_at
+                from child_upis cu
+                join organizations o on o.id = cu.org_id
+                where o.user_id = %s
+                """,
+                (user_id,),
+            )
+            child_upis = [dict(r) for r in cur.fetchall()]
+
+    return {
+        "user": user,
+        "organizations": orgs,
+        "payment_accounts": accounts,
+        "child_upis": child_upis,
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def delete_user_data(user_id: int) -> None:
+    """Delete all data for a user. Cascade handles related records."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("delete from users where id = %s", (user_id,))
+            conn.commit()

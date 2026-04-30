@@ -23,6 +23,8 @@ from app.routes.resolve import router as resolve_router
 from app.routes.public import router as public_router
 from app.routes.onboarding import router as onboarding_router
 from app.routes.admin import router as admin_router
+from app.routes.keys import router as keys_router
+from app.routes.account import router as account_router
 from app.utils.ratelimit import RateLimit, check_rate_limit
 
 load_dotenv()
@@ -51,6 +53,8 @@ app.include_router(accounts_router)
 app.include_router(public_router)
 app.include_router(onboarding_router)
 app.include_router(admin_router)
+app.include_router(keys_router)
+app.include_router(account_router)
 
 logger = logging.getLogger("aplite")
 if not logger.handlers:

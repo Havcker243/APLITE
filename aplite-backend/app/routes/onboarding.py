@@ -25,6 +25,7 @@ from app.db import queries
 from app.routes.auth import get_current_user
 from app.utils.upi import generate_core_entity_id, generate_upi
 from app.utils.ratelimit import RateLimit, check_rate_limit
+from app.utils.email import send_onboarding_submitted
 import boto3
 from botocore.client import Config as BotoConfig
 
@@ -693,6 +694,15 @@ async def onboarding_complete(
     except Exception as exc:
         logger.exception("Onboarding completion failed")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to complete onboarding") from exc
+
+    try:
+        send_onboarding_submitted(
+            to_address=user.get("email", ""),
+            first_name=user.get("first_name") or payload.identity.full_name.split()[0],
+            legal_name=payload.org.legal_name,
+        )
+    except Exception:
+        logger.exception("Failed to send onboarding submitted email")
 
     return {
         "status": result["status"],

@@ -133,7 +133,7 @@ export default function LoginPage() {
       toast.error("Supabase is not configured.");
       return;
     }
-    const redirectTo = typeof window !== "undefined" ? `${window.location.origin}/login` : undefined;
+    const redirectTo = typeof window !== "undefined" ? `${window.location.origin}/reset-password` : undefined;
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
     if (error) {
       toast.error("Reset failed", { description: error.message });

@@ -13,6 +13,7 @@ from fastapi import APIRouter, Header, HTTPException, Request, Response, status
 
 from app.db import queries
 from app.db.connection import get_connection
+from app.utils.email import send_onboarding_approved, send_onboarding_rejected
 
 router = APIRouter()
 logger = logging.getLogger("aplite")
@@ -187,6 +188,19 @@ def approve_verification(
         reviewed_by=reviewer,
     )
     logger.info("verification approved", extra={"session_id": session_id, "reviewed_by": reviewer})
+
+    user_record = queries.get_user_by_id(int(session["user_id"])) or {}
+    org = queries.get_organization_by_id(str(session.get("org_id"))) or {}
+    try:
+        send_onboarding_approved(
+            to_address=user_record.get("email", ""),
+            first_name=user_record.get("first_name") or "there",
+            legal_name=org.get("legal_name") or "your organization",
+            upi=upi or "",
+        )
+    except Exception:
+        logger.exception("Failed to send approval email")
+
     return {"status": "VERIFIED", "upi": upi}
 
 
@@ -238,4 +252,17 @@ def reject_verification(
         reviewed_by=reviewer,
     )
     logger.info("verification rejected", extra={"session_id": session_id, "reviewed_by": reviewer})
+
+    user_record = queries.get_user_by_id(int(session["user_id"])) or {}
+    org = queries.get_organization_by_id(org_id) or {}
+    try:
+        send_onboarding_rejected(
+            to_address=user_record.get("email", ""),
+            first_name=user_record.get("first_name") or "there",
+            legal_name=org.get("legal_name") or "your organization",
+            reason=reason_value,
+        )
+    except Exception:
+        logger.exception("Failed to send rejection email")
+
     return {"status": "REJECTED"}

@@ -220,6 +220,16 @@ export type MasterUpiLookupResult = {
     status?: string | null;
   }>;
 };
+
+export type VerifyApliteIdResult = {
+  verified: boolean;
+  handle: string;
+  name: string | null;
+  industry: string | null;
+  country: string | null;
+  last_verified: string | null;
+  website: string | null;
+};
 // All requests prefer cookie-based auth but also attach Bearer when available.
 const defaultInit: RequestInit = { credentials: "include" };
 
@@ -280,6 +290,17 @@ async function parseError(res: Response, fallback: string) {
   if (status >= 500) return "We are having trouble right now. Please try again soon.";
 
   return fallback;
+}
+
+export async function verifyApliteId(apliteId: string): Promise<VerifyApliteIdResult> {
+  const params = new URLSearchParams({ id: apliteId });
+  const res = await fetch(`${API_BASE_URL}/api/public/verify?${params}`, {
+    headers: { ...NGROK_SKIP_HEADER },
+  });
+  if (!res.ok) {
+    throw new Error("Verification lookup failed");
+  }
+  return res.json();
 }
 
 export async function resolveUPI(data: ResolvePayload) {
@@ -592,4 +613,61 @@ export async function onboardingComplete(payload: {
   });
   if (!res.ok) throw new Error(await parseError(res, "Unable to complete onboarding"));
   return res.json();
+}
+
+// ============================================================
+// API KEYS
+// ============================================================
+
+export type ApiKeyRecord = {
+  id: string;
+  name: string;
+  key_prefix: string;
+  scopes: string[];
+  last_used_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
+  active: boolean;
+};
+
+export async function listApiKeys(): Promise<ApiKeyRecord[]> {
+  const res = await authedFetch(`${API_BASE_URL}/api/keys`);
+  if (!res.ok) throw new Error(await parseError(res, "Failed to load API keys"));
+  return res.json();
+}
+
+export async function createApiKey(name: string): Promise<ApiKeyRecord & { key: string; warning: string }> {
+  const res = await authedFetch(`${API_BASE_URL}/api/keys`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new Error(await parseError(res, "Failed to create API key"));
+  return res.json();
+}
+
+export async function revokeApiKey(keyId: string): Promise<void> {
+  const res = await authedFetch(`${API_BASE_URL}/api/keys/${keyId}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(await parseError(res, "Failed to revoke API key"));
+}
+
+// ============================================================
+// ACCOUNT SELF-SERVICE
+// ============================================================
+
+export async function exportAccountData(): Promise<void> {
+  const res = await authedFetch(`${API_BASE_URL}/api/account/export`);
+  if (!res.ok) throw new Error(await parseError(res, "Failed to export data"));
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "aplite-data-export.json";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function deleteAccount(): Promise<void> {
+  const res = await authedFetch(`${API_BASE_URL}/api/account`, { method: "DELETE" });
+  if (!res.ok) throw new Error(await parseError(res, "Failed to delete account"));
 }

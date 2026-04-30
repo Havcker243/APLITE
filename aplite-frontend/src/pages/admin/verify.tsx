@@ -51,6 +51,9 @@ export default function AdminVerifyPage() {
   const [loadingQueue, setLoadingQueue] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [reason, setReason] = useState("");
+  const [search, setSearch] = useState("");
+  const [methodFilter, setMethodFilter] = useState<string>("all");
+  const [stateFilter, setStateFilter] = useState<string>("all");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -227,6 +230,21 @@ export default function AdminVerifyPage() {
 
   const selectedItem = useMemo(() => queue.find((item) => item.session_id === selectedId) || null, [queue, selectedId]);
 
+  const filteredQueue = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    return queue.filter((item) => {
+      if (methodFilter !== "all" && item.method !== methodFilter) return false;
+      if (stateFilter !== "all" && item.state !== stateFilter) return false;
+      if (!q) return true;
+      return (
+        (item.org?.legal_name || "").toLowerCase().includes(q) ||
+        (item.user?.email || "").toLowerCase().includes(q) ||
+        (item.user?.first_name || "").toLowerCase().includes(q) ||
+        (item.user?.last_name || "").toLowerCase().includes(q)
+      );
+    });
+  }, [queue, search, methodFilter, stateFilter]);
+
   if (!authed) {
     return (
       <div className="min-h-screen bg-background flex">
@@ -303,12 +321,40 @@ export default function AdminVerifyPage() {
         <div className="rounded-lg border border-border bg-card p-4 h-[70vh] overflow-y-auto">
           <div className="flex items-center justify-between mb-3">
             <div className="text-xs uppercase text-muted-foreground">Pending</div>
-            <div className="text-xs text-muted-foreground">{queue.length} total</div>
+            <div className="text-xs text-muted-foreground">{filteredQueue.length}/{queue.length}</div>
+          </div>
+          <div className="space-y-2 mb-3">
+            <Input
+              placeholder="Search by org or email"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="text-xs h-8"
+            />
+            <div className="flex gap-2">
+              <select
+                className="flex-1 h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground"
+                value={methodFilter}
+                onChange={(e) => setMethodFilter(e.target.value)}
+              >
+                <option value="all">All methods</option>
+                <option value="call">Call</option>
+                <option value="id">ID</option>
+              </select>
+              <select
+                className="flex-1 h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground"
+                value={stateFilter}
+                onChange={(e) => setStateFilter(e.target.value)}
+              >
+                <option value="all">All states</option>
+                <option value="PENDING_CALL">Pending call</option>
+                <option value="PENDING_REVIEW">Pending review</option>
+              </select>
+            </div>
           </div>
           {loadingQueue && <div className="text-sm text-muted-foreground">Loading queue...</div>}
-          {!loadingQueue && queue.length === 0 && <div className="text-sm text-muted-foreground">No pending reviews.</div>}
+          {!loadingQueue && filteredQueue.length === 0 && <div className="text-sm text-muted-foreground">No matching reviews.</div>}
           <div className="space-y-3">
-            {queue.map((item) => {
+            {filteredQueue.map((item) => {
               const isActive = item.session_id === selectedId;
               const initials =
                 (item.user?.first_name?.[0] || "") + (item.user?.last_name?.[0] || "");
