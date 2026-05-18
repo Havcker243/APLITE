@@ -1,6 +1,6 @@
 # Documentation
 
-This folder contains product and engineering docs for Aplite. Start with the
+This folder contains product and engineering docs for TATIM. Start with the
 product spec if you are new to the project, then review architecture and API.
 
 ## Recommended reading order

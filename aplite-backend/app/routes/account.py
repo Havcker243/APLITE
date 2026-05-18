@@ -11,7 +11,7 @@ from app.db import queries
 from app.routes.auth import get_current_user
 
 router = APIRouter()
-logger = logging.getLogger("aplite")
+logger = logging.getLogger("tatim")
 
 
 @router.get("/api/account/export")
@@ -28,7 +28,7 @@ def export_account_data(user=Depends(get_current_user)):
     return JSONResponse(
         content=data,
         headers={
-            "Content-Disposition": "attachment; filename=aplite-data-export.json",
+            "Content-Disposition": "attachment; filename=tatim-data-export.json",
             "Content-Type": "application/json",
         },
     )

@@ -41,7 +41,7 @@ export default function OnboardStep6() {
   useEffect(() => {
     if (typeof window === "undefined" || !userId) return;
     try {
-      const stored = window.localStorage.getItem(`aplite_call_scheduled:${userId}`);
+      const stored = window.localStorage.getItem(`tatim_call_scheduled:${userId}`);
       setCallScheduled(stored === "1");
     } catch {
       // ignore storage errors
@@ -101,7 +101,7 @@ export default function OnboardStep6() {
     if (!userId) return;
     if (callScheduled) {
       try {
-        window.localStorage.setItem(`aplite_call_scheduled:${userId}`, "1");
+        window.localStorage.setItem(`tatim_call_scheduled:${userId}`, "1");
       } catch {
         // ignore storage errors
       }
@@ -110,7 +110,7 @@ export default function OnboardStep6() {
       return;
     }
     try {
-      window.localStorage.removeItem(`aplite_call_scheduled:${userId}`);
+      window.localStorage.removeItem(`tatim_call_scheduled:${userId}`);
     } catch {
       // ignore storage errors
     }

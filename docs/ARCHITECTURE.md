@@ -1,6 +1,6 @@
 # Architecture (MVP)
 
-This document describes the current MVP architecture for Aplite. It is intentionally practical and aligned to the codebase.
+This document describes the current MVP architecture for TATIM. It is intentionally practical and aligned to the codebase.
 
 ## High-level overview
 - Frontend: Next.js (pages router) app in `aplite-frontend/`

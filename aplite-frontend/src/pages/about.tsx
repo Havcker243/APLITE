@@ -10,16 +10,16 @@ export default function AboutPage() {
   return (
     <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
       <Head>
-        <title>About Aplite</title>
+        <title>About TATIM</title>
       </Head>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-12">
         <div className="mb-10 rounded-lg border border-border bg-background/80 p-8 shadow-card backdrop-blur">
           <PublicPageNav backHref={backHref} />
-          <h1 className="mt-4 text-3xl font-semibold text-foreground">About Aplite</h1>
+          <h1 className="mt-4 text-3xl font-semibold text-foreground">About TATIM</h1>
           <p className="mt-2 text-sm text-muted-foreground">Built for businesses that move money with precision.</p>
           <p className="mt-5 text-sm text-muted-foreground leading-relaxed">
-            Aplite is a payment identity platform designed for serious operators. We help businesses verify who they
+            TATIM is a payment identity platform designed for serious operators. We help businesses verify who they
             are, attach payout rails with encryption at rest, and issue short, resolvable identifiers that are easy to
             share internally and with partners. The result is a cleaner payments workflow: fewer errors, less manual
             verification, and a consistent audit trail when funds move.
@@ -49,7 +49,7 @@ export default function AboutPage() {
           <section className="rounded-lg border border-border bg-card p-6 shadow-card">
             <h2 className="text-base font-semibold text-foreground">Why it matters</h2>
             <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
-              Payment mistakes are expensive. Aplite provides a reliable identity layer that reduces error rates and
+              Payment mistakes are expensive. TATIM provides a reliable identity layer that reduces error rates and
               improves compliance posture.
             </p>
           </section>
@@ -69,7 +69,7 @@ export default function AboutPage() {
             <h2 className="text-base font-semibold text-foreground">Who we serve</h2>
             <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
               Accounts Payable teams, marketplaces, and regulated platforms that need predictable payouts and verifiable
-              vendor identities. Aplite is built for teams that want controls without sacrificing speed.
+              vendor identities. TATIM is built for teams that want controls without sacrificing speed.
             </p>
           </section>
         </div>

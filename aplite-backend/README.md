@@ -1,4 +1,4 @@
-# Aplite Backend
+# TATIM Backend
 
 FastAPI service for onboarding organizations, managing payment accounts, issuing
 UPIs, and resolving payout details.

@@ -9,7 +9,7 @@ export default function PrivacyPolicyPage() {
   return (
     <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
       <Head>
-        <title>Aplite Privacy Policy</title>
+        <title>TATIM Privacy Policy</title>
       </Head>
 
       <main className="mx-auto w-full max-w-4xl px-6 py-12">
@@ -18,7 +18,7 @@ export default function PrivacyPolicyPage() {
           <h1 className="mt-4 text-3xl font-semibold text-foreground">Privacy Policy</h1>
           <p className="mt-2 text-sm text-muted-foreground">Last updated: 2026-01-08</p>
           <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
-            Aplite is a payment identity platform built for regulated workflows. We collect only what we need to verify
+            TATIM is a payment identity platform built for regulated workflows. We collect only what we need to verify
             your organization, connect payout rails, and maintain a secure, compliant network. This policy explains
             what we collect, why we collect it, and how we protect it.
           </p>
@@ -49,8 +49,8 @@ export default function PrivacyPolicyPage() {
           <section className="space-y-2">
             <h2 className="text-base font-semibold text-foreground">1. Overview</h2>
             <p>
-              This Privacy Policy explains how Aplite collects, uses, and shares information when you use our services.
-              By using Aplite, you agree to the practices described here.
+              This Privacy Policy explains how TATIM collects, uses, and shares information when you use our services.
+              By using TATIM, you agree to the practices described here.
             </p>
           </section>
 
@@ -114,7 +114,7 @@ export default function PrivacyPolicyPage() {
           <section className="space-y-2">
             <h2 className="text-base font-semibold text-foreground">9. Children</h2>
             <p>
-              Aplite is not intended for use by individuals under 18. We do not knowingly collect personal information
+              TATIM is not intended for use by individuals under 18. We do not knowingly collect personal information
               from minors.
             </p>
           </section>
@@ -123,8 +123,8 @@ export default function PrivacyPolicyPage() {
             <h2 className="text-base font-semibold text-foreground">10. Contact</h2>
             <p>
               Questions about this Privacy Policy can be sent to{" "}
-              <a className="text-accent hover:underline" href="mailto:support@aplite.io">
-                support@aplite.io
+              <a className="text-accent hover:underline" href="mailto:support@tatim.io">
+                support@tatim.io
               </a>
               .
             </p>

@@ -43,7 +43,7 @@ export type OnboardingStep3Draft = { full_name: string; title: string; phone: st
 export type OnboardingStep4Draft = { bank_name: string; account_number: string; ach_routing: string; wire_routing: string; swift: string };
 
 // Session-only persistence as a fallback; server drafts are the source of truth.
-const STORAGE_KEY = "aplite_onboarding_session_v2";
+const STORAGE_KEY = "tatim_onboarding_session_v2";
 
 type OnboardingContextValue = {
   session: any | null;

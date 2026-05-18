@@ -4,9 +4,15 @@ Provides a read-only directory of verified clients for public lookup and
 basic health-style visibility into the onboarding funnel.
 """
 
+import json
 import logging
 import os
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException, Query, Request, status
+from pydantic import BaseModel, EmailStr
 
 from app.db import queries
 from app.utils.ratelimit import RateLimit, check_rate_limit
@@ -110,11 +116,11 @@ def list_public_clients(
 
 
 @router.get("/api/public/verify")
-def verify_aplite_id(
+def verify_tatim_id(
     request: Request,
     id: str = Query(..., max_length=120),
 ):
-    """Verify an Aplite ID (e.g. bulldogbites@aplite). No auth required."""
+    """Verify an TATIM ID (e.g. bulldogbites@tatim). No auth required."""
     limit_value = int(os.getenv("RL_PUBLIC_VERIFY_LIMIT", "120"))
     window_seconds = int(os.getenv("RL_PUBLIC_VERIFY_WINDOW_SECONDS", "60"))
     if limit_value > 0:
@@ -131,17 +137,17 @@ def verify_aplite_id(
             )
 
     raw = (id or "").strip().lower()
-    # Accept both "bulldogbites@aplite" and bare "bulldogbites"
+    # Accept both "bulldogbites@tatim" and bare "bulldogbites"
     if "@" in raw:
         handle, domain = raw.split("@", 1)
-        if domain != "aplite":
+        if domain != "tatim":
             return {"verified": False, "handle": handle, "name": None, "industry": None, "country": None, "last_verified": None}
     else:
         handle = raw
 
     handle = handle.strip()
     if not handle:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid Aplite ID")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid TATIM ID")
 
     # Check demo seed data first
     demo = _DEMO_BUSINESSES.get(handle)
@@ -176,3 +182,41 @@ def verify_aplite_id(
         logger.exception("DB lookup failed during verify")
 
     return {"verified": False, "handle": handle, "name": None, "industry": None, "country": None, "last_verified": None, "website": None}
+
+
+class WaitlistRequest(BaseModel):
+    email: str
+    company: Optional[str] = None
+
+
+_WAITLIST_PATH = Path(os.getenv("WAITLIST_FILE", "data/waitlist.json"))
+
+
+@router.post("/api/public/waitlist")
+def join_waitlist(request: Request, body: WaitlistRequest):
+    """Record a waitlist signup. Appends to a local JSON file."""
+    email = (body.email or "").strip().lower()
+    if not email or "@" not in email or len(email) > 254:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid email address")
+
+    _WAITLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    existing: list[dict] = []
+    if _WAITLIST_PATH.exists():
+        try:
+            existing = json.loads(_WAITLIST_PATH.read_text())
+        except Exception:
+            existing = []
+
+    if any(e.get("email") == email for e in existing):
+        return {"ok": True, "message": "Already on the waitlist"}
+
+    existing.append({
+        "email": email,
+        "company": (body.company or "").strip() or None,
+        "signed_up_at": datetime.now(timezone.utc).isoformat(),
+        "ip": request.client.host if request.client else None,
+    })
+    _WAITLIST_PATH.write_text(json.dumps(existing, indent=2))
+    logger.info("Waitlist signup: %s", email)
+    return {"ok": True, "message": "You're on the list"}

@@ -4,17 +4,17 @@ import { PublicPageNav } from "../components/PublicPageNav";
 
 const FAQS = [
   {
-    question: "What is Aplite?",
+    question: "What is TATIM?",
     answer:
-      "Aplite is a payment identity platform that verifies businesses, links payout rails, and issues identifiers that resolve into trusted payment coordinates.",
+      "TATIM is a payment identity platform that verifies businesses, links payout rails, and issues identifiers that resolve into trusted payment coordinates.",
   },
   {
-    question: "Who is Aplite for?",
+    question: "Who is TATIM for?",
     answer:
-      "Aplite is built for finance teams, marketplaces, platforms, and regulated businesses that need reliable payouts and clear identity verification.",
+      "TATIM is built for finance teams, marketplaces, platforms, and regulated businesses that need reliable payouts and clear identity verification.",
   },
   {
-    question: "What is a UPI in Aplite?",
+    question: "What is a UPI in TATIM?",
     answer:
       "A UPI is a universal payment identifier issued to a verified organization. It can be resolved into payout coordinates for approved rails.",
   },
@@ -26,7 +26,7 @@ const FAQS = [
   {
     question: "What rails are supported?",
     answer:
-      "Aplite supports ACH, domestic wire, and SWIFT for international payouts (based on the rail data you provide).",
+      "TATIM supports ACH, domestic wire, and SWIFT for international payouts (based on the rail data you provide).",
   },
   {
     question: "How long does verification take?",
@@ -51,7 +51,7 @@ const FAQS = [
   {
     question: "How do I contact support?",
     answer:
-      "Email support@aplite.io for onboarding or account help.",
+      "Email support@tatim.io for onboarding or account help.",
   },
 ];
 
@@ -63,7 +63,7 @@ export default function FaqPage() {
   return (
     <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
       <Head>
-        <title>Aplite FAQ</title>
+        <title>TATIM FAQ</title>
       </Head>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-12">

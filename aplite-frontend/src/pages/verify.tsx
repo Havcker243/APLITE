@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-import { verifyApliteId, VerifyApliteIdResult } from "../utils/api";
+import { verifyTATIMId, VerifyTATIMIdResult } from "../utils/api";
 
 function formatDate(iso: string | null) {
   if (!iso) return "Unknown";
@@ -23,7 +23,7 @@ export default function VerifyPage() {
   const router = useRouter();
   const [inputId, setInputId] = useState("");
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<VerifyApliteIdResult | null>(null);
+  const [result, setResult] = useState<VerifyTATIMIdResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [searched, setSearched] = useState<string | null>(null);
 
@@ -45,7 +45,7 @@ export default function VerifyPage() {
     setError(null);
     setSearched(trimmed);
     try {
-      const data = await verifyApliteId(trimmed);
+      const data = await verifyTATIMId(trimmed);
       setResult(data);
     } catch {
       setError("Could not complete the verification lookup. Please try again.");
@@ -67,7 +67,7 @@ export default function VerifyPage() {
         <div className="container mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <Shield className="h-7 w-7 text-primary" />
-            <span className="text-xl font-semibold text-foreground">Aplite</span>
+            <span className="text-xl font-semibold text-foreground">TATIM</span>
           </Link>
           <div className="flex items-center gap-3">
             <Button variant="ghost" asChild>
@@ -94,15 +94,15 @@ export default function VerifyPage() {
           {/* Search */}
           <div className="mb-10">
             <h1 className="text-2xl font-semibold text-foreground mb-6">
-              Verify an Aplite ID
+              Verify an TATIM ID
             </h1>
             <form onSubmit={handleSubmit} className="flex gap-3">
               <Input
                 value={inputId}
                 onChange={(e) => setInputId(e.target.value)}
-                placeholder="bulldogbites@aplite"
+                placeholder="bulldogbites@tatim"
                 className="flex-1 font-mono"
-                aria-label="Aplite ID"
+                aria-label="TATIM ID"
               />
               <Button type="submit" variant="hero" disabled={loading || !inputId.trim()}>
                 {loading ? (
@@ -145,23 +145,23 @@ export default function VerifyPage() {
             <div className="text-center py-16">
               <Shield className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
               <p className="text-muted-foreground text-sm">
-                Enter an Aplite ID above to check if a business is verified.
+                Enter an TATIM ID above to check if a business is verified.
               </p>
               <div className="flex gap-3 justify-center mt-4 text-sm">
                 <button
                   type="button"
                   className="font-mono text-primary underline underline-offset-2 hover:text-primary/80"
-                  onClick={() => { setInputId("bulldogbites@aplite"); void runLookup("bulldogbites@aplite"); }}
+                  onClick={() => { setInputId("bulldogbites@tatim"); void runLookup("bulldogbites@tatim"); }}
                 >
-                  Try bulldogbites@aplite
+                  Try bulldogbites@tatim
                 </button>
                 <span className="text-muted-foreground">·</span>
                 <button
                   type="button"
                   className="font-mono text-primary underline underline-offset-2 hover:text-primary/80"
-                  onClick={() => { setInputId("fastfreight@aplite"); void runLookup("fastfreight@aplite"); }}
+                  onClick={() => { setInputId("fastfreight@tatim"); void runLookup("fastfreight@tatim"); }}
                 >
-                  Try fastfreight@aplite
+                  Try fastfreight@tatim
                 </button>
               </div>
             </div>
@@ -172,7 +172,7 @@ export default function VerifyPage() {
   );
 }
 
-function VerifiedCard({ result, searched }: { result: VerifyApliteIdResult; searched: string | null }) {
+function VerifiedCard({ result, searched }: { result: VerifyTATIMIdResult; searched: string | null }) {
   return (
     <div className="bg-card border border-success/30 rounded-xl p-8 shadow-card animate-fade-in">
       <div className="flex items-center gap-4 mb-6">
@@ -181,12 +181,12 @@ function VerifiedCard({ result, searched }: { result: VerifyApliteIdResult; sear
         </div>
         <div>
           <p className="text-xl font-semibold text-foreground">{result.name}</p>
-          <p className="text-sm text-success font-medium">Verified by Aplite</p>
+          <p className="text-sm text-success font-medium">Verified by TATIM</p>
         </div>
       </div>
 
       <div className="space-y-3 mb-6">
-        <Row label="Aplite ID" value={`${result.handle}@aplite`} mono />
+        <Row label="TATIM ID" value={`${result.handle}@tatim`} mono />
         <Row label="Status" value="Verified Business" className="text-success font-medium" />
         {result.last_verified && (
           <Row label="Last verified" value={formatDate(result.last_verified)} />
@@ -237,12 +237,12 @@ function NotVerifiedCard({ searched }: { searched: string | null }) {
 
       {searched && (
         <div className="bg-muted/50 rounded-lg px-4 py-3 mb-4 font-mono text-sm text-muted-foreground">
-          {searched.includes("@") ? searched : `${searched}@aplite`}
+          {searched.includes("@") ? searched : `${searched}@tatim`}
         </div>
       )}
 
       <p className="text-muted-foreground text-sm mb-6">
-        We could not verify this business. This ID is not registered with Aplite.
+        We could not verify this business. This ID is not registered with TATIM.
         Do not send money based solely on this ID.
       </p>
 

@@ -1,5 +1,5 @@
 """
-Data-access helpers for the Aplite backend.
+Data-access helpers for the TATIM backend.
 
 This module centralizes all Postgres queries used by the FastAPI app, including
 auth sessions, onboarding flow persistence, and payment account storage. The
@@ -1913,7 +1913,7 @@ def list_pending_verification_queue() -> List[Dict[str, Any]]:
 
 def send_verification_message_email(*, to_address: str, code: str) -> None:
     """Send a verification code via email."""
-    send_email(to_address=to_address, subject="Your Aplite verification code", body=f"Your verification code is {code}. It expires in 10 minutes.")
+    send_email(to_address=to_address, subject="Your TATIM verification code", body=f"Your verification code is {code}. It expires in 10 minutes.")
 
 
 def send_verification_message_sms(*, code: str) -> None:

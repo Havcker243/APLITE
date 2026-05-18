@@ -18,7 +18,7 @@ from app.db import queries
 from app.routes.auth import get_current_user
 
 router = APIRouter()
-logger = logging.getLogger("aplite")
+logger = logging.getLogger("tatim")
 
 
 class CreateKeyRequest(BaseModel):

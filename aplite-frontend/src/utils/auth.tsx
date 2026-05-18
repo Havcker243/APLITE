@@ -69,7 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    const stored = (typeof window !== "undefined" && window.localStorage.getItem("aplite_auth_storage")) || "local";
+    const stored = (typeof window !== "undefined" && window.localStorage.getItem("tatim_auth_storage")) || "local";
     const supabase = getSupabaseClient(stored === "session" ? "session" : "local");
     if (!supabase) {
       setIsBootstrapping(false);
@@ -143,7 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUserEmail(null);
       if (typeof window !== "undefined") {
         try {
-          window.sessionStorage.removeItem("aplite_onboarding_session_v2"); // clear onboarding draft/progress
+          window.sessionStorage.removeItem("tatim_onboarding_session_v2"); // clear onboarding draft/progress
         } catch {
           // ignore storage errors on logout
         }

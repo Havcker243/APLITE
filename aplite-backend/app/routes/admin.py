@@ -16,7 +16,7 @@ from app.db.connection import get_connection
 from app.utils.email import send_onboarding_approved, send_onboarding_rejected
 
 router = APIRouter()
-logger = logging.getLogger("aplite")
+logger = logging.getLogger("tatim")
 
 
 def _require_admin_key(x_admin_key: str | None) -> None:

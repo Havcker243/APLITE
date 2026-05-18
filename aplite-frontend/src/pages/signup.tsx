@@ -128,7 +128,7 @@ export default function SignupPage() {
         <div className="max-w-md text-primary-foreground">
           <h2 className="text-3xl font-semibold mb-4">Start your verification</h2>
           <p className="text-primary-foreground/80 leading-relaxed mb-6">
-            Join businesses that trust Aplite to protect their banking information. Complete verification to unlock secure UPI creation and resolution.
+            Join businesses that trust TATIM to protect their banking information. Complete verification to unlock secure UPI creation and resolution.
           </p>
           <div className="space-y-3 text-sm text-primary-foreground/70">
             <div className="flex items-center gap-3">
@@ -154,11 +154,11 @@ export default function SignupPage() {
             className="inline-flex items-center gap-2 mb-8 text-muted-foreground hover:text-foreground transition-colors"
           >
             <Shield className="h-6 w-6" />
-            <span className="font-semibold">Aplite</span>
+            <span className="font-semibold">TATIM</span>
           </Link>
 
           <h1 className="text-2xl font-semibold text-foreground mb-2">Create your account</h1>
-          <p className="text-muted-foreground mb-8">Start the verification process to access Aplite.</p>
+          <p className="text-muted-foreground mb-8">Start the verification process to access TATIM.</p>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
@@ -248,7 +248,7 @@ export default function SignupPage() {
                 onCheckedChange={(checked) => setForm((prev) => ({ ...prev, accept_terms: Boolean(checked) }))}
               />
               <Label htmlFor="accept_terms" className="text-sm text-muted-foreground font-normal leading-relaxed cursor-pointer">
-                I agree to Aplite&apos;s{" "}
+                I agree to TATIM&apos;s{" "}
                 <Link href="/terms-of-service" className="text-accent hover:underline">
                   Terms of Service
                 </Link>{" "}

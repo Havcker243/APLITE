@@ -19,7 +19,7 @@ from app.routes.auth import get_current_user
 from app.utils.ratelimit import RateLimit, check_rate_limit
 
 router = APIRouter()
-logger = logging.getLogger("aplite")
+logger = logging.getLogger("tatim")
 
 
 class AccountCreateRequest(BaseModel):

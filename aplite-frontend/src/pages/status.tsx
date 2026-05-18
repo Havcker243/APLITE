@@ -9,7 +9,7 @@ export default function StatusPage() {
   return (
     <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
       <Head>
-        <title>Status - Aplite</title>
+        <title>Status - TATIM</title>
       </Head>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-12">
@@ -50,8 +50,8 @@ export default function StatusPage() {
             <h2 className="text-base font-semibold text-foreground">Support</h2>
             <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
               For urgent issues, email{" "}
-              <a className="text-accent hover:underline" href="mailto:support@aplite.io">
-                support@aplite.io
+              <a className="text-accent hover:underline" href="mailto:support@tatim.io">
+                support@tatim.io
               </a>
               .
             </p>

@@ -66,7 +66,7 @@ export function OnboardingShell({
               className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
             >
               <Shield className="h-6 w-6" />
-              <span className="font-semibold">Aplite</span>
+              <span className="font-semibold">TATIM</span>
             </button>
           </div>
         </div>

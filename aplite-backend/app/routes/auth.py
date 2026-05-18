@@ -22,7 +22,7 @@ from app.utils.ratelimit import RateLimit, check_rate_limit
 from app.utils.upi import generate_core_entity_id, generate_upi
 
 router = APIRouter()
-logger = logging.getLogger("aplite")
+logger = logging.getLogger("tatim")
 
 
 class ProfileUpdateRequest(BaseModel):

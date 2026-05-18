@@ -36,7 +36,7 @@ export default function OnboardIndex() {
       let scheduled = false;
       if (typeof window !== "undefined" && userId) {
         try {
-          scheduled = window.localStorage.getItem(`aplite_call_scheduled:${userId}`) === "1";
+          scheduled = window.localStorage.getItem(`tatim_call_scheduled:${userId}`) === "1";
         } catch {
           scheduled = false;
         }

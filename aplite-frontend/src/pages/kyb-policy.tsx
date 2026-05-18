@@ -24,7 +24,7 @@ export default function KybPolicyPage() {
         <div className="container mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 text-foreground hover:text-muted-foreground transition-colors">
             <Shield className="h-6 w-6" />
-            <span className="font-semibold">Aplite</span>
+            <span className="font-semibold">TATIM</span>
           </Link>
           <Button variant="outline" size="sm" asChild>
             <Link href="/">
@@ -48,7 +48,7 @@ export default function KybPolicyPage() {
             </div>
           </div>
           <p className="text-lg text-muted-foreground">
-            Aplite requires verification of every business before granting access to our platform.
+            TATIM requires verification of every business before granting access to our platform.
             This policy outlines our verification requirements and process.
           </p>
         </div>
@@ -63,7 +63,7 @@ export default function KybPolicyPage() {
               <div className="prose prose-slate max-w-none">
                 <p className="text-muted-foreground leading-relaxed">
                   Know Your Business (KYB) is our verification process to confirm the identity and
-                  legitimacy of businesses using Aplite. This helps prevent fraud, money laundering,
+                  legitimacy of businesses using TATIM. This helps prevent fraud, money laundering,
                   and ensures only legitimate businesses can create and resolve payment identifiers.
                 </p>
                 <p className="text-muted-foreground leading-relaxed mt-4">
@@ -277,9 +277,9 @@ export default function KybPolicyPage() {
       <footer className="py-8 px-6 border-t border-border">
         <div className="container mx-auto text-center">
           <p className="text-sm text-muted-foreground">
-            2024 Aplite. For questions about our KYB policy, contact{" "}
-            <a href="mailto:compliance@aplite.com" className="text-foreground hover:underline">
-              compliance@aplite.com
+            2024 TATIM. For questions about our KYB policy, contact{" "}
+            <a href="mailto:compliance@tatim.com" className="text-foreground hover:underline">
+              compliance@tatim.com
             </a>
           </p>
         </div>

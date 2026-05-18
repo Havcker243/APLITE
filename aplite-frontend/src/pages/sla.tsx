@@ -9,7 +9,7 @@ export default function SlaPage() {
   return (
     <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
       <Head>
-        <title>Service Commitments - Aplite</title>
+        <title>Service Commitments - TATIM</title>
       </Head>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-12">
@@ -17,7 +17,7 @@ export default function SlaPage() {
           <PublicPageNav backHref={backHref} />
           <h1 className="mt-4 text-3xl font-semibold text-foreground">Customer commitments and SLA</h1>
           <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
-            Aplite is committed to helping teams verify payment identity with clarity, speed, and confidence. These
+            TATIM is committed to helping teams verify payment identity with clarity, speed, and confidence. These
             service commitments reflect our current stage and near-term standards.
           </p>
         </div>

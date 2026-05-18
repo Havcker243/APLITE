@@ -31,7 +31,7 @@ export function PublicPageNav({ backHref, markHref }: PublicPageNavProps) {
           href={targetHref}
           className="pointer-events-auto absolute right-6 top-6 text-5xl font-semibold tracking-tight text-foreground/5"
         >
-          Aplite
+          TATIM
         </Link>
       </div>
       <button

@@ -39,7 +39,7 @@ type VerificationDetail = {
   reviews?: Array<{ status?: string; reason?: string; reviewed_at?: string; reviewed_by?: string; method?: string }>;
 };
 
-const ADMIN_KEY_STORAGE = "aplite_admin_key";
+const ADMIN_KEY_STORAGE = "tatim_admin_key";
 
 export default function AdminVerifyPage() {
   const [adminKey, setAdminKey] = useState("");

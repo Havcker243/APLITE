@@ -30,7 +30,7 @@ import boto3
 from botocore.client import Config as BotoConfig
 
 router = APIRouter()
-logger = logging.getLogger("aplite")
+logger = logging.getLogger("tatim")
 
 EIN_RE = re.compile(r"^\d{2}-\d{7}$")
 DOMAIN_RE = re.compile(

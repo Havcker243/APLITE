@@ -1,6 +1,6 @@
-﻿# Product/UI Spec (Draft)
+# Product/UI Spec (Draft)
 
-This document captures the intended **design language** + **onboarding UX** direction for Aplite.
+This document captures the intended **design language** + **onboarding UX** direction for TATIM.
 
 It is written to be **implementation-ready** for the current repo:
 - Frontend: `aplite-frontend/` (Next.js pages router)

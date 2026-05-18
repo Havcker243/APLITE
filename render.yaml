@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: aplite-backend
+    name: tatim-backend
     env: python
     region: oregon
     plan: starter

@@ -32,7 +32,7 @@ type NavItem = {
   icon: React.ComponentType<{ className?: string }>;
 };
 
-const THEME_STORAGE_KEY = "aplite_theme";
+const THEME_STORAGE_KEY = "tatim_theme";
 
 const getNavItems = (status: string): NavItem[] => {
   /** Return nav items based on verification status. */
@@ -120,7 +120,7 @@ export default function DashboardLayout({ children }: PropsWithChildren) {
         <div className="h-16 px-6 flex items-center border-b border-border">
           <Link href="/dashboard" className="flex items-center gap-2">
             <Shield className="h-6 w-6 text-primary" />
-            <span className="font-semibold text-foreground">Aplite</span>
+            <span className="font-semibold text-foreground">TATIM</span>
           </Link>
         </div>
 

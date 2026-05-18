@@ -9,7 +9,7 @@ export default function VerificationPage() {
   return (
     <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
       <Head>
-        <title>Verification Process - Aplite</title>
+        <title>Verification Process - TATIM</title>
       </Head>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-12">

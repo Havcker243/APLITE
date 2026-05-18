@@ -221,7 +221,7 @@ export type MasterUpiLookupResult = {
   }>;
 };
 
-export type VerifyApliteIdResult = {
+export type VerifyTATIMIdResult = {
   verified: boolean;
   handle: string;
   name: string | null;
@@ -292,8 +292,8 @@ async function parseError(res: Response, fallback: string) {
   return fallback;
 }
 
-export async function verifyApliteId(apliteId: string): Promise<VerifyApliteIdResult> {
-  const params = new URLSearchParams({ id: apliteId });
+export async function verifyTATIMId(tatimId: string): Promise<VerifyTATIMIdResult> {
+  const params = new URLSearchParams({ id: tatimId });
   const res = await fetch(`${API_BASE_URL}/api/public/verify?${params}`, {
     headers: { ...NGROK_SKIP_HEADER },
   });
@@ -662,7 +662,7 @@ export async function exportAccountData(): Promise<void> {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "aplite-data-export.json";
+  a.download = "tatim-data-export.json";
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -670,4 +670,17 @@ export async function exportAccountData(): Promise<void> {
 export async function deleteAccount(): Promise<void> {
   const res = await authedFetch(`${API_BASE_URL}/api/account`, { method: "DELETE" });
   if (!res.ok) throw new Error(await parseError(res, "Failed to delete account"));
+}
+
+export async function joinWaitlist(email: string, company?: string): Promise<{ ok: boolean; message: string }> {
+  const res = await fetch(`${API_BASE_URL}/api/public/waitlist`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...NGROK_SKIP_HEADER },
+    body: JSON.stringify({ email, company: company || null }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as any).detail || "Failed to join waitlist");
+  }
+  return res.json();
 }

@@ -42,12 +42,12 @@ build/
 *.tsbuildinfo
 
 # Local uploads / runtime data
-aplite-backend/data/uploads/
+tatim-backend/data/uploads/
 
 # Misc
 *.claude/
 .claude/
-aplite-backend/nul
+tatim-backend/nul
 
 # Sentry Config File
 .env.sentry-build-plugin

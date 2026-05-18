@@ -19,19 +19,19 @@ export default function ContactPage() {
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const subject = encodeURIComponent("Aplite support request");
+    const subject = encodeURIComponent("TATIM support request");
     const body = encodeURIComponent(`Name: ${name}\nEmail: ${email}\n\n${message}`);
     if (!message.trim()) {
       toast.error("Please enter a message.");
       return;
     }
-    window.location.href = `mailto:support@aplite.io?subject=${subject}&body=${body}`;
+    window.location.href = `mailto:support@tatim.io?subject=${subject}&body=${body}`;
   }
 
   return (
     <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
       <Head>
-        <title>Contact - Aplite</title>
+        <title>Contact - TATIM</title>
       </Head>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-12">
@@ -72,7 +72,7 @@ export default function ContactPage() {
           <div className="rounded-lg border border-border bg-card p-6 shadow-card space-y-4 text-sm text-muted-foreground">
             <div>
               <h2 className="text-base font-semibold text-foreground">Support</h2>
-              <p className="mt-2">Email us at support@aplite.io.</p>
+              <p className="mt-2">Email us at support@tatim.io.</p>
               <p className="mt-2">We respond within the same business day during business hours.</p>
             </div>
             <div>

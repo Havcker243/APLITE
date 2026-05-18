@@ -9,7 +9,7 @@ export default function TermsOfServicePage() {
   return (
     <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
       <Head>
-        <title>Aplite Terms of Service</title>
+        <title>TATIM Terms of Service</title>
       </Head>
 
       <main className="mx-auto w-full max-w-4xl px-6 py-12">
@@ -18,13 +18,13 @@ export default function TermsOfServicePage() {
           <h1 className="mt-4 text-3xl font-semibold text-foreground">Terms of Service</h1>
           <p className="mt-2 text-sm text-muted-foreground">Last updated: 2026-01-08</p>
           <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
-            Aplite is a fintech infrastructure company focused on payment identity. We help businesses verify who they
+            TATIM is a fintech infrastructure company focused on payment identity. We help businesses verify who they
             are, connect payout rails, and issue short identifiers that resolve into accurate payment coordinates.
             The goal is simple: less operational friction, fewer mistakes, and a clearer audit trail when money moves.
           </p>
           <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
             Our platform is designed for compliance-minded teams. We treat onboarding and verification as a core product
-            experience, not a checkbox. These Terms define how Aplite should be used, the standards we expect, and the
+            experience, not a checkbox. These Terms define how TATIM should be used, the standards we expect, and the
             responsibilities we share with our customers.
           </p>
         </div>
@@ -51,7 +51,7 @@ export default function TermsOfServicePage() {
           <section className="space-y-2">
             <h2 className="text-base font-semibold text-foreground">1. Agreement</h2>
             <p>
-              These Terms of Service ("Terms") govern your use of Aplite ("Aplite", "we", "us"). By creating an
+              These Terms of Service ("Terms") govern your use of TATIM ("TATIM", "we", "us"). By creating an
               account or using the services, you agree to these Terms. If you do not agree, do not use the services.
             </p>
           </section>
@@ -60,7 +60,7 @@ export default function TermsOfServicePage() {
             <h2 className="text-base font-semibold text-foreground">2. Eligibility</h2>
             <p>
               You must be legally able to enter into a contract and authorized to act on behalf of a business entity
-              to use Aplite. You represent that the information you provide is accurate and complete.
+              to use TATIM. You represent that the information you provide is accurate and complete.
             </p>
           </section>
 
@@ -75,7 +75,7 @@ export default function TermsOfServicePage() {
           <section className="space-y-2">
             <h2 className="text-base font-semibold text-foreground">4. Services</h2>
             <p>
-              Aplite provides onboarding, verification workflows, and payment identity resolution features. We may
+              TATIM provides onboarding, verification workflows, and payment identity resolution features. We may
               modify, suspend, or discontinue services at any time.
             </p>
           </section>
@@ -83,7 +83,7 @@ export default function TermsOfServicePage() {
           <section className="space-y-2">
             <h2 className="text-base font-semibold text-foreground">5. Verification and Compliance</h2>
             <p>
-              You authorize Aplite to collect and review documentation to verify your business and representatives.
+              You authorize TATIM to collect and review documentation to verify your business and representatives.
               You agree to provide accurate, up to date information and documents upon request.
             </p>
           </section>
@@ -104,7 +104,7 @@ export default function TermsOfServicePage() {
           <section className="space-y-2">
             <h2 className="text-base font-semibold text-foreground">8. Intellectual Property</h2>
             <p>
-              Aplite and its licensors retain all rights in the services, including all software, branding, and
+              TATIM and its licensors retain all rights in the services, including all software, branding, and
               documentation.
             </p>
           </section>
@@ -120,7 +120,7 @@ export default function TermsOfServicePage() {
           <section className="space-y-2">
             <h2 className="text-base font-semibold text-foreground">10. Limitation of Liability</h2>
             <p>
-              To the maximum extent permitted by law, Aplite will not be liable for indirect, incidental, or
+              To the maximum extent permitted by law, TATIM will not be liable for indirect, incidental, or
               consequential damages or for loss of profits, data, or goodwill.
             </p>
           </section>
@@ -145,8 +145,8 @@ export default function TermsOfServicePage() {
             <h2 className="text-base font-semibold text-foreground">13. Contact</h2>
             <p>
               Questions about these Terms can be sent to{" "}
-              <a className="text-accent hover:underline" href="mailto:support@aplite.io">
-                support@aplite.io
+              <a className="text-accent hover:underline" href="mailto:support@tatim.io">
+                support@tatim.io
               </a>
               .
             </p>

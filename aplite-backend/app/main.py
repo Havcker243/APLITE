@@ -1,4 +1,4 @@
-"""FastAPI application setup for the Aplite backend.
+"""FastAPI application setup for the TATIM backend.
 
 Defines middleware, routers, and cross-cutting concerns like timeouts,
 rate limiting, and DB connection handling.
@@ -56,7 +56,7 @@ app.include_router(admin_router)
 app.include_router(keys_router)
 app.include_router(account_router)
 
-logger = logging.getLogger("aplite")
+logger = logging.getLogger("tatim")
 if not logger.handlers:
     logging.basicConfig(level=logging.INFO)
 

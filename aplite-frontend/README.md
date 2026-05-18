@@ -1,4 +1,4 @@
-# Aplite Frontend
+# TATIM Frontend
 
 Next.js (Pages Router) UI for signup/login, onboarding, UPI management, and
 resolving payout coordinates.

@@ -25,7 +25,7 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(true);
 
   useEffect(() => {
-    const stored = typeof window !== "undefined" ? window.localStorage.getItem("aplite_auth_storage") : null;
+    const stored = typeof window !== "undefined" ? window.localStorage.getItem("tatim_auth_storage") : null;
     if (stored === "session") setRememberMe(false);
   }, []);
   // Legacy OTP flow (kept for reference):
@@ -56,10 +56,10 @@ export default function LoginPage() {
       // toast.success("Check your email", { description: "Enter the 6-digit verification code." });
 
       if (typeof window !== "undefined") {
-        window.localStorage.setItem("aplite_auth_storage", rememberMe ? "local" : "session");
+        window.localStorage.setItem("tatim_auth_storage", rememberMe ? "local" : "session");
       }
       if (typeof window !== "undefined") {
-      window.localStorage.setItem("aplite_auth_storage", rememberMe ? "local" : "session");
+      window.localStorage.setItem("tatim_auth_storage", rememberMe ? "local" : "session");
     }
     const supabase = getSupabaseClient(rememberMe ? "local" : "session");
       if (!supabase) {
@@ -151,7 +151,7 @@ export default function LoginPage() {
         <div className="w-full max-w-md">
           <Link href="/" className="inline-flex items-center gap-2 mb-8 text-muted-foreground hover:text-foreground transition-colors">
             <Shield className="h-6 w-6" />
-            <span className="font-semibold">Aplite</span>
+            <span className="font-semibold">TATIM</span>
           </Link>
 
           <h1 className="text-2xl font-semibold text-foreground mb-2">

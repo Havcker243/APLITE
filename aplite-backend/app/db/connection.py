@@ -24,7 +24,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 _pool_lock = threading.Lock()
 _pool: ThreadedConnectionPool | None = None
 
-_request_conn: ContextVar[psycopg2.extensions.connection | None] = ContextVar("aplite_request_db_conn", default=None)
+_request_conn: ContextVar[psycopg2.extensions.connection | None] = ContextVar("tatim_request_db_conn", default=None)
 
 
 def _get_pool() -> ThreadedConnectionPool:

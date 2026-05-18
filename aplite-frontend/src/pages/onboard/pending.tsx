@@ -61,7 +61,7 @@ export default function OnboardPendingPage() {
         callback: () => {
           if (!userId) return;
           try {
-            window.localStorage.setItem(`aplite_call_scheduled:${userId}`, "1");
+            window.localStorage.setItem(`tatim_call_scheduled:${userId}`, "1");
           } catch {
             // ignore storage errors
           }
