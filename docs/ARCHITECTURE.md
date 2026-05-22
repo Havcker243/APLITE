@@ -1,10 +1,10 @@
 # Architecture (MVP)
 
-This document describes the current MVP architecture for TATIM. It is intentionally practical and aligned to the codebase.
+This document describes the current MVP architecture for Tatin. It is intentionally practical and aligned to the codebase.
 
 ## High-level overview
-- Frontend: Next.js (pages router) app in `aplite-frontend/`
-- Backend: FastAPI service in `aplite-backend/`
+- Frontend: Next.js (pages router) app in `tatin-frontend/`
+- Backend: FastAPI service in `tatin-backend/`
 - Database: Postgres schema in `schema-final.sql`
 - Storage: S3-compatible bucket required for onboarding uploads (no local fallback)
 
@@ -35,6 +35,6 @@ This document describes the current MVP architecture for TATIM. It is intentiona
 - Disabled child UPIs cannot be resolved.
 
 ## Key entrypoints
-- Backend: `aplite-backend/app/main.py`
-- Frontend app shell: `aplite-frontend/src/components/Layout.tsx`
-- Onboarding shell: `aplite-frontend/src/components/onboarding/OnboardingShell.tsx`
+- Backend: `tatin-backend/app/main.py`
+- Frontend app shell: `tatin-frontend/src/components/Layout.tsx`
+- Onboarding shell: `tatin-frontend/src/components/onboarding/OnboardingShell.tsx`

@@ -1,10 +1,10 @@
 services:
   - type: web
-    name: tatim-backend
+    name: tatin-backend
     env: python
     region: oregon
     plan: starter
-    rootDir: aplite-backend
+    rootDir: tatin-backend
     buildCommand: pip install -r requirements-backend.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health

@@ -1,0 +1,167 @@
+/*
+ * Global styles and Tailwind layers for the frontend.
+ * Defines base typography, layout resets, and shared design tokens.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Tatin Design System - Professional Fintech */
+    --background: 210 20% 98%;
+    --foreground: 220 25% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 25% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 10%;
+
+    /* Deep slate navy - trust & professionalism */
+    --primary: 220 30% 18%;
+    --primary-foreground: 210 20% 98%;
+
+    /* Light slate for secondary surfaces */
+    --secondary: 215 20% 95%;
+    --secondary-foreground: 220 25% 20%;
+
+    --muted: 215 15% 92%;
+    --muted-foreground: 215 15% 45%;
+
+    /* Subtle blue accent */
+    --accent: 215 80% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 215 20% 88%;
+    --input: 215 20% 88%;
+    --ring: 215 80% 55%;
+
+    --radius: 0.5rem;
+
+    /* Custom Tatin tokens */
+    --success: 152 60% 40%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --pending: 38 92% 50%;
+    --pending-foreground: 38 92% 15%;
+    --verified: 152 60% 40%;
+    --verified-foreground: 0 0% 100%;
+
+    /* Gradients */
+    --gradient-hero: linear-gradient(135deg, hsl(220 30% 18%) 0%, hsl(220 25% 28%) 100%);
+    --gradient-subtle: linear-gradient(180deg, hsl(210 20% 98%) 0%, hsl(215 20% 95%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(215 20% 99%) 100%);
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 hsl(220 25% 10% / 0.03);
+    --shadow-md: 0 4px 6px -1px hsl(220 25% 10% / 0.05), 0 2px 4px -2px hsl(220 25% 10% / 0.03);
+    --shadow-lg: 0 10px 15px -3px hsl(220 25% 10% / 0.05), 0 4px 6px -4px hsl(220 25% 10% / 0.03);
+    --shadow-card: 0 1px 3px 0 hsl(220 25% 10% / 0.04), 0 1px 2px -1px hsl(220 25% 10% / 0.04);
+
+    /* Sidebar */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 220 25% 20%;
+    --sidebar-primary: 220 30% 18%;
+    --sidebar-primary-foreground: 210 20% 98%;
+    --sidebar-accent: 215 20% 95%;
+    --sidebar-accent-foreground: 220 25% 20%;
+    --sidebar-border: 215 20% 90%;
+    --sidebar-ring: 215 80% 55%;
+  }
+
+  .dark {
+    --background: 220 25% 8%;
+    --foreground: 210 20% 95%;
+
+    --card: 220 25% 10%;
+    --card-foreground: 210 20% 95%;
+
+    --popover: 220 25% 10%;
+    --popover-foreground: 210 20% 95%;
+
+    --primary: 210 20% 95%;
+    --primary-foreground: 220 30% 18%;
+
+    --secondary: 220 20% 15%;
+    --secondary-foreground: 210 20% 90%;
+
+    --muted: 220 20% 18%;
+    --muted-foreground: 215 15% 55%;
+
+    --accent: 215 80% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 20% 18%;
+    --input: 220 20% 18%;
+    --ring: 215 80% 55%;
+
+    --success: 152 60% 45%;
+    --warning: 38 92% 50%;
+    --pending: 38 92% 50%;
+    --verified: 152 60% 45%;
+
+    --sidebar-background: 220 25% 8%;
+    --sidebar-foreground: 210 20% 90%;
+    --sidebar-primary: 215 80% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 20% 15%;
+    --sidebar-accent-foreground: 210 20% 90%;
+    --sidebar-border: 220 20% 18%;
+    --sidebar-ring: 215 80% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    line-height: 1.6;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+  }
+
+  p {
+    @apply text-base;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .gradient-hero {
+    background: var(--gradient-hero);
+  }
+
+  .gradient-subtle {
+    background: var(--gradient-subtle);
+  }
+
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+
+  .shadow-elevated {
+    box-shadow: var(--shadow-lg);
+  }
+}

@@ -26,4 +26,4 @@
 - Rejections show a reason and allow resubmission.
 
 ## Schema note
-Use `schema-final.sql`. Older `aplite-backend/data/schema.sql` is missing onboarding columns (`organizations.upi`, `verification_status`, `status`, `sessions.expires_at`, etc.).
+Use `schema-final.sql`. Older `tatin-backend/data/schema.sql` is missing onboarding columns (`organizations.upi`, `verification_status`, `status`, `sessions.expires_at`, etc.).

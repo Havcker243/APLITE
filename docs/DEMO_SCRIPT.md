@@ -1,6 +1,6 @@
 # Demo Script
 
-This is a short, repeatable walkthrough for showing TATIM end to end. Use it for
+This is a short, repeatable walkthrough for showing Tatin end to end. Use it for
 investor demos, partner calls, or internal reviews.
 
 ## Setup (2 minutes)
@@ -12,7 +12,7 @@ investor demos, partner calls, or internal reviews.
 
 ### 1) Landing page and value proposition (30 seconds)
 Talking points:
-- TATIM replaces raw bank detail sharing with secure payment identifiers (UPIs).
+- Tatin replaces raw bank detail sharing with secure payment identifiers (UPIs).
 - Only verified parties can resolve a UPI into payout coordinates.
 
 ### 2) Signup and onboarding overview (60 seconds)

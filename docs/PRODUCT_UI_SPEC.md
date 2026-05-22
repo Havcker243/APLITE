@@ -1,10 +1,10 @@
 # Product/UI Spec (Draft)
 
-This document captures the intended **design language** + **onboarding UX** direction for TATIM.
+This document captures the intended **design language** + **onboarding UX** direction for Tatin.
 
 It is written to be **implementation-ready** for the current repo:
-- Frontend: `aplite-frontend/` (Next.js pages router)
-- Styling: `aplite-frontend/src/styles/globals.css` + shared shell `aplite-frontend/src/components/Layout.tsx`
+- Frontend: `tatin-frontend/` (Next.js pages router)
+- Styling: `tatin-frontend/src/styles/globals.css` + shared shell `tatin-frontend/src/components/Layout.tsx`
 
 ## Current implementation notes (MVP)
 - Onboarding is a single-submit flow (`/onboarding/complete`) with server-side drafts saved per step.

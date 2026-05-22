@@ -1,9 +1,9 @@
 # Frontend (MVP)
 
 ## App structure
-- Next.js pages router in `aplite-frontend/src/pages`
-- Shared shell in `aplite-frontend/src/components/Layout.tsx`
-- Styling in `aplite-frontend/src/styles/globals.css`
+- Next.js pages router in `tatin-frontend/src/pages`
+- Shared shell in `tatin-frontend/src/components/Layout.tsx`
+- Styling in `tatin-frontend/src/styles/globals.css`
 
 ## Auth/session behavior
 - Auth uses HttpOnly cookies with in-memory session state.
