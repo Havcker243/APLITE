@@ -4,17 +4,17 @@ import { PublicPageNav } from "../components/PublicPageNav";
 
 const FAQS = [
   {
-    question: "What is Tatin?",
+    question: "What is TATIN?",
     answer:
-      "Tatin is a payment identity platform that verifies businesses, links payout rails, and issues identifiers that resolve into trusted payment coordinates.",
+      "TATIN is a payment identity platform that verifies businesses, links payout rails, and issues identifiers that resolve into trusted payment coordinates.",
   },
   {
-    question: "Who is Tatin for?",
+    question: "Who is TATIN for?",
     answer:
-      "Tatin is built for finance teams, marketplaces, platforms, and regulated businesses that need reliable payouts and clear identity verification.",
+      "TATIN is built for finance teams, marketplaces, platforms, and regulated businesses that need reliable payouts and clear identity verification.",
   },
   {
-    question: "What is a UPI in Tatin?",
+    question: "What is a UPI in TATIN?",
     answer:
       "A UPI is a universal payment identifier issued to a verified organization. It can be resolved into payout coordinates for approved rails.",
   },
@@ -26,7 +26,7 @@ const FAQS = [
   {
     question: "What rails are supported?",
     answer:
-      "Tatin supports ACH, domestic wire, and SWIFT for international payouts (based on the rail data you provide).",
+      "TATIN supports ACH, domestic wire, and SWIFT for international payouts (based on the rail data you provide).",
   },
   {
     question: "How long does verification take?",
@@ -63,7 +63,7 @@ export default function FaqPage() {
   return (
     <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
       <Head>
-        <title>Tatin FAQ</title>
+        <title>TATIN FAQ</title>
       </Head>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-12">

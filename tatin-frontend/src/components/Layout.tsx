@@ -42,7 +42,7 @@ export function Layout({ children }: PropsWithChildren) {
         <div className="mx-auto w-full max-w-6xl px-6 py-10 text-sm text-muted-foreground">
           <div className="flex flex-col gap-8 md:flex-row md:items-start md:justify-between">
             <div className="space-y-2">
-              <span className="text-base font-semibold text-foreground">Tatin</span>
+              <span className="text-base font-semibold text-foreground">TATIN</span>
               <p className="max-w-xs text-sm text-muted-foreground">
                 Verified payment identity for businesses that want security without friction.
               </p>
@@ -81,7 +81,7 @@ export function Layout({ children }: PropsWithChildren) {
             </div>
           </div>
           <div className="mt-8 text-xs text-muted-foreground">
-            <span>© 2024 Tatin. Secure payment identifiers for verified businesses.</span>
+            <span>© 2024 TATIN. Secure payment identifiers for verified businesses.</span>
           </div>
         </div>
       </footer>

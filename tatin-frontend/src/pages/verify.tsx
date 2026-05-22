@@ -67,7 +67,7 @@ export default function VerifyPage() {
         <div className="container mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <Shield className="h-7 w-7 text-primary" />
-            <span className="text-xl font-semibold text-foreground">Tatin</span>
+            <span className="text-xl font-semibold text-foreground">TATIN</span>
           </Link>
           <div className="flex items-center gap-3">
             <Button variant="ghost" asChild>
@@ -94,7 +94,7 @@ export default function VerifyPage() {
           {/* Search */}
           <div className="mb-10">
             <h1 className="text-2xl font-semibold text-foreground mb-6">
-              Verify a Tatin ID
+              Verify a TATIN ID
             </h1>
             <form onSubmit={handleSubmit} className="flex gap-3">
               <Input
@@ -102,7 +102,7 @@ export default function VerifyPage() {
                 onChange={(e) => setInputId(e.target.value)}
                 placeholder="bulldogbites@tatin"
                 className="flex-1 font-mono"
-                aria-label="Tatin ID"
+                aria-label="TATIN ID"
               />
               <Button type="submit" variant="hero" disabled={loading || !inputId.trim()}>
                 {loading ? (
@@ -145,7 +145,7 @@ export default function VerifyPage() {
             <div className="text-center py-16">
               <Shield className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
               <p className="text-muted-foreground text-sm">
-                Enter a Tatin ID above to check if a business is verified.
+                Enter a TATIN ID above to check if a business is verified.
               </p>
               <div className="flex gap-3 justify-center mt-4 text-sm">
                 <button
@@ -181,12 +181,12 @@ function VerifiedCard({ result, searched }: { result: VerifyTatinIdResult; searc
         </div>
         <div>
           <p className="text-xl font-semibold text-foreground">{result.name}</p>
-          <p className="text-sm text-success font-medium">Verified by Tatin</p>
+          <p className="text-sm text-success font-medium">Verified by TATIN</p>
         </div>
       </div>
 
       <div className="space-y-3 mb-6">
-        <Row label="Tatin ID" value={`${result.handle}@tatin`} mono />
+        <Row label="TATIN ID" value={`${result.handle}@tatin`} mono />
         <Row label="Status" value="Verified Business" className="text-success font-medium" />
         {result.last_verified && (
           <Row label="Last verified" value={formatDate(result.last_verified)} />
@@ -242,7 +242,7 @@ function NotVerifiedCard({ searched }: { searched: string | null }) {
       )}
 
       <p className="text-muted-foreground text-sm mb-6">
-        We could not verify this business. This ID is not registered with Tatin.
+        We could not verify this business. This ID is not registered with TATIN.
         Do not send money based solely on this ID.
       </p>
 

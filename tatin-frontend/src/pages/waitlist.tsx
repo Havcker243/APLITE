@@ -30,8 +30,8 @@ export default function WaitlistPage() {
   return (
     <div className="min-h-screen bg-background">
       <Head>
-        <title>Join the Waitlist — Tatin</title>
-        <meta name="description" content="Get early access to Tatin — verified payment identity for businesses." />
+        <title>Join the Waitlist — TATIN</title>
+        <meta name="description" content="Get early access to TATIN — verified payment identity for businesses." />
       </Head>
 
       {/* Header */}
@@ -39,7 +39,7 @@ export default function WaitlistPage() {
         <div className="container mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <Shield className="h-7 w-7 text-primary" />
-            <span className="text-xl font-semibold text-foreground">Tatin</span>
+            <span className="text-xl font-semibold text-foreground">TATIN</span>
           </Link>
           <div className="flex items-center gap-3">
             <Button variant="ghost" asChild>
@@ -63,10 +63,10 @@ export default function WaitlistPage() {
             </div>
             <h1 className="text-4xl md:text-5xl font-semibold text-foreground leading-tight mb-4">
               Be first to know<br />
-              <span className="text-muted-foreground">when Tatin opens.</span>
+              <span className="text-muted-foreground">when TATIN opens.</span>
             </h1>
             <p className="text-lg text-muted-foreground max-w-lg mx-auto">
-              Tatin gives businesses a verified payment identity so partners know
+              TATIN gives businesses a verified payment identity so partners know
               exactly who they're paying — before money moves.
             </p>
           </div>
@@ -153,7 +153,7 @@ export default function WaitlistPage() {
             <Feature
               icon={<CheckCircle2 className="h-5 w-5" />}
               title="Human-reviewed KYB"
-              description="Every business is manually verified before a Tatin ID is issued."
+              description="Every business is manually verified before a TATIN ID is issued."
             />
             <Feature
               icon={<FileText className="h-5 w-5" />}
@@ -169,14 +169,14 @@ export default function WaitlistPage() {
         <div className="container mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Tatin</span>
+            <span className="text-sm text-muted-foreground">TATIN</span>
           </div>
           <div className="flex items-center gap-6">
             <Link href="/security" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Security</Link>
             <Link href="/trust" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Trust</Link>
             <Link href="/privacy-policy" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Privacy</Link>
           </div>
-          <p className="text-sm text-muted-foreground">© 2026 Tatin. Payment identity verification.</p>
+          <p className="text-sm text-muted-foreground">© 2026 TATIN. Payment identity verification.</p>
         </div>
       </footer>
     </div>

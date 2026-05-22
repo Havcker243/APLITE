@@ -7,7 +7,7 @@ import { Input } from "../components/ui/input";
 
 export default function LandingPage() {
   const router = useRouter();
-  const [tatinId, setTatinId] = useState("bulldogbites@tatin");
+  const [tatinId, setTATINId] = useState("bulldogbites@tatin");
 
   function handleVerify(e: React.FormEvent) {
     e.preventDefault();
@@ -23,7 +23,7 @@ export default function LandingPage() {
         <div className="container mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Shield className="h-7 w-7 text-primary" />
-            <span className="text-xl font-semibold text-foreground">Tatin</span>
+            <span className="text-xl font-semibold text-foreground">TATIN</span>
           </div>
           <div className="flex items-center gap-3">
             <Button variant="ghost" asChild>
@@ -51,21 +51,21 @@ export default function LandingPage() {
           </h1>
 
           <p className="text-lg text-muted-foreground max-w-xl mx-auto mb-12">
-            Before wiring money to a new vendor, check their Tatin ID. Instantly
+            Before wiring money to a new vendor, check their TATIN ID. Instantly
             see if they're a verified business — or flag them as suspicious.
           </p>
 
           <form onSubmit={handleVerify} className="flex flex-col sm:flex-row gap-3 max-w-lg mx-auto">
             <Input
               value={tatinId}
-              onChange={(e) => setTatinId(e.target.value)}
+              onChange={(e) => setTATINId(e.target.value)}
               placeholder="bulldogbites@tatin"
               className="flex-1 h-12 text-base font-mono"
-              aria-label="Tatin ID"
+              aria-label="TATIN ID"
             />
             <Button type="submit" variant="hero" size="lg" className="h-12 px-8 shrink-0">
               <Search className="h-4 w-4 mr-2" />
-              Verify a Tatin ID
+              Verify a TATIN ID
             </Button>
           </form>
 
@@ -74,7 +74,7 @@ export default function LandingPage() {
             <button
               type="button"
               className="font-mono underline underline-offset-2 hover:text-foreground transition-colors"
-              onClick={() => setTatinId("bulldogbites@tatin")}
+              onClick={() => setTATINId("bulldogbites@tatin")}
             >
               bulldogbites@tatin
             </button>
@@ -82,7 +82,7 @@ export default function LandingPage() {
             <button
               type="button"
               className="font-mono underline underline-offset-2 hover:text-foreground transition-colors"
-              onClick={() => setTatinId("fastfreight@tatin")}
+              onClick={() => setTATINId("fastfreight@tatin")}
             >
               fastfreight@tatin
             </button>
@@ -118,7 +118,7 @@ export default function LandingPage() {
                 </div>
                 <div>
                   <p className="font-semibold text-foreground">Verified Business</p>
-                  <p className="text-xs text-success">Tatin confirmed</p>
+                  <p className="text-xs text-success">TATIN confirmed</p>
                 </div>
               </div>
               <div className="space-y-2 text-sm">
@@ -149,7 +149,7 @@ export default function LandingPage() {
                 </div>
               </div>
               <p className="text-sm text-muted-foreground mb-4">
-                We could not verify this business. This ID is not registered in the Tatin network.
+                We could not verify this business. This ID is not registered in the TATIN network.
               </p>
               <button
                 type="button"
@@ -171,13 +171,13 @@ export default function LandingPage() {
           <div className="space-y-8">
             <Step
               number="01"
-              title="Get the Tatin ID"
-              description="When paying a new vendor, ask them for their Tatin ID. It looks like: businessname@tatin"
+              title="Get the TATIN ID"
+              description="When paying a new vendor, ask them for their TATIN ID. It looks like: businessname@tatin"
             />
             <Step
               number="02"
               title="Check it here"
-              description="Enter the ID above. Tatin instantly tells you if this business has been verified by our team."
+              description="Enter the ID above. TATIN instantly tells you if this business has been verified by our team."
             />
             <Step
               number="03"
@@ -204,7 +204,7 @@ export default function LandingPage() {
             />
             <SecurityCard
               title="Cryptographic IDs"
-              description="Tatin IDs are generated via HMAC with a per-deployment secret. They are not guessable or enumerable."
+              description="TATIN IDs are generated via HMAC with a per-deployment secret. They are not guessable or enumerable."
             />
             <SecurityCard
               title="Rate limited"
@@ -251,7 +251,7 @@ export default function LandingPage() {
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <Shield className="h-5 w-5 text-foreground" />
-                <span className="font-semibold text-foreground">Tatin</span>
+                <span className="font-semibold text-foreground">TATIN</span>
               </div>
               <p className="text-sm text-muted-foreground max-w-xs">
                 Verified payment identity for businesses. Replace bank-detail sharing with a secure, stable identifier.
@@ -280,7 +280,7 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="border-t border-border pt-6 flex flex-col md:flex-row items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground">© 2026 Tatin. Payment identity verification.</p>
+            <p className="text-sm text-muted-foreground">© 2026 TATIN. Payment identity verification.</p>
             <Link href="/login" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Business login</Link>
           </div>
         </div>

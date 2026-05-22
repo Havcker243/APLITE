@@ -120,7 +120,7 @@ export default function DashboardLayout({ children }: PropsWithChildren) {
         <div className="h-16 px-6 flex items-center border-b border-border">
           <Link href="/dashboard" className="flex items-center gap-2">
             <Shield className="h-6 w-6 text-primary" />
-            <span className="font-semibold text-foreground">Tatin</span>
+            <span className="font-semibold text-foreground">TATIN</span>
           </Link>
         </div>
 

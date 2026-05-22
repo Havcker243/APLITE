@@ -9,7 +9,7 @@ export default function PaymentIdentityPage() {
   return (
     <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
       <Head>
-        <title>Why Payment Identity Matters - Tatin</title>
+        <title>Why Payment Identity Matters - TATIN</title>
       </Head>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-12">
@@ -18,7 +18,7 @@ export default function PaymentIdentityPage() {
           <h1 className="mt-4 text-3xl font-semibold text-foreground">Why payment identity matters</h1>
           <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
             Payment fraud often starts with ambiguity. A vendor requests a bank change, someone forwards an email, and a
-            detail is updated without strong verification. The result is avoidable risk. Tatin replaces that ambiguity
+            detail is updated without strong verification. The result is avoidable risk. TATIN replaces that ambiguity
             with a verified identifier that stays stable over time, even as rails and bank details evolve.
           </p>
         </div>
@@ -42,7 +42,7 @@ export default function PaymentIdentityPage() {
 
         <div className="mt-10 space-y-6 text-sm text-muted-foreground leading-relaxed">
           <section className="space-y-2">
-            <h2 className="text-base font-semibold text-foreground">Tatin's approach</h2>
+            <h2 className="text-base font-semibold text-foreground">TATIN's approach</h2>
             <p>
               We treat payment details as structured, verifiable data. A stable identifier allows AP teams to remit
               payments to a verified entity without re-verifying everything each time a routing detail changes. Our

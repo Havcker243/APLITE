@@ -9,7 +9,7 @@ export default function PrivacyPolicyPage() {
   return (
     <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
       <Head>
-        <title>Tatin Privacy Policy</title>
+        <title>TATIN Privacy Policy</title>
       </Head>
 
       <main className="mx-auto w-full max-w-4xl px-6 py-12">
@@ -18,7 +18,7 @@ export default function PrivacyPolicyPage() {
           <h1 className="mt-4 text-3xl font-semibold text-foreground">Privacy Policy</h1>
           <p className="mt-2 text-sm text-muted-foreground">Last updated: 2026-01-08</p>
           <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
-            Tatin is a payment identity platform built for regulated workflows. We collect only what we need to verify
+            TATIN is a payment identity platform built for regulated workflows. We collect only what we need to verify
             your organization, connect payout rails, and maintain a secure, compliant network. This policy explains
             what we collect, why we collect it, and how we protect it.
           </p>
@@ -49,8 +49,8 @@ export default function PrivacyPolicyPage() {
           <section className="space-y-2">
             <h2 className="text-base font-semibold text-foreground">1. Overview</h2>
             <p>
-              This Privacy Policy explains how Tatin collects, uses, and shares information when you use our services.
-              By using Tatin, you agree to the practices described here.
+              This Privacy Policy explains how TATIN collects, uses, and shares information when you use our services.
+              By using TATIN, you agree to the practices described here.
             </p>
           </section>
 
@@ -114,7 +114,7 @@ export default function PrivacyPolicyPage() {
           <section className="space-y-2">
             <h2 className="text-base font-semibold text-foreground">9. Children</h2>
             <p>
-              Tatin is not intended for use by individuals under 18. We do not knowingly collect personal information
+              TATIN is not intended for use by individuals under 18. We do not knowingly collect personal information
               from minors.
             </p>
           </section>

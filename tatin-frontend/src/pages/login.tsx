@@ -151,7 +151,7 @@ export default function LoginPage() {
         <div className="w-full max-w-md">
           <Link href="/" className="inline-flex items-center gap-2 mb-8 text-muted-foreground hover:text-foreground transition-colors">
             <Shield className="h-6 w-6" />
-            <span className="font-semibold">Tatin</span>
+            <span className="font-semibold">TATIN</span>
           </Link>
 
           <h1 className="text-2xl font-semibold text-foreground mb-2">

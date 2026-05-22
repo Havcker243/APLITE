@@ -10,16 +10,16 @@ export default function Document() {
     <Html lang="en">
       <Head>
         <meta charSet="UTF-8" />
-        <meta name="description" content="Tatin helps verified businesses share secure payment identifiers." />
-        <meta name="author" content="Tatin" />
+        <meta name="description" content="TATIN helps verified businesses share secure payment identifiers." />
+        <meta name="author" content="TATIN" />
 
-        <meta property="og:title" content="Tatin" />
+        <meta property="og:title" content="TATIN" />
         <meta property="og:description" content="Secure payment identifiers for verified businesses." />
         <meta property="og:type" content="website" />
         <meta property="og:image" content="/og.png" />
 
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:site" content="@Tatin" />
+        <meta name="twitter:site" content="@TATIN" />
         <meta name="twitter:image" content="/og.png" />
       </Head>
       <body>

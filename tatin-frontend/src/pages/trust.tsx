@@ -9,7 +9,7 @@ export default function TrustPage() {
   return (
     <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
       <Head>
-        <title>Trust and Transparency - Tatin</title>
+        <title>Trust and Transparency - TATIN</title>
       </Head>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-12">
@@ -17,14 +17,14 @@ export default function TrustPage() {
           <PublicPageNav backHref={backHref} />
           <h1 className="mt-4 text-3xl font-semibold text-foreground">Trust and transparency</h1>
           <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
-            Tatin provides a verified payment identity system that gives Accounts Payable teams confidence in vendor
+            TATIN provides a verified payment identity system that gives Accounts Payable teams confidence in vendor
             banking changes. We replace email-only verification with structured workflows and a permanent audit trail.
           </p>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
           <section className="rounded-lg border border-border bg-card p-6 shadow-card">
-            <h2 className="text-base font-semibold text-foreground">How Tatin works</h2>
+            <h2 className="text-base font-semibold text-foreground">How TATIN works</h2>
             <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
               Vendors complete a structured onboarding flow, attach payout rails, and receive a verified identifier.
               When a payment is made, the identifier resolves to approved coordinates with clear ownership.

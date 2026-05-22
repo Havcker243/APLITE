@@ -9,7 +9,7 @@ export default function SecurityPage() {
   return (
     <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
       <Head>
-        <title>Security - Tatin</title>
+        <title>Security - TATIN</title>
       </Head>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-12">
@@ -17,7 +17,7 @@ export default function SecurityPage() {
           <PublicPageNav backHref={backHref} />
           <h1 className="mt-4 text-3xl font-semibold text-foreground">Security posture</h1>
           <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
-            Tatin is architected to ensure sensitive payment details are never stored in plain text and are not
+            TATIN is architected to ensure sensitive payment details are never stored in plain text and are not
             exposed in logs or user interfaces. We minimize data exposure while maintaining the auditability required
             for regulated workflows.
           </p>

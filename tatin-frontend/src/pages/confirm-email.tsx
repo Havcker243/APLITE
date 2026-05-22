@@ -15,7 +15,7 @@ export default function ConfirmEmailPage() {
   return (
     <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
       <Head>
-        <title>Confirm your email - Tatin</title>
+        <title>Confirm your email - TATIN</title>
       </Head>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-12">

@@ -19,7 +19,7 @@ export default function ContactPage() {
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const subject = encodeURIComponent("Tatin support request");
+    const subject = encodeURIComponent("TATIN support request");
     const body = encodeURIComponent(`Name: ${name}\nEmail: ${email}\n\n${message}`);
     if (!message.trim()) {
       toast.error("Please enter a message.");
@@ -31,7 +31,7 @@ export default function ContactPage() {
   return (
     <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
       <Head>
-        <title>Contact - Tatin</title>
+        <title>Contact - TATIN</title>
       </Head>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-12">

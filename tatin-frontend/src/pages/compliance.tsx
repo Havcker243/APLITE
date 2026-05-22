@@ -9,7 +9,7 @@ export default function CompliancePage() {
   return (
     <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">
       <Head>
-        <title>Compliance and Risk - Tatin</title>
+        <title>Compliance and Risk - TATIN</title>
       </Head>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-12">
@@ -17,7 +17,7 @@ export default function CompliancePage() {
           <PublicPageNav backHref={backHref} />
           <h1 className="mt-4 text-3xl font-semibold text-foreground">Compliance and risk management</h1>
           <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
-            Tatin is built to support the practical controls that Accounts Payable teams need for regulatory
+            TATIN is built to support the practical controls that Accounts Payable teams need for regulatory
             compliance and risk mitigation. We provide verifiable evidence of authorization and review without
             replacing your internal control framework.
           </p>
@@ -58,7 +58,7 @@ export default function CompliancePage() {
           <section className="space-y-2">
             <h2 className="text-base font-semibold text-foreground">Important clarification</h2>
             <p>
-              Tatin does not replace your internal control framework. It provides consistent workflows and verifiable
+              TATIN does not replace your internal control framework. It provides consistent workflows and verifiable
               evidence to support those controls.
             </p>
           </section>
